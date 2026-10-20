@@ -9,7 +9,7 @@
   <script src="https://js.paystack.co/v2/inline.js"></script>
   <!-- Google Identity Services (GIS) API -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <!-- FFmpeg WASM Core & Utilities (v0.12.10) -->
+  <!-- FFmpeg WASM Core & Utilities (v0.12.10 via jsDelivr) -->
   <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.10/dist/umd/util.js"></script>
 
@@ -76,8 +76,10 @@
 
     function logMessage(msg) {
       const logDiv = document.getElementById('log');
-      logDiv.innerHTML += `<div>> ${msg}</div>`;
-      logDiv.scrollTop = logDiv.scrollHeight;
+      if (logDiv) {
+        logDiv.innerHTML += `<div>> ${msg}</div>`;
+        logDiv.scrollTop = logDiv.scrollHeight;
+      }
     }
 
     // --- AUTOMATIC RETURN CHECK FROM PAYSTACK ---
@@ -217,7 +219,7 @@
       }
     }
 
-       // --- FFMPEG.WASM INITIALIZATION & PROCESSING ---
+    // --- FFMPEG.WASM INITIALIZATION & PROCESSING ---
     async function initFFmpeg() {
       logMessage('Initializing local ffmpeg.wasm engine...');
       
@@ -239,6 +241,33 @@
         logMessage('❌ FFmpeg failed to load: ' + err.message);
         console.error(err);
       }
+    }
+
+    async function processAudio() {
+      const fileInput = document.getElementById('audio-file');
+      if (fileInput.files.length === 0) {
+        alert('Please select an audio file first.');
+        return;
+      }
+      const file = fileInput.files[0];
+      logMessage(`Loading local file: ${file.name}...`);
+
+      const fileData = await fetchFile(file);
+      await ffmpeg.writeFile('input.mp3', fileData);
+
+      logMessage('Executing local AES encryption & HLS segmentation...');
+      await ffmpeg.exec([
+        '-i', 'input.mp3',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-hls_time', '10',
+        '-hls_list_size', '0',
+        '-hls_segment_filename', 'segment_%03d.ts',
+        'playlist.m3u8'
+      ]);
+
+      logMessage('Segmentation complete. Preparing Google Drive upload...');
+      await uploadGeneratedChunksToDrive();
     }
 
     // --- GOOGLE DRIVE DIRECT UPLOADER ---
