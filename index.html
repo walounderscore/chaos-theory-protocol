@@ -41,7 +41,7 @@
     <div class="card">
       <h3>2. Google Drive Authorization</h3>
       <p>Connect your personal Google Drive to store encrypted HLS assets.</p>
-      <button id="auth-btn" onclick="authGoogleDrive()">Connect Google Drive</button>
+      <button id="auth-btn" onclick="authGoogleDrive()" disabled>Connect Google Drive</button>
       <span id="auth-status" style="margin-left: 10px; color: #8b949e;">Not Connected</span>
     </div>
 
@@ -182,7 +182,7 @@
 
     // --- GOOGLE DRIVE GIS POPUP CLIENT ---
     function authGoogleDrive() {
-      logMessage('Initiating Google OAuth popup...');
+      logMessage('Initiating Google OAuth window...');
 
       try {
         const client = google.accounts.oauth2.initTokenClient({
@@ -262,6 +262,13 @@
 
         await globalFFmpegInstance.load();
         logMessage('✅ ffmpeg.wasm loaded and ready in browser CPU.');
+        
+        // 🔓 UNLOCK GOOGLE DRIVE BUTTON NOW THAT CPU IS FREE
+        const authBtn = document.getElementById('auth-btn');
+        if (authBtn) {
+          authBtn.disabled = false;
+          logMessage('🔓 Google Drive authorization unlocked.');
+        }
         
         updateButtonState();
       } catch (err) {
