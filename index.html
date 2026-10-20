@@ -82,37 +82,36 @@
     }
 
     // --- AUTOMATIC RETURN CHECK FROM PAYSTACK ---
-    window.addEventListener('DOMContentLoaded', async () => {
+    window.addEventListener('DOMContentLoaded', () => {
       const urlParams = new URLSearchParams(window.location.search);
       const reference = urlParams.get('trxref') || urlParams.get('reference');
       
       if (reference) {
         logMessage(`Returning from Paystack checkout. Ref: ${reference}`);
-        window.history.replaceState({}, document.title, window.location.pathname);
 
         // Retrieve the email stored before redirecting
         const savedEmail = localStorage.getItem('pending_artist_email');
         
         if (savedEmail) {
           logMessage(`Logging payment for ${savedEmail} to Google Sheet...`);
-          try {
-            await fetch(APPS_SCRIPT_URL, {
-              method: 'POST',
-              mode: 'no-cors',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email: savedEmail, reference: reference })
-            });
-            logMessage('Email successfully appended to Google Sheet whitelist.');
-          } catch (err) {
-            console.error('Failed to append email to sheet:', err);
-          }
+          
+          // Use an Image beacon to fire-and-forget the log to Apps Script instantly 
+          // This bypasses CORS and never gets dropped by browser navigation/redirect lifecycle
+          const logUrl = `${APPS_SCRIPT_URL}?email=${encodeURIComponent(savedEmail)}&reference=${encodeURIComponent(reference)}`;
+          const beacon = new Image();
+          beacon.src = logUrl;
+          
+          logMessage('Logging beacon dispatched to Google Sheet.');
           localStorage.removeItem('pending_artist_email');
+        } else {
+          logMessage('No pending email found in browser storage.');
         }
 
+        // Clean the URL bar
+        window.history.replaceState({}, document.title, window.location.pathname);
         unlockToolkit();
       }
     });
-
     // --- WHITELIST CHECK & ACCESS GATE ---
     async function checkAccessAndProceed() {
       const emailInput = prompt("Enter your artist email:");
