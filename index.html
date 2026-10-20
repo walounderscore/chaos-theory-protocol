@@ -240,7 +240,7 @@
         });
         const data = await res.json();
         driveFolderId = data.id;
-        sessionStorage.setItem('chaos_google_folder', driveFolderId);
+        localStorage.setItem('chaos_google_folder', driveFolderId);
         
         logMessage(`Folder ready! ID: ${driveFolderId}`);
         updateButtonState();
