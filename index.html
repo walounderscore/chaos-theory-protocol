@@ -194,17 +194,27 @@
         driveFolderId = data.id;
         logMessage(`Folder created successfully! ID: ${driveFolderId}`);
         
-        // Enable file selection, but let  enable the process button when ready
-        document.getElementById('audio-file').disabled = false;
-        if (globalFFmpegInstance) {
-          document.getElementById('process-btn').disabled = false;
-        }
+        // Check if FFmpeg is already loaded
+        updateButtonState();
       } catch (err) {
         logMessage('Error creating Drive folder: ' + err.message);
       }
     }
 
-    // --- FFMPEG.WASM INITIALIZATION (v0.11) ---
+    // --- CENTRALIZED UI STATE CHECKER ---
+    function updateButtonState() {
+      const processBtn = document.getElementById('process-btn');
+      const fileInput = document.getElementById('audio-file');
+
+      // Enable inputs only when both FFmpeg is loaded and Drive folder exists
+      if (globalFFmpegInstance && globalFFmpegInstance.isLoaded() && driveFolderId) {
+        processBtn.disabled = false;
+        fileInput.disabled = false;
+        logMessage('🚀 Toolkit fully active! Select an audio file to begin.');
+      }
+    }
+
+    // --- FFMPEG.WASM INITIALIZATION ---
     async function initFFmpeg() {
       logMessage('Initializing local ffmpeg.wasm engine...');
       
@@ -224,9 +234,8 @@
         await globalFFmpegInstance.load();
         logMessage('✅ ffmpeg.wasm loaded and ready in browser CPU.');
         
-        if (driveFolderId) {
-          document.getElementById('process-btn').disabled = false;
-        }
+        // Check if Drive is already connected
+        updateButtonState();
       } catch (err) {
         logMessage('❌ FFmpeg failed to load: ' + err.message);
         console.error(err);
