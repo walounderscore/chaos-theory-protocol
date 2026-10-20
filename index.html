@@ -115,12 +115,16 @@
 
     // --- PAYSTACK GATE & APPS SCRIPT LOGGING ---
     function payWithPaystack(email) {
-      const popup = new PaystackPop();
-      popup.newTransaction({
+      logMessage('Initializing Paystack payment gateway...');
+      
+      const paystack = new PaystackPop();
+      paystack.newTransaction({
         key: 'pk_test_078a52ae522dacc57ba8546539a611bca777d472',
         email: email,
         amount: 10000, // 100 NGN in kobo
         currency: 'NGN',
+        // Forces a clean external popup/redirect container instead of an embedded iframe
+        channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'],
         onSuccess: async function(transaction) {
           logMessage('Payment verified! Ref: ' + transaction.reference);
 
@@ -143,6 +147,7 @@
           unlockToolkit();
         },
         onCancel: function() {
+          logMessage('Commitment payment cancelled by user.');
           alert('Commitment payment cancelled.');
         }
       });
