@@ -124,9 +124,15 @@
       }
     }
 
-    function unlockToolkit() {
-      document.getElementById('gate-card').style.display = 'none';
-      document.getElementById('toolkit').classList.remove('locked');
+   function unlockToolkit() {
+      logMessage('Unlocking user workspace...');
+      const gateCard = document.getElementById('gate-card');
+      const toolkit = document.getElementById('toolkit');
+      
+      if (gateCard) gateCard.style.display = 'none';
+      if (toolkit) toolkit.classList.remove('locked');
+      
+      // Initialize FFmpeg safely without blocking UI unlock
       initFFmpeg();
     }
 
@@ -184,42 +190,28 @@
       }
     }
 
-    // --- FFMPEG.WASM INITIALIZATION & PROCESSING ---
+       // --- FFMPEG.WASM INITIALIZATION & PROCESSING ---
     async function initFFmpeg() {
       logMessage('Initializing local ffmpeg.wasm engine...');
-      ffmpeg = new FFmpeg();
-      await ffmpeg.load({
-        coreURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
-        wasmURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
-      });
-      logMessage('ffmpeg.wasm loaded and ready in browser CPU.');
-    }
-
-    async function processAudio() {
-      const fileInput = document.getElementById('audio-file');
-      if (fileInput.files.length === 0) {
-        alert('Please select an audio file first.');
+      
+      // Check if SharedArrayBuffer is available (required for ffmpeg.wasm)
+      if (typeof SharedArrayBuffer === 'undefined') {
+        logMessage('⚠️ WARNING: SharedArrayBuffer is not enabled. coi-serviceworker may still be registering.');
+        logMessage('Please refresh the page once more to activate WebAssembly CPU isolation.');
         return;
       }
-      const file = fileInput.files[0];
-      logMessage(`Loading local file: ${file.name}...`);
 
-      const fileData = await fetchFile(file);
-      await ffmpeg.writeFile('input.mp3', fileData);
-
-      logMessage('Executing local AES encryption & HLS segmentation...');
-      await ffmpeg.exec([
-        '-i', 'input.mp3',
-        '-c:a', 'aac',
-        '-b:a', '128k',
-        '-hls_time', '10',
-        '-hls_list_size', '0',
-        '-hls_segment_filename', 'segment_%03d.ts',
-        'playlist.m3u8'
-      ]);
-
-      logMessage('Segmentation complete. Preparing Google Drive upload...');
-      await uploadGeneratedChunksToDrive();
+      try {
+        ffmpeg = new FFmpeg();
+        await ffmpeg.load({
+          coreURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
+          wasmURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
+        });
+        logMessage('✅ ffmpeg.wasm loaded and ready in browser CPU.');
+      } catch (err) {
+        logMessage('❌ FFmpeg failed to load: ' + err.message);
+        console.error(err);
+      }
     }
 
     // --- GOOGLE DRIVE DIRECT UPLOADER ---
