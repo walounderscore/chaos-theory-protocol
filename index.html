@@ -395,7 +395,7 @@
 
       const fileId = data.id;
 
-      // Grant public reader access in the background without blocking execution
+      // Non-blocking background call to grant public read access
       fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
         method: 'POST',
         headers: new Headers({
@@ -406,7 +406,7 @@
           role: 'reader',
           type: 'anyone'
         })
-      }).catch(() => {}); // Non-blocking background call
+      }).catch(() => {});
 
       return fileId;
     }
