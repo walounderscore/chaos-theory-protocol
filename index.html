@@ -250,24 +250,34 @@
         return;
       }
       const file = fileInput.files[0];
-      logMessage(`Loading local file: ${file.name}...`);
+      logMessage(`Loading local file: ${file.name} (${(file.size / (1024*1024)).toFixed(2)} MB)...`);
 
-      const fileData = await fetchFile(file);
-      await ffmpeg.writeFile('input.mp3', fileData);
+      try {
+        // Read file natively using ArrayBuffer (bypasses external utility helper bugs)
+        const arrayBuffer = await file.arrayBuffer();
+        const fileData = new Uint8Array(arrayBuffer);
 
-      logMessage('Executing local AES encryption & HLS segmentation...');
-      await ffmpeg.exec([
-        '-i', 'input.mp3',
-        '-c:a', 'aac',
-        '-b:a', '128k',
-        '-hls_time', '10',
-        '-hls_list_size', '0',
-        '-hls_segment_filename', 'segment_%03d.ts',
-        'playlist.m3u8'
-      ]);
+        logMessage('Writing file to virtual WebAssembly filesystem...');
+        await ffmpeg.writeFile('input.mp3', fileData);
 
-      logMessage('Segmentation complete. Preparing Google Drive upload...');
-      await uploadGeneratedChunksToDrive();
+        logMessage('Executing local AES encryption & HLS segmentation...');
+        await ffmpeg.exec([
+          '-i', 'input.mp3',
+          '-c:a', 'aac',
+          '-b:a', '128k',
+          '-hls_time', '10',
+          '-hls_list_size', '0',
+          '-hls_segment_filename', 'segment_%03d.ts',
+          'playlist.m3u8'
+        ]);
+
+        logMessage('Segmentation complete. Preparing Google Drive upload...');
+        await uploadGeneratedChunksToDrive();
+
+      } catch (err) {
+        logMessage('❌ Error during processing: ' + err.message);
+        console.error(err);
+      }
     }
 
     // --- GOOGLE DRIVE DIRECT UPLOADER ---
