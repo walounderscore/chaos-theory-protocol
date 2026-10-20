@@ -413,40 +413,51 @@
 
     // --- GOOGLE DRIVE DIRECT UPLOADER & LOCAL BLOB PLAYER ---
     async function uploadGeneratedChunksToDrive() {
-      const files = globalFFmpegInstance.FS('readdir', '/');
-      const segmentFiles = files.filter(f => f.endsWith('.ts')).sort();
-      logMessage(`Found ${segmentFiles.length} audio chunks. Uploading segments to Drive backup vault...`);
+      try {
+        const files = globalFFmpegInstance.FS('readdir', '/');
+        const segmentFiles = files.filter(f => f.endsWith('.ts')).sort();
+        logMessage(`Found ${segmentFiles.length} audio chunks. Uploading segments to Drive backup vault...`);
 
-      const segmentMap = {};
+        const segmentMap = {};
 
-      // 1. Upload all .ts chunks to Google Drive vault
-      for (const fileName of segmentFiles) {
-        logMessage(`Uploading ${fileName}...`);
-        try {
-          const fileData = globalFFmpegInstance.FS('readFile', fileName);
-          const fileId = await uploadFileToDrive(fileName, fileData, 'video/mp2t');
-          segmentMap[fileName] = fileId;
-          logMessage(`✅ Backed up ${fileName}`);
-        } catch (err) {
-          logMessage(`❌ Failed uploading ${fileName}: ${err.message}`);
+        // 1. Upload all .ts chunks to Google Drive vault
+        for (const fileName of segmentFiles) {
+          logMessage(`Uploading ${fileName}...`);
+          try {
+            const fileData = globalFFmpegInstance.FS('readFile', fileName);
+            const fileId = await uploadFileToDrive(fileName, fileData, 'video/mp2t');
+            segmentMap[fileName] = fileId;
+            logMessage(`✅ Backed up ${fileName}`);
+          } catch (err) {
+            logMessage(`❌ Failed uploading ${fileName}: ${err.message}`);
+          }
         }
+
+        // 2. Upload playlist.m3u8 to Drive vault
+        logMessage('Uploading playlist.m3u8 to Drive vault...');
+        const playlistTextDecoder = new TextDecoder('utf-8');
+        let m3u8Content = playlistTextDecoder.decode(globalFFmpegInstance.FS('readFile', 'playlist.m3u8'));
+        
+        const textEncoder = new TextEncoder();
+        const playlistFileId = await uploadFileToDrive('playlist.m3u8', textEncoder.encode(m3u8Content), 'application/x-mpegURL');
+
+        logMessage(`🎉 Processing complete! Playlist ID: ${playlistFileId}`);
+
+        // 3. Play locally using WebAssembly Memory Blobs
+        playLocalWasmStream();
+
+        // 4. Generate Embed UI with error safety
+        try {
+          generateEmbedUI(playlistFileId);
+        } catch (embedErr) {
+          logMessage('❌ Error rendering embed UI: ' + embedErr.message);
+          console.error("Embed UI Error:", embedErr);
+        }
+
+      } catch (err) {
+        logMessage('❌ Error in upload pipeline: ' + err.message);
+        console.error("Upload Pipeline Error:", err);
       }
-
-      // 2. Upload playlist.m3u8 to Drive vault
-      logMessage('Uploading playlist.m3u8 to Drive vault...');
-      const playlistTextDecoder = new TextDecoder('utf-8');
-      let m3u8Content = playlistTextDecoder.decode(globalFFmpegInstance.FS('readFile', 'playlist.m3u8'));
-      
-      const textEncoder = new TextEncoder();
-      const playlistFileId = await uploadFileToDrive('playlist.m3u8', textEncoder.encode(m3u8Content), 'application/x-mpegURL');
-
-      logMessage('🎉 Processing and Google Drive vault sync completed!');
-
-      // 3. Play locally using WebAssembly Memory Blobs (Bypasses Google Drive CORS completely)
-      playLocalWasmStream();
-
-      // 4. Generate Embed UI for external distribution
-      generateEmbedUI(playlistFileId);
     }
     
     // --- PLAY LOCAL WASM STREAM (Zero CORS, Instant Preview) ---
@@ -554,6 +565,11 @@
 
     // --- GENERATE COPYABLE EMBED UI ---
     function generateEmbedUI(playlistFileId) {
+      if (!playlistFileId) {
+        logMessage('⚠️ Warning: Cannot generate embed UI because playlistFileId is missing.');
+        return;
+      }
+
       const embedCode = `<div style="max-width:640px; background:#161b22; padding:1rem; border-radius:8px; border:1px solid #30363d;">
   <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
   <video id="chaos-embed-${playlistFileId}" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" width="100%" height="268" data-setup='{}'>
@@ -562,39 +578,46 @@
   <script src="https://vjs.zencdn.net/8.10.0/video.min.js"><\/script>
 </div>`;
 
-      logMessage('🎉 Embed code generated successfully!');
+      logMessage('🎉 Building copyable embed box...');
 
       const logDiv = document.getElementById('log');
-      if (logDiv) {
-        const container = document.createElement('div');
-        container.style.marginTop = '12px';
-
-        const label = document.createElement('strong');
-        label.innerText = 'Copy HTML Embed Snippet:';
-        label.style.display = 'block';
-        label.style.color = '#c9d1d9';
-
-        const textarea = document.createElement('textarea');
-        textarea.className = 'embed-box';
-        textarea.value = embedCode;
-        textarea.readOnly = true;
-
-        const copyBtn = document.createElement('button');
-        copyBtn.className = 'copy-btn';
-        copyBtn.innerText = '📋 Copy Embed Code';
-        copyBtn.onclick = () => {
-          textarea.select();
-          navigator.clipboard.writeText(embedCode);
-          copyBtn.innerText = '✅ Copied!';
-          setTimeout(() => { copyBtn.innerText = '📋 Copy Embed Code'; }, 2000);
-        };
-
-        container.appendChild(label);
-        container.appendChild(textarea);
-        container.appendChild(copyBtn);
-        logDiv.appendChild(container);
-        logDiv.scrollTop = logDiv.scrollHeight;
+      if (!logDiv) {
+        console.error("Log div element not found!");
+        return;
       }
+
+      const container = document.createElement('div');
+      container.style.marginTop = '12px';
+      container.style.borderTop = '1px solid #30363d';
+      container.style.paddingTop = '10px';
+
+      const label = document.createElement('strong');
+      label.innerText = 'Copy HTML Embed Snippet:';
+      label.style.display = 'block';
+      label.style.color = '#c9d1d9';
+
+      const textarea = document.createElement('textarea');
+      textarea.className = 'embed-box';
+      textarea.value = embedCode;
+      textarea.readOnly = true;
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'copy-btn';
+      copyBtn.innerText = '📋 Copy Embed Code';
+      copyBtn.onclick = () => {
+        textarea.select();
+        navigator.clipboard.writeText(embedCode);
+        copyBtn.innerText = '✅ Copied!';
+        setTimeout(() => { copyBtn.innerText = '📋 Copy Embed Code'; }, 2000);
+      };
+
+      container.appendChild(label);
+      container.appendChild(textarea);
+      container.appendChild(copyBtn);
+      logDiv.appendChild(container);
+      logDiv.scrollTop = logDiv.scrollHeight;
+      
+      logMessage('✅ Embed snippet successfully injected into UI.');
     }
   </script>
 </body>
