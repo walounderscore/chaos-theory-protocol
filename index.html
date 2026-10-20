@@ -78,28 +78,40 @@
       }
     }
 
-    // --- CHECK FOR OAUTH TOKEN ON PAGE LOAD ---
+   // --- AUTOMATIC SESSION RESTORER & PAYSTACK CHECK ---
     window.addEventListener('DOMContentLoaded', async () => {
       console.log("DOMContentLoaded event fired.");
       
-      // 1. Check for OAuth token in URL hash (returned from Google redirect)
-      const hash = window.location.hash.substring(1);
-      const params = new URLSearchParams(hash);
-      const token = params.get('access_token');
+      // Restore Drive session if already connected in this browser session
+      accessToken = sessionStorage.getItem('chaos_google_token');
+      driveFolderId = sessionStorage.getItem('chaos_google_folder');
 
-      if (token) {
-        accessToken = token;
-        // Clean token from URL bar without reloading page
-        window.history.replaceState({}, document.title, window.location.pathname);
-
+      if (accessToken) {
         const statusEl = document.getElementById('auth-status');
         if (statusEl) {
           statusEl.innerText = 'Connected ✅';
           statusEl.style.color = '#7ee787';
         }
-        logMessage('Google Drive authorized successfully via redirect.');
-        await createDriveFolder();
+        logMessage('Google Drive session restored from cache.');
+        updateButtonState();
       }
+
+      // Check for Paystack return reference
+      const urlParams = new URLSearchParams(window.location.search);
+      const reference = urlParams.get('trxref') || urlParams.get('reference');
+      
+      if (reference) {
+        logMessage(`Returning from Paystack checkout. Ref: ${reference}`);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        
+        try {
+          unlockToolkit();
+        } catch (err) {
+          console.error("Error inside unlockToolkit:", err);
+          logMessage("❌ Unlock error: " + err.message);
+        }
+      }
+    });
 
       // 2. Check for Paystack return reference
       const urlParams = new URLSearchParams(window.location.search);
@@ -187,19 +199,42 @@
       }
     }
 
-    // --- DIRECT OAUTH REDIRECT (Bypasses COOP popup block) ---
+    // --- GOOGLE DRIVE GIS POPUP CLIENT ---
     function authGoogleDrive() {
-      logMessage('Redirecting to Google for authorization...');
+      logMessage('Initiating Google OAuth popup...');
 
-      const clientId = '104287153665-c7sbnq3lm32u8kgt8gohqne0kr1i8vn4.apps.googleusercontent.com';
-      // Redirect back to the exact current GitHub Pages URL
-      const redirectUri = window.location.origin + window.location.pathname;
-      const scope = 'https://www.googleapis.com/auth/drive.file';
+      try {
+        const client = google.accounts.oauth2.initTokenClient({
+          client_id: '104287153665-c7sbnq3lm32u8kgt8gohqne0kr1i8vn4.apps.googleusercontent.com',
+          scope: 'https://www.googleapis.com/auth/drive.file',
+          callback: async (response) => {
+            console.log("OAuth Popup Response:", response);
 
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scope)}&prompt=select_account`;
+            if (response.error) {
+              logMessage('❌ Auth Error: ' + response.error);
+              return;
+            }
 
-      // Navigate away to Google's login page
-      window.location.href = authUrl;
+            accessToken = response.access_token;
+            sessionStorage.setItem('chaos_google_token', accessToken);
+            
+            // 1. Immediately update UI status so it never gets stuck
+            const statusEl = document.getElementById('auth-status');
+            if (statusEl) {
+              statusEl.innerText = 'Connected ✅';
+              statusEl.style.color = '#7ee787';
+            }
+            logMessage('Google Drive authorized successfully.');
+            
+            // 2. Create or verify the release folder
+            await createDriveFolder();
+          },
+        });
+        client.requestAccessToken();
+      } catch (err) {
+        logMessage('❌ Auth initialization error: ' + err.message);
+        console.error(err);
+      }
     }
 
     // --- DRIVE FOLDER CREATOR ---
@@ -220,14 +255,15 @@
         });
         const data = await res.json();
         driveFolderId = data.id;
-        logMessage(`Folder created successfully! ID: ${driveFolderId}`);
+        sessionStorage.setItem('chaos_google_folder', driveFolderId);
         
+        logMessage(`Folder ready! ID: ${driveFolderId}`);
         updateButtonState();
       } catch (err) {
-        logMessage('Error creating Drive folder: ' + err.message);
+        logMessage('Error setting up Drive folder: ' + err.message);
       }
     }
-
+    
     // --- FFMPEG.WASM INITIALIZATION ---
     async function initFFmpeg() {
       logMessage('Initializing local ffmpeg.wasm engine...');
