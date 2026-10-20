@@ -355,7 +355,7 @@
       }
     }
 
-    // --- UPLOAD MULTIPART FILE HELPER ---
+    // --- UPLOAD MULTIPART FILE HELPER & MAKE PUBLIC ---
     async function uploadFileToDrive(fileName, fileData, mimeType) {
       const boundary = '-------314159265358979323846';
       const delimiter = "\r\n--" + boundary + "\r\n";
@@ -392,7 +392,23 @@
       if (!res.ok) {
         throw new Error(data.error ? data.error.message : res.statusText);
       }
-      return data.id;
+
+      const fileId = data.id;
+
+      // EXPLICIT PERMISSION FIX: Grant public reader access to this specific file
+      await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+        method: 'POST',
+        headers: new Headers({
+          'Authorization': 'Bearer ' + accessToken,
+          'Content-Type': 'application/json'
+        }),
+        body: JSON.stringify({
+          role: 'reader',
+          type: 'anyone'
+        })
+      });
+
+      return fileId;
     }
 
     // --- GOOGLE DRIVE DIRECT UPLOADER & HLS RE-LINKER ---
@@ -408,4 +424,136 @@
         logMessage(`Uploading ${fileName}...`);
         try {
           const fileData = globalFFmpegInstance.FS('readFile', fileName);
-          const fileId =
+          const fileId = await uploadFileToDrive(fileName, fileData, 'video/mp2t');
+          segmentMap[fileName] = fileId;
+          logMessage(`✅ Uploaded ${fileName}`);
+        } catch (err) {
+          logMessage(`❌ Failed uploading ${fileName}: ${err.message}`);
+        }
+      }
+
+      // 2. Read and update relative segment paths inside playlist.m3u8 to absolute Drive URLs
+      logMessage('Rewriting playlist.m3u8 with absolute Drive segment URLs...');
+      const playlistTextDecoder = new TextDecoder('utf-8');
+      let m3u8Content = playlistTextDecoder.decode(globalFFmpegInstance.FS('readFile', 'playlist.m3u8'));
+
+      for (const [segmentName, fileId] of Object.entries(segmentMap)) {
+        const driveSegmentUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+        m3u8Content = m3u8Content.split(segmentName).join(driveSegmentUrl);
+      }
+
+      // 3. Upload the rewritten master playlist.m3u8
+      logMessage('Uploading rewritten playlist.m3u8 to Drive...');
+      const textEncoder = new TextEncoder();
+      const updatedM3u8Bytes = textEncoder.encode(m3u8Content);
+      const playlistFileId = await uploadFileToDrive('playlist.m3u8', updatedM3u8Bytes, 'application/x-mpegURL');
+
+      logMessage('🎉 All HLS assets uploaded and linked in Google Drive!');
+
+      // 4. Configure public permissions on folder and initialize player with manifest Blob
+      initSovereignPlayer(m3u8Content);
+      generateEmbedUI(playlistFileId);
+    }
+
+    // --- INITIALIZE SOVEREIGN PLAYER (PUBLIC HLS MANIFEST BLOB) ---
+    function initSovereignPlayer(m3u8ManifestContent) {
+      if (!player) {
+        player = videojs('chaos-player');
+
+        player.on('error', () => {
+          const err = player.error();
+          console.error("Video.js Error:", err);
+          logMessage(`❌ Player Error [Code ${err.code}]: ${err.message || 'HLS stream initialization failed.'}`);
+        });
+
+        player.on('loadedmetadata', () => {
+          logMessage('📊 Stream metadata loaded successfully.');
+        });
+      }
+
+      // Create a local Blob URL for the manifest to bypass CORS and relative resolution issues
+      const manifestBlob = new Blob([m3u8ManifestContent], { type: 'application/x-mpegURL' });
+      const blobUrl = URL.createObjectURL(manifestBlob);
+
+      logMessage('Loading HLS stream manifest into Sovereign Video.js player...');
+      player.src({
+        src: blobUrl,
+        type: 'application/x-mpegURL'
+      });
+
+      player.ready(() => {
+        logMessage('▶️ Sovereign player ready for playback.');
+        player.play().catch(() => {
+          logMessage('ℹ️ Auto-play restricted by browser. Click play on the player controls.');
+        });
+      });
+    }
+
+    // --- MAKE DRIVE FOLDER PUBLIC ---
+    async function makeFolderPublic(folderId) {
+      logMessage('Setting public read access on Drive release folder...');
+      try {
+        await fetch(`https://www.googleapis.com/drive/v3/files/${folderId}/permissions`, {
+          method: 'POST',
+          headers: new Headers({
+            'Authorization': 'Bearer ' + accessToken,
+            'Content-Type': 'application/json'
+          }),
+          body: JSON.stringify({
+            role: 'reader',
+            type: 'anyone'
+          })
+        });
+        logMessage('✅ Release folder permissions configured for public streaming.');
+      } catch (err) {
+        logMessage('⚠️ Error configuring folder permissions: ' + err.message);
+      }
+    }
+
+    // --- GENERATE COPYABLE EMBED UI ---
+    function generateEmbedUI(playlistFileId) {
+      const embedCode = `<div style="max-width:640px; background:#161b22; padding:1rem; border-radius:8px; border:1px solid #30363d;">
+  <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+  <video id="chaos-embed-${playlistFileId}" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" width="100%" height="268" data-setup='{}'>
+    <source src="https://www.googleapis.com/drive/v3/files/${playlistFileId}?alt=media" type="application/x-mpegURL">
+  </video>
+  <script src="https://vjs.zencdn.net/8.10.0/video.min.js"><\/script>
+</div>`;
+
+      logMessage('🎉 Embed code generated successfully!');
+
+      const logDiv = document.getElementById('log');
+      if (logDiv) {
+        const container = document.createElement('div');
+        container.style.marginTop = '12px';
+
+        const label = document.createElement('strong');
+        label.innerText = 'Copy HTML Embed Snippet:';
+        label.style.display = 'block';
+        label.style.color = '#c9d1d9';
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'embed-box';
+        textarea.value = embedCode;
+        textarea.readOnly = true;
+
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.innerText = '📋 Copy Embed Code';
+        copyBtn.onclick = () => {
+          textarea.select();
+          navigator.clipboard.writeText(embedCode);
+          copyBtn.innerText = '✅ Copied!';
+          setTimeout(() => { copyBtn.innerText = '📋 Copy Embed Code'; }, 2000);
+        };
+
+        container.appendChild(label);
+        container.appendChild(textarea);
+        container.appendChild(copyBtn);
+        logDiv.appendChild(container);
+        logDiv.scrollTop = logDiv.scrollHeight;
+      }
+    }
+  </script>
+</body>
+</html>
