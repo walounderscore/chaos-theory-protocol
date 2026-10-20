@@ -441,7 +441,7 @@
       }
     }
 
-    // --- INITIALIZE VIDEO.JS WITH AUTH INJECTION ---
+// --- INITIALIZE VIDEO.JS WITH AUTH INJECTION & ERROR LOGGING ---
     function initSovereignPlayer(playlistFileId) {
       if (!player) {
         player = videojs('chaos-player');
@@ -454,6 +454,17 @@
           }
           return options;
         });
+
+        // Capture and log any player/stream errors
+        player.on('error', () => {
+          const err = player.error();
+          console.error("Video.js Error:", err);
+          logMessage(`❌ Player Error [Code ${err.code}]: ${err.message || 'Unknown HLS/Network failure'}`);
+        });
+
+        player.on('loadedmetadata', () => {
+          logMessage('📊 Stream metadata loaded successfully.');
+        });
       }
 
       const playlistUrl = `https://www.googleapis.com/drive/v3/files/${playlistFileId}?alt=media`;
@@ -465,10 +476,10 @@
       });
 
       player.ready(() => {
-        logMessage('▶️ Sovereign player ready for playback!');
+        logMessage('▶️ Sovereign player ready for playback.');
       });
     }
-
+    
     // --- MAKE DRIVE FOLDER PUBLIC (GIVES PUBLIC ACCESS TO PLAYLIST & ALL TS CHUNKS) ---
     async function makeFolderPublic(folderId) {
       logMessage('Setting public read access on Drive release folder...');
