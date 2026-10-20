@@ -167,33 +167,53 @@
       }
     }
 
-    // --- GOOGLE DRIVE GIS TOKEN CLIENT ---
+    // --- GOOGLE DRIVE GIS TOKEN CLIENT (ROBUST VERSION) ---
     function authGoogleDrive() {
       logMessage('Initiating Google OAuth request...');
 
-      const client = google.accounts.oauth2.initTokenClient({
-        client_id: '104287153665-c7sbnq3lm32u8kgt8gohqne0kr1i8vn4.apps.googleusercontent.com',
-        scope: 'https://www.googleapis.com/auth/drive.file',
-        callback: async (response) => {
-          if (response.error) {
-            logMessage('Auth Error: ' + response.error);
-            return;
-          }
-          accessToken = response.access_token;
-          
-          const statusEl = document.getElementById('auth-status');
-          if (statusEl) {
-            statusEl.innerText = 'Connected ✅';
-            statusEl.style.color = '#7ee787';
-          }
-          logMessage('Google Drive authorized successfully.');
-          
-          await createDriveFolder();
-        },
-      });
-      client.requestAccessToken();
-    }
+      try {
+        const client = google.accounts.oauth2.initTokenClient({
+          client_id: '104287153665-c7sbnq3lm32u8kgt8gohqne0kr1i8vn4.apps.googleusercontent.com',
+          scope: 'https://www.googleapis.com/auth/drive.file',
+          callback: async (response) => {
+            console.log("OAuth Response Object:", response);
+            logMessage('Auth callback received from Google.');
 
+            if (response.error) {
+              logMessage('❌ Auth Error from Google: ' + JSON.stringify(response));
+              return;
+            }
+
+            if (!response.access_token) {
+              logMessage('❌ Error: Google returned no access token.');
+              return;
+            }
+
+            accessToken = response.access_token;
+            
+            // Immediately update UI status
+            const statusEl = document.getElementById('auth-status');
+            if (statusEl) {
+              statusEl.innerText = 'Connected ✅';
+              statusEl.style.color = '#7ee787';
+            }
+            logMessage('Google Drive authorized successfully.');
+            
+            // Attempt to create the folder safely
+            try {
+              await createDriveFolder();
+            } catch (folderErr) {
+              logMessage('⚠️ Warning: Folder creation encountered an issue: ' + folderErr.message);
+              // Even if folder creation fails, user is still connected and can proceed
+            }
+          },
+        });
+        client.requestAccessToken();
+      } catch (err) {
+        logMessage('❌ Exception initializing token client: ' + err.message);
+        console.error(err);
+      }
+    }
     // --- DRIVE FOLDER CREATOR ---
     async function createDriveFolder() {
       logMessage('Creating Chaos_Theory_Releases folder on Google Drive...');
