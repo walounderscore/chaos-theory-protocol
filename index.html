@@ -419,6 +419,18 @@
       }
 
       logMessage('🎉 Processing and direct Google Drive upload routine finished!');
+
+      // Find the file ID of playlist.m3u8 from Drive to generate the embed code
+      const query = encodeURIComponent(`name = 'playlist.m3u8' and '${driveFolderId}' in parents`);
+      const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}`, {
+        headers: { 'Authorization': 'Bearer ' + accessToken }
+      });
+      const searchData = await searchRes.json();
+      
+      if (searchData.files && searchData.files.length > 0) {
+        const playlistFileId = searchData.files[0].id;
+        await makeFilePublicAndGenerateEmbed(playlistFileId);
+      }
     }
 
     let player = null;
@@ -451,6 +463,46 @@
       player.ready(() => {
         logMessage('▶️ Sovereign player ready for playback.');
       });
+    }
+
+    // --- SET FILE PUBLIC & GENERATE EMBED CODE ---
+    async function makeFilePublicAndGenerateEmbed(playlistFileId) {
+      logMessage('Configuring public streaming permissions for release...');
+      try {
+        // 1. Make the playlist file public for reading
+        await fetch(`https://www.googleapis.com/drive/v3/files/${playlistFileId}/permissions`, {
+          method: 'POST',
+          headers: new Headers({
+            'Authorization': 'Bearer ' + accessToken,
+            'Content-Type': 'application/json'
+          }),
+          body: JSON.stringify({
+            role: 'reader',
+            type: 'anyone'
+          })
+        });
+
+        // 2. Generate the Embed Snippet HTML
+        // (Using Google Drive's direct webContentLink or direct export URL)
+        const embedCode = `<div style="max-width:640px; background:#161b22; padding:1rem; border-radius:8px; border:1px solid #30363d;">
+  <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+  <video id="chaos-embed-${playlistFileId}" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" width="100%" height="268" data-setup='{}'>
+    <source src="https://www.googleapis.com/drive/v3/files/${playlistFileId}?alt=media" type="application/x-mpegURL">
+  </video>
+  <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+</div>`;
+
+        // Display it in the system logs or a popup for you to copy
+        logMessage('🎉 Release ready! Embed code generated:');
+        console.log(embedCode);
+        
+        // You can also drop this into a text box in your UI so you can copy it instantly
+        const logDiv = document.getElementById('log');
+        logDiv.innerHTML += `<textarea style="width:100%; height:80px; background:#010409; color:#7ee787; margin-top:10px;" readonly>${embedCode}</textarea>`;
+
+      } catch (err) {
+        logMessage('⚠️ Error setting public permission: ' + err.message);
+      }
     }
   </script>
 </body>
