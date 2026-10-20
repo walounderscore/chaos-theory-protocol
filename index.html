@@ -486,37 +486,32 @@
     function playLocalWasmStream() {
       if (!player) {
         player = videojs('chaos-player');
-
-        player.on('error', () => {
-          const err = player.error();
-          console.error("Video.js Error:", err);
-          logMessage(`❌ Player Error [Code ${err.code}]: ${err.message || 'HLS stream initialization failed.'}`);
-        });
-
-        player.on('loadedmetadata', () => {
-          logMessage('📊 Stream metadata loaded successfully.');
-        });
       }
 
-      // Read files directly from FFmpeg virtual memory
       const m3u8Data = globalFFmpegInstance.FS('readFile', 'playlist.m3u8');
       const files = globalFFmpegInstance.FS('readdir', '/');
       const segmentFiles = files.filter(f => f.endsWith('.ts')).sort();
       
       let modifiedM3u8 = new TextDecoder('utf-8').decode(m3u8Data);
       
-      // Map every relative .ts filename in the playlist to a local memory blob URL
+      // Convert chunks to local base64 Data URIs internally in memory
       for (const seg of segmentFiles) {
         const segData = globalFFmpegInstance.FS('readFile', seg);
-        const segBlob = new Blob([segData], { type: 'video/mp2t' });
-        const segBlobUrl = URL.createObjectURL(segBlob);
-        modifiedM3u8 = modifiedM3u8.split(seg).join(segBlobUrl);
+        let binaryString = '';
+        const chunkSize = 8192;
+        for (let i = 0; i < segData.length; i += chunkSize) {
+          binaryString += String.fromCharCode.apply(null, segData.subarray(i, i + chunkSize));
+        }
+        const base64Segment = btoa(binaryString);
+        const dataUri = `data:video/mp2t;base64,${base64Segment}`;
+        
+        modifiedM3u8 = modifiedM3u8.split(seg).join(dataUri);
       }
 
       const playlistBlob = new Blob([modifiedM3u8], { type: 'application/x-mpegURL' });
       const playlistBlobUrl = URL.createObjectURL(playlistBlob);
 
-      logMessage('Loading local zero-CORS stream into Sovereign Video.js player...');
+      logMessage('Loading self-contained zero-network stream into Sovereign player...');
       player.src({
         src: playlistBlobUrl,
         type: 'application/x-mpegURL'
@@ -525,7 +520,7 @@
       player.ready(() => {
         logMessage('▶️ Sovereign player ready for playback.');
         player.play().catch(() => {
-          logMessage('ℹ️ Auto-play restricted by browser. Click play on the player controls.');
+          logMessage('ℹ️ Click play on the player controls.');
         });
       });
     }
