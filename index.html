@@ -81,19 +81,58 @@
     }
 
     // --- AUTOMATIC RETURN CHECK FROM PAYSTACK ---
-    window.addEventListener('DOMContentLoaded', async () => {
+    window.addEventListener('DOMContentLoaded', () => {
+      console.log("DOMContentLoaded event fired.");
       const urlParams = new URLSearchParams(window.location.search);
       const reference = urlParams.get('trxref') || urlParams.get('reference');
       
       if (reference) {
         logMessage(`Returning from Paystack checkout. Ref: ${reference}`);
-        logMessage('Payment verified by gateway. Unlocking protocol...');
+        console.log("Paystack reference detected:", reference);
 
-        // Clean the URL bar
+        // Clean the URL bar immediately
         window.history.replaceState({}, document.title, window.location.pathname);
-        unlockToolkit();
+        
+        // Force unlock toolkit safely
+        try {
+          unlockToolkit();
+        } catch (err) {
+          console.error("Error inside unlockToolkit:", err);
+          logMessage("❌ Unlock error: " + err.message);
+        }
+      } else {
+        console.log("No Paystack reference found in URL.");
       }
     });
+
+    function unlockToolkit() {
+      logMessage('Unlocking user workspace...');
+      console.log("Executing unlockToolkit()...");
+
+      const gateCard = document.getElementById('gate-card');
+      const toolkit = document.getElementById('toolkit');
+      
+      if (gateCard) {
+        gateCard.style.display = 'none';
+        console.log("Gate card hidden.");
+      } else {
+        console.warn("Element #gate-card not found!");
+      }
+
+      if (toolkit) {
+        toolkit.classList.remove('locked');
+        console.log("Toolkit .locked class removed.");
+        logMessage('✅ Toolkit successfully unlocked!');
+      } else {
+        console.warn("Element #toolkit not found!");
+        logMessage('❌ Error: #toolkit element missing from DOM.');
+      }
+      
+      // Initialize FFmpeg safely in the background
+      setTimeout(() => {
+        initFFmpeg();
+      }, 500);
+    }
 
     // --- WHITELIST CHECK & ACCESS GATE ---
     async function checkAccessAndProceed() {
@@ -122,18 +161,6 @@
         logMessage('Whitelist check failed/skipped: ' + error.message + '. Proceeding to payment.');
         payWithPaystack(userEmail);
       }
-    }
-
-   function unlockToolkit() {
-      logMessage('Unlocking user workspace...');
-      const gateCard = document.getElementById('gate-card');
-      const toolkit = document.getElementById('toolkit');
-      
-      if (gateCard) gateCard.style.display = 'none';
-      if (toolkit) toolkit.classList.remove('locked');
-      
-      // Initialize FFmpeg safely without blocking UI unlock
-      initFFmpeg();
     }
 
     // --- PAYSTACK HOSTED REDIRECT GATE ---
