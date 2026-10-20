@@ -11,7 +11,7 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <!-- FFmpeg v0.11.6 UMD build -->
   <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
-   <!-- Video.js CSS -->
+  <!-- Video.js CSS -->
   <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
   <!-- Video.js Core -->
   <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
@@ -24,7 +24,10 @@
     button:hover { background: #2ea043; }
     button:disabled { background: #30363d; color: #8b949e; cursor: not-allowed; }
     input[type="file"] { margin: 10px 0; }
-    #log { background: #010409; padding: 1rem; border-radius: 6px; font-family: monospace; font-size: 0.85rem; max-height: 180px; overflow-y: auto; color: #7ee787; }
+    #log { background: #010409; padding: 1rem; border-radius: 6px; font-family: monospace; font-size: 0.85rem; max-height: 250px; overflow-y: auto; color: #7ee787; }
+    .embed-box { margin-top: 10px; width: 100%; height: 90px; background: #0d1117; color: #7ee787; border: 1px solid #30363d; border-radius: 4px; font-family: monospace; font-size: 0.8rem; padding: 8px; box-sizing: border-box; }
+    .copy-btn { margin-top: 6px; background: #1f6feb; font-size: 0.8rem; padding: 6px 12px; }
+    .copy-btn:hover { background: #388bfd; }
   </style>
 </head>
 <body>
@@ -45,7 +48,6 @@
     <div class="card">
       <h3>2. Google Drive Authorization</h3>
       <p>Connect your personal Google Drive to store encrypted HLS assets.</p>
-      <!-- Drive button starts disabled until FFmpeg finishes loading -->
       <button id="auth-btn" onclick="authGoogleDrive()" disabled>Connect Google Drive</button>
       <span id="auth-status" style="margin-left: 10px; color: #8b949e;">Not Connected</span>
     </div>
@@ -63,9 +65,8 @@
       <h3>System Logs</h3>
       <div id="log">Awaiting workflow initialization...</div>
     </div>
-  </div>
 
-  <!-- Step 4: Sovereign Player -->
+    <!-- Step 4: Sovereign Player -->
     <div class="card">
       <h3>4. Sovereign HLS Stream Player</h3>
       <p>Stream your encrypted release directly from your authorized Google Drive storage.</p>
@@ -84,6 +85,8 @@
       </video>
     </div>
 
+  </div>
+
   <script>
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyZSrEmHzdLVLwMHDyJa_F5Vi1V9f_CE7Dt9Nm5bZ6vK0OnMGCP2bIaQCOO05JJ5BqaeA/exec';
     const SHEET_ID = '1UjT3R0QXXoLxkekS7-9MnpsdPP72oAPWYg4OUOlJaTA';
@@ -93,6 +96,7 @@
     let accessToken = null;
     let driveFolderId = null;
     let globalFFmpegInstance = null;
+    let player = null;
 
     function logMessage(msg) {
       const logDiv = document.getElementById('log');
@@ -137,16 +141,12 @@
         if (gateCard) gateCard.style.display = 'none';
         if (toolkit) toolkit.classList.remove('locked');
         
-        // Boot up FFmpeg immediately if workspace is unlocked
         initFFmpeg();
       }
 
       // 3. Handle Drive UI State if token exists
       if (accessToken) {
         setDriveConnectedUI();
-        if (!driveFolderId && isUnlocked === 'true') {
-          // Folder will be verified/created when FFmpeg finishes or via state check
-        }
       }
 
       // 4. Check for Paystack return reference
@@ -300,14 +300,12 @@
         await globalFFmpegInstance.load();
         logMessage('✅ ffmpeg.wasm loaded and ready in browser CPU.');
         
-        // UNLOCK GOOGLE DRIVE BUTTON ONLY AFTER FFMPEG LOADS
         const authBtn = document.getElementById('auth-btn');
         if (authBtn) {
           authBtn.disabled = false;
           logMessage('🔓 Google Drive authorization unlocked.');
         }
 
-        // If we already have a token but no folder yet, create the folder now
         if (accessToken && !driveFolderId) {
           await createDriveFolder();
         } else {
@@ -420,8 +418,8 @@
 
       logMessage('🎉 Processing and direct Google Drive upload routine finished!');
 
-      // Find the file ID of playlist.m3u8 from Drive to generate the embed code
-      const query = encodeURIComponent(`name = 'playlist.m3u8' and '${driveFolderId}' in parents`);
+      // Retrieve playlist file ID from Drive
+      const query = encodeURIComponent(`name = 'playlist.m3u8' and '${driveFolderId}' in parents and trashed = false`);
       const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}`, {
         headers: { 'Authorization': 'Bearer ' + accessToken }
       });
@@ -429,21 +427,28 @@
       
       if (searchData.files && searchData.files.length > 0) {
         const playlistFileId = searchData.files[0].id;
-        await makeFilePublicAndGenerateEmbed(playlistFileId);
+        
+        // 1. Make entire release folder public (playlist + chunks)
+        await makeFolderPublic(driveFolderId);
+        
+        // 2. Initialize in-page player
+        initSovereignPlayer(playlistFileId);
+
+        // 3. Render copyable embed UI
+        generateEmbedUI(playlistFileId);
+      } else {
+        logMessage('⚠️ Could not locate playlist.m3u8 in Drive folder for player initialization.');
       }
     }
-
-    let player = null;
 
     // --- INITIALIZE VIDEO.JS WITH AUTH INJECTION ---
     function initSovereignPlayer(playlistFileId) {
       if (!player) {
         player = videojs('chaos-player');
 
-        // Intercept all HLS/XHR requests made by Video.js to attach the Google OAuth Token
+        // Intercept network requests made by Video.js to pass OAuth Bearer token
         videojs.xhr.beforeRequest(function (options) {
-          // Check if the request is going to Google Drive API
-          if (options.uri.includes('googleapis.com')) {
+          if (options.uri && options.uri.includes('googleapis.com')) {
             options.headers = options.headers || {};
             options.headers['Authorization'] = 'Bearer ' + accessToken;
           }
@@ -451,26 +456,24 @@
         });
       }
 
-      // Construct the Google Drive direct download/stream URL for the playlist
       const playlistUrl = `https://www.googleapis.com/drive/v3/files/${playlistFileId}?alt=media`;
 
-      logMessage(`Loading stream into Video.js player from Drive...`);
+      logMessage('Loading stream into Sovereign Video.js player...');
       player.src({
         src: playlistUrl,
         type: 'application/x-mpegURL'
       });
 
       player.ready(() => {
-        logMessage('▶️ Sovereign player ready for playback.');
+        logMessage('▶️ Sovereign player ready for playback!');
       });
     }
 
-    // --- SET FILE PUBLIC & GENERATE EMBED CODE ---
-    async function makeFilePublicAndGenerateEmbed(playlistFileId) {
-      logMessage('Configuring public streaming permissions for release...');
+    // --- MAKE DRIVE FOLDER PUBLIC (GIVES PUBLIC ACCESS TO PLAYLIST & ALL TS CHUNKS) ---
+    async function makeFolderPublic(folderId) {
+      logMessage('Setting public read access on Drive release folder...');
       try {
-        // 1. Make the playlist file public for reading
-        await fetch(`https://www.googleapis.com/drive/v3/files/${playlistFileId}/permissions`, {
+        await fetch(`https://www.googleapis.com/drive/v3/files/${folderId}/permissions`, {
           method: 'POST',
           headers: new Headers({
             'Authorization': 'Bearer ' + accessToken,
@@ -481,27 +484,54 @@
             type: 'anyone'
           })
         });
+        logMessage('✅ Release folder permissions configured for public streaming.');
+      } catch (err) {
+        logMessage('⚠️ Error configuring folder permissions: ' + err.message);
+      }
+    }
 
-        // 2. Generate the Embed Snippet HTML
-        // (Using Google Drive's direct webContentLink or direct export URL)
-        const embedCode = `<div style="max-width:640px; background:#161b22; padding:1rem; border-radius:8px; border:1px solid #30363d;">
+    // --- GENERATE COPYABLE EMBED UI ---
+    function generateEmbedUI(playlistFileId) {
+      const embedCode = `<div style="max-width:640px; background:#161b22; padding:1rem; border-radius:8px; border:1px solid #30363d;">
   <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
   <video id="chaos-embed-${playlistFileId}" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" width="100%" height="268" data-setup='{}'>
     <source src="https://www.googleapis.com/drive/v3/files/${playlistFileId}?alt=media" type="application/x-mpegURL">
   </video>
-  <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+  <script src="https://vjs.zencdn.net/8.10.0/video.min.js"><\/script>
 </div>`;
 
-        // Display it in the system logs or a popup for you to copy
-        logMessage('🎉 Release ready! Embed code generated:');
-        console.log(embedCode);
-        
-        // You can also drop this into a text box in your UI so you can copy it instantly
-        const logDiv = document.getElementById('log');
-        logDiv.innerHTML += `<textarea style="width:100%; height:80px; background:#010409; color:#7ee787; margin-top:10px;" readonly>${embedCode}</textarea>`;
+      logMessage('🎉 Embed code generated successfully!');
 
-      } catch (err) {
-        logMessage('⚠️ Error setting public permission: ' + err.message);
+      const logDiv = document.getElementById('log');
+      if (logDiv) {
+        const container = document.createElement('div');
+        container.style.marginTop = '12px';
+
+        const label = document.createElement('strong');
+        label.innerText = 'Copy HTML Embed Snippet:';
+        label.style.display = 'block';
+        label.style.color = '#c9d1d9';
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'embed-box';
+        textarea.value = embedCode;
+        textarea.readOnly = true;
+
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.innerText = '📋 Copy Embed Code';
+        copyBtn.onclick = () => {
+          textarea.select();
+          navigator.clipboard.writeText(embedCode);
+          copyBtn.innerText = '✅ Copied!';
+          setTimeout(() => { copyBtn.innerText = '📋 Copy Embed Code'; }, 2000);
+        };
+
+        container.appendChild(label);
+        container.appendChild(textarea);
+        container.appendChild(copyBtn);
+        logDiv.appendChild(container);
+        logDiv.scrollTop = logDiv.scrollHeight;
       }
     }
   </script>
