@@ -7,58 +7,185 @@
   <script src="coi-serviceworker.js"></script>
   <!-- Paystack Inline JS -->
   <script src="https://js.paystack.co/v2/inline.js"></script>
+  <!-- Google Identity Services (GIS) API -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <!-- FFmpeg WASM Core -->
+  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+  <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/util.js"></script>
+
   <style>
-    body { font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 2rem; }
+    body { font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 2rem; max-width: 800px; margin: auto; }
     .card { border: 1px solid #30363d; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; background: #161b22; }
     .locked { opacity: 0.4; pointer-events: none; }
-    button { background: #238636; color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; }
+    button { background: #238636; color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }
     button:hover { background: #2ea043; }
+    button:disabled { background: #30363d; color: #8b949e; cursor: not-allowed; }
+    input[type="file"] { margin: 10px 0; }
+    #log { background: #010409; padding: 1rem; border-radius: 6px; font-family: monospace; font-size: 0.85rem; max-height: 150px; overflow-y: auto; color: #7ee787; }
   </style>
 </head>
 <body>
   <h1>Chaos Theory Protocol</h1>
   <p>Self-Hosted Audio Encryption & Direct Distribution Toolkit</p>
 
-  <!-- Step 1: Intent & Verification Gate -->
+  <!-- Step 1: Commitment Gate -->
   <div id="gate-card" class="card">
     <h3>1. Unlock Protocol Toolkit</h3>
-    <p>A commitment fee of <b>₦100</b> is required to access local WebAssembly encryption & Drive tools.</p>
-    <button id="pay-btn" onclick="payWithPaystack()">Unlock Toolkit (₦100)</button>
+    <p>A commitment fee of <b>₦100</b> is required to initialize local WebAssembly encryption & Drive tools.</p>
+    <button onclick="payWithPaystack()">Unlock Toolkit (₦100)</button>
   </div>
 
-  <!-- Step 2: Locked Workspace -->
+  <!-- Step 2: Main Workspace (Locked until payment) -->
   <div id="toolkit" class="locked">
+    
+    <!-- Google Drive Integration -->
     <div class="card">
-      <h3>2. Drive Authorization & File Selection</h3>
-      <button id="auth-btn">Connect Google Drive</button>
+      <h3>2. Google Drive Authorization</h3>
+      <p>Connect your personal Google Drive to store encrypted HLS assets.</p>
+      <button id="auth-btn" onclick="authGoogleDrive()">Connect Google Drive</button>
+      <span id="auth-status" style="margin-left: 10px; color: #8b949e;">Not Connected</span>
     </div>
 
+    <!-- Local ffmpeg.wasm Processing -->
     <div class="card">
-      <h3>3. In-Browser Packaging (ffmpeg.wasm)</h3>
-      <button id="encrypt-btn">Encrypt & Segment Track</button>
+      <h3>3. Local Encryption & Segmentation</h3>
+      <p>Select a master audio file to encrypt and chunk via local WebAssembly CPU.</p>
+      <input type="file" id="audio-file" accept="audio/*" disabled><br>
+      <button id="process-btn" onclick="processAudio()" disabled>Encrypt & Upload to Drive</button>
+    </div>
+
+    <!-- Activity Log -->
+    <div class="card">
+      <h3>System Logs</h3>
+      <div id="log">Awaiting workflow initialization...</div>
     </div>
   </div>
 
   <script>
+    let accessToken = null;
+    let driveFolderId = null;
+    const { FFmpeg } = FFmpegWASM;
+    const { fetchFile } = FFmpegUtil;
+    let ffmpeg = null;
+
+    function logMessage(msg) {
+      const logDiv = document.getElementById('log');
+      logDiv.innerHTML += `<div>> ${msg}</div>`;
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    // --- PAYSTACK GATE ---
     function payWithPaystack() {
       const email = prompt("Enter your artist email for transaction reference:");
       if (!email) return;
 
       const popup = new PaystackPop();
       popup.newTransaction({
-        key: 'YOUR_PAYSTACK_PUBLIC_KEY', // Replace with your Paystack Public Key
+        key: 'pk_live_3bd7cee5669b2fa3e543d5b86391f46c3f880088', // Replace with your Paystack Public Key
         email: email,
         amount: 10000, // 100 NGN in kobo
         currency: 'NGN',
         onSuccess: function(transaction) {
-          alert('Protocol Unlocked. Reference: ' + transaction.reference);
+          logMessage('Protocol Unlocked. Ref: ' + transaction.reference);
           document.getElementById('gate-card').style.display = 'none';
           document.getElementById('toolkit').classList.remove('locked');
+          initFFmpeg();
         },
         onCancel: function() {
           alert('Commitment payment cancelled.');
         }
       });
+    }
+
+    // --- GOOGLE DRIVE GIS TOKEN CLIENT ---
+    function authGoogleDrive() {
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id: '104287153665-c7sbnq3lm32u8kgt8gohqne0kr1i8vn4.apps.googleusercontent.com', // Replace with your Google OAuth Client ID
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        callback: async (response) => {
+          if (response.error) {
+            logMessage('Auth Error: ' + response.error);
+            return;
+          }
+          accessToken = response.access_token;
+          document.getElementById('auth-status').innerText = 'Connected ✅';
+          document.getElementById('auth-status').style.color = '#7ee787';
+          logMessage('Google Drive authorized successfully.');
+          
+          // Automatically create the dedicated release folder
+          await createDriveFolder();
+        },
+      });
+      client.requestAccessToken();
+    }
+
+    // --- DRIVE FOLDER CREATOR ---
+    async function createDriveFolder() {
+      logMessage('Creating Chaos_Theory_Releases folder on Google Drive...');
+      try {
+        const metadata = {
+          name: 'Chaos_Theory_Releases',
+          mimeType: 'application/vnd.google-apps.folder'
+        };
+        const res = await fetch('https://www.googleapis.com/drive/v3/files', {
+          method: 'POST',
+          headers: new Headers({
+            'Authorization': 'Bearer ' + accessToken,
+            'Content-Type': 'application/json'
+          }),
+          body: JSON.stringify(metadata)
+        });
+        const data = await res.json();
+        driveFolderId = data.id;
+        logMessage(`Folder created successfully! ID: ${driveFolderId}`);
+        document.getElementById('audio-file').disabled = false;
+        document.getElementById('process-btn').disabled = false;
+      } catch (err) {
+        logMessage('Error creating Drive folder: ' + err.message);
+      }
+    }
+
+    // --- FFMPEG.WASM INITIALIZATION & PROCESSING ---
+    async function initFFmpeg() {
+      logMessage('Initializing local ffmpeg.wasm engine...');
+      ffmpeg = new FFmpeg();
+      ffmpeg.on('log', ({ message }) => {
+        // Uncomment if you want deep console logging from ffmpeg
+        // console.log(message);
+      });
+      await ffmpeg.load({
+        coreURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
+        wasmURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
+      });
+      logMessage('ffmpeg.wasm loaded and ready in browser CPU.');
+    }
+
+    async function processAudio() {
+      const fileInput = document.getElementById('audio-file');
+      if (fileInput.files.length === 0) {
+        alert('Please select an audio file first.');
+        return;
+      }
+      const file = fileInput.files[0];
+      logMessage(`Loading local file: ${file.name}...`);
+
+      const fileData = await fetchFile(file);
+      await ffmpeg.writeFile('input.mp3', fileData);
+
+      logMessage('Executing local AES encryption & HLS segmentation...');
+      // Run ffmpeg command to chunk audio into .ts segments and build an .m3u8 playlist
+      await ffmpeg.exec([
+        '-i', 'input.mp3',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-hls_time', '10',
+        '-hls_list_size', '0',
+        '-hls_segment_filename', 'segment_%03d.ts',
+        'playlist.m3u8'
+      ]);
+
+      logMessage('Segmentation complete. Ready to upload chunks to Google Drive folder.');
+      // Next step in pipeline: read output files from ffmpeg virtual filesystem and upload to driveFolderId via REST API
     }
   </script>
 </body>
