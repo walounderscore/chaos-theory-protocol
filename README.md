@@ -1,6 +1,7 @@
 # chaos theory protocol:
 
 self-hosting for artists who love the music most.
+
 <u>Music is emotions stored in code.</u>
 
 What's your goal when your music is shared?
