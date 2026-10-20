@@ -446,11 +446,21 @@
         const playlistTextDecoder = new TextDecoder('utf-8');
         let rawM3u8Content = playlistTextDecoder.decode(globalFFmpegInstance.FS('readFile', 'playlist.m3u8'));
         
-        // 3. Create Cloud-Linked M3u8 (Routing chunks through Apps Script Gateway for CORS bypass)
+        // 3. Create Self-Contained Base64 Data URI Manifest
         let cloudM3u8Content = rawM3u8Content;
-        for (const [segmentName, fileId] of Object.entries(segmentMap)) {
-          const gatewaySegmentUrl = `${APPS_SCRIPT_URL}?fileId=${fileId}`;
-          cloudM3u8Content = cloudM3u8Content.split(segmentName).join(gatewaySegmentUrl);
+        for (const [segmentName, fileName] of Object.entries(segmentMap)) {
+          const segData = globalFFmpegInstance.FS('readFile', segmentName);
+          
+          // Convert binary bytes to Base64 string manually or via browser utility
+          let binaryString = '';
+          const chunkSize = 8192;
+          for (let i = 0; i < segData.length; i += chunkSize) {
+            binaryString += String.fromCharCode.apply(null, segData.subarray(i, i + chunkSize));
+          }
+          const base64Segment = btoa(binaryString);
+          
+          const dataUri = `data:video/mp2t;base64,${base64Segment}`;
+          cloudM3u8Content = cloudM3u8Content.split(segmentName).join(dataUri);
         }
 
         // Upload the cloud-linked playlist to Drive vault
