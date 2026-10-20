@@ -41,7 +41,7 @@
     <div class="card">
       <h3>2. Google Drive Authorization</h3>
       <p>Connect your personal Google Drive to store encrypted HLS assets.</p>
-      <button id="auth-btn" onclick="authGoogleDrive()" disabled>Connect Google Drive</button>
+      <button id="auth-btn" onclick="authGoogleDrive()">Connect Google Drive</button>
       <span id="auth-status" style="margin-left: 10px; color: #8b949e;">Not Connected</span>
     </div>
 
@@ -78,11 +78,11 @@
       }
     }
 
-   // --- AUTOMATIC SESSION RESTORER & PAYSTACK CHECK ---
+    // --- AUTOMATIC SESSION RESTORER & PAYSTACK CHECK ---
     window.addEventListener('DOMContentLoaded', async () => {
       console.log("DOMContentLoaded event fired.");
       
-      // Restore Drive session if already connected in this browser session
+      // Restore Drive session if cached
       accessToken = sessionStorage.getItem('chaos_google_token');
       driveFolderId = sessionStorage.getItem('chaos_google_folder');
 
@@ -97,23 +97,6 @@
       }
 
       // Check for Paystack return reference
-      const urlParams = new URLSearchParams(window.location.search);
-      const reference = urlParams.get('trxref') || urlParams.get('reference');
-      
-      if (reference) {
-        logMessage(`Returning from Paystack checkout. Ref: ${reference}`);
-        window.history.replaceState({}, document.title, window.location.pathname);
-        
-        try {
-          unlockToolkit();
-        } catch (err) {
-          console.error("Error inside unlockToolkit:", err);
-          logMessage("❌ Unlock error: " + err.message);
-        }
-      }
-    });
-
-      // 2. Check for Paystack return reference
       const urlParams = new URLSearchParams(window.location.search);
       const reference = urlParams.get('trxref') || urlParams.get('reference');
       
@@ -175,7 +158,7 @@
       }
     }
 
-    // --- PAYSTACK HOSTED REDIRECT GATE ---
+    // --- PAYSTACK REDIRECT GATE ---
     function payWithPaystack(email) {
       localStorage.setItem('pending_artist_email', email);
       const targetUrl = `${PAYSTACK_PAGE_URL}?email=${encodeURIComponent(email)}`;
@@ -187,12 +170,10 @@
       const processBtn = document.getElementById('process-btn');
       const fileInput = document.getElementById('audio-file');
 
-      // Unlock the file picker when FFmpeg is ready
       if (globalFFmpegInstance && globalFFmpegInstance.isLoaded()) {
         fileInput.disabled = false;
       }
 
-      // Unlock the final upload button only when both FFmpeg is ready and Drive is connected
       if (globalFFmpegInstance && globalFFmpegInstance.isLoaded() && driveFolderId) {
         processBtn.disabled = false;
         logMessage('🚀 Toolkit fully active! Ready to process audio.');
@@ -218,7 +199,6 @@
             accessToken = response.access_token;
             sessionStorage.setItem('chaos_google_token', accessToken);
             
-            // 1. Immediately update UI status so it never gets stuck
             const statusEl = document.getElementById('auth-status');
             if (statusEl) {
               statusEl.innerText = 'Connected ✅';
@@ -226,7 +206,6 @@
             }
             logMessage('Google Drive authorized successfully.');
             
-            // 2. Create or verify the release folder
             await createDriveFolder();
           },
         });
@@ -263,8 +242,8 @@
         logMessage('Error setting up Drive folder: ' + err.message);
       }
     }
-    
-    // --- FFMPEG.WASM INITIALIZATION ---
+
+    // --- FFMPEG.WASM INITIALIZATION (v0.11) ---
     async function initFFmpeg() {
       logMessage('Initializing local ffmpeg.wasm engine...');
       
@@ -284,13 +263,6 @@
         await globalFFmpegInstance.load();
         logMessage('✅ ffmpeg.wasm loaded and ready in browser CPU.');
         
-        // Enable the Google Drive button ONLY now that CPU is free
-        const authBtn = document.getElementById('auth-btn');
-        if (authBtn) {
-          authBtn.disabled = false;
-          logMessage('🔓 Google Drive authorization unlocked.');
-        }
-
         updateButtonState();
       } catch (err) {
         logMessage('❌ FFmpeg failed to load: ' + err.message);
@@ -363,7 +335,6 @@
             parents: [driveFolderId]
           };
 
-          // Build raw multipart body string & binary array
           const metadataPart = 
             delimiter +
             'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
