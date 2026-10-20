@@ -355,7 +355,7 @@
       }
     }
 
-    // --- UPLOAD MULTIPART FILE HELPER & VERIFY PUBLIC PROPAGATION ---
+    // --- HIGH-SPEED UPLOAD MULTIPART FILE HELPER ---
     async function uploadFileToDrive(fileName, fileData, mimeType) {
       const boundary = '-------314159265358979323846';
       const delimiter = "\r\n--" + boundary + "\r\n";
@@ -395,8 +395,8 @@
 
       const fileId = data.id;
 
-      // 1. Explicitly grant public reader access
-      await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+      // Grant public reader access in the background without blocking execution
+      fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
         method: 'POST',
         headers: new Headers({
           'Authorization': 'Bearer ' + accessToken,
@@ -406,27 +406,7 @@
           role: 'reader',
           type: 'anyone'
         })
-      });
-
-      // 2. Propagation verification loop: Wait until Google's edge servers honor the public link
-      let isReady = false;
-      let attempts = 0;
-      while (!isReady && attempts < 8) {
-        attempts++;
-        await new Promise(r => setTimeout(r, 1000)); // wait 1 second between checks
-        
-        try {
-          // Test fetch using the public alternate media link (without auth header to verify public status)
-          const checkRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-            method: 'HEAD'
-          });
-          if (checkRes.ok) {
-            isReady = true;
-          }
-        } catch (e) {
-          // Network hiccup or still propagating, retry
-        }
-      }
+      }).catch(() => {}); // Non-blocking background call
 
       return fileId;
     }
