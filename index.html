@@ -224,7 +224,7 @@
       window.location.href = authUrl;
     }
 
-    // --- DRIVE FOLDER CREATOR ---
+    // --- DRIVE FOLDER CREATOR (STANDARD API ENDPOINT) ---
     async function createDriveFolder() {
       logMessage('Creating Chaos_Theory_Releases folder on Google Drive...');
       try {
@@ -232,7 +232,8 @@
           name: 'Chaos_Theory_Releases',
           mimeType: 'application/vnd.google-apps.folder'
         };
-        const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+
+        const res = await fetch('https://www.googleapis.com/drive/v3/files', {
           method: 'POST',
           headers: new Headers({
             'Authorization': 'Bearer ' + accessToken,
@@ -240,14 +241,20 @@
           }),
           body: JSON.stringify(metadata)
         });
+
         const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error ? data.error.message : res.statusText);
+        }
+
         driveFolderId = data.id;
         localStorage.setItem('chaos_google_folder', driveFolderId);
         
         logMessage(`Folder ready! ID: ${driveFolderId}`);
         updateButtonState();
       } catch (err) {
-        logMessage('Error setting up Drive folder: ' + err.message);
+        logMessage('❌ Error setting up Drive folder: ' + err.message);
       }
     }
 
