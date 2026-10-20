@@ -182,7 +182,7 @@
           name: 'Chaos_Theory_Releases',
           mimeType: 'application/vnd.google-apps.folder'
         };
-        const res = await fetch('https://www.googleapis.com/upload/drive/v3/files', {
+        const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
           method: 'POST',
           headers: new Headers({
             'Authorization': 'Bearer ' + accessToken,
@@ -194,8 +194,11 @@
         driveFolderId = data.id;
         logMessage(`Folder created successfully! ID: ${driveFolderId}`);
         
+        // Enable file selection, but let initFFmpeg enable the process button when ready
         document.getElementById('audio-file').disabled = false;
-        document.getElementById('process-btn').disabled = false;
+        if (globalFFmpegInstance) {
+          document.getElementById('process-btn').disabled = false;
+        }
       } catch (err) {
         logMessage('Error creating Drive folder: ' + err.message);
       }
