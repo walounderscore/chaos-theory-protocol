@@ -11,6 +11,10 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <!-- FFmpeg v0.11.6 UMD build -->
   <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+   <!-- Video.js CSS -->
+  <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+  <!-- Video.js Core -->
+  <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
 
   <style>
     body { font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 2rem; max-width: 800px; margin: auto; }
@@ -60,6 +64,25 @@
       <div id="log">Awaiting workflow initialization...</div>
     </div>
   </div>
+
+  <!-- Step 4: Sovereign Player -->
+    <div class="card">
+      <h3>4. Sovereign HLS Stream Player</h3>
+      <p>Stream your encrypted release directly from your authorized Google Drive storage.</p>
+      <video
+        id="chaos-player"
+        class="video-js vjs-default-skin vjs-big-play-centered"
+        controls
+        preload="auto"
+        width="640"
+        height="268"
+        data-setup='{}'>
+        <p class="vjs-no-js">
+          To view this video please enable JavaScript, and consider upgrading to a
+          web browser that <a href="https://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>
+        </p>
+      </video>
+    </div>
 
   <script>
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyZSrEmHzdLVLwMHDyJa_F5Vi1V9f_CE7Dt9Nm5bZ6vK0OnMGCP2bIaQCOO05JJ5BqaeA/exec';
@@ -396,6 +419,38 @@
       }
 
       logMessage('🎉 Processing and direct Google Drive upload routine finished!');
+    }
+
+    let player = null;
+
+    // --- INITIALIZE VIDEO.JS WITH AUTH INJECTION ---
+    function initSovereignPlayer(playlistFileId) {
+      if (!player) {
+        player = videojs('chaos-player');
+
+        // Intercept all HLS/XHR requests made by Video.js to attach the Google OAuth Token
+        videojs.xhr.beforeRequest(function (options) {
+          // Check if the request is going to Google Drive API
+          if (options.uri.includes('googleapis.com')) {
+            options.headers = options.headers || {};
+            options.headers['Authorization'] = 'Bearer ' + accessToken;
+          }
+          return options;
+        });
+      }
+
+      // Construct the Google Drive direct download/stream URL for the playlist
+      const playlistUrl = `https://www.googleapis.com/drive/v3/files/${playlistFileId}?alt=media`;
+
+      logMessage(`Loading stream into Video.js player from Drive...`);
+      player.src({
+        src: playlistUrl,
+        type: 'application/x-mpegURL'
+      });
+
+      player.ready(() => {
+        logMessage('▶️ Sovereign player ready for playback.');
+      });
     }
   </script>
 </body>
