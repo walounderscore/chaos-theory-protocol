@@ -451,7 +451,7 @@
         for (const [segmentName, fileName] of Object.entries(segmentMap)) {
           const segData = globalFFmpegInstance.FS('readFile', segmentName);
           
-          // Convert binary bytes to Base64 string manually or via browser utility
+          // Convert binary chunk bytes to Base64 string safely
           let binaryString = '';
           const chunkSize = 8192;
           for (let i = 0; i < segData.length; i += chunkSize) {
