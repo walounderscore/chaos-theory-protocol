@@ -61,12 +61,11 @@
     </div>
   </div>
 
- <script>
+  <script>
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyZSrEmHzdLVLwMHDyJa_F5Vi1V9f_CE7Dt9Nm5bZ6vK0OnMGCP2bIaQCOO05JJ5BqaeA/exec';
     const SHEET_ID = '1UjT3R0QXXoLxkekS7-9MnpsdPP72oAPWYg4OUOlJaTA';
     const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
     
-    // Replace with your actual Paystack Payment Page URL from Step 1
     const PAYSTACK_PAGE_URL = 'https://paystack.shop/pay/mlxva1fop1'; 
 
     let accessToken = null;
@@ -82,29 +81,42 @@
     }
 
     // --- AUTOMATIC RETURN CHECK FROM PAYSTACK ---
-    window.addEventListener('DOMContentLoaded', () => {
+    window.addEventListener('DOMContentLoaded', async () => {
       const urlParams = new URLSearchParams(window.location.search);
       const reference = urlParams.get('trxref') || urlParams.get('reference');
       
       if (reference) {
         logMessage(`Returning from Paystack checkout. Ref: ${reference}`);
 
-        // Retrieve the email stored before redirecting
-        const savedEmail = localStorage.getItem('pending_artist_email');
-        
-        if (savedEmail) {
-          logMessage(`Logging payment for ${savedEmail} to Google Sheet...`);
-          
-          // Use an Image beacon to fire-and-forget the log to Apps Script instantly 
-          // This bypasses CORS and never gets dropped by browser navigation/redirect lifecycle
-          const logUrl = `${APPS_SCRIPT_URL}?email=${encodeURIComponent(savedEmail)}&reference=${encodeURIComponent(reference)}`;
+        // Try getting email from localStorage or URL query params
+        let emailToLog = localStorage.getItem('pending_artist_email') || urlParams.get('email');
+
+        // Fallback: prompt user if email was lost during redirect
+        if (!emailToLog) {
+          emailToLog = prompt("Payment confirmed! Please enter your email to finalize whitelist registration:");
+        }
+
+        if (emailToLog) {
+          emailToLog = emailToLog.trim().toLowerCase();
+          logMessage(`Logging payment for ${emailToLog} to Google Sheet...`);
+
+          const targetEndpoint = `${APPS_SCRIPT_URL}?email=${encodeURIComponent(emailToLog)}&reference=${encodeURIComponent(reference)}`;
+
+          // 1. Dispatch via Image Beacon (immune to CORS restrictions)
           const beacon = new Image();
-          beacon.src = logUrl;
-          
-          logMessage('Logging beacon dispatched to Google Sheet.');
+          beacon.src = targetEndpoint;
+
+          // 2. Secondary fetch trigger to guarantee delivery
+          try {
+            await fetch(targetEndpoint, { method: 'GET', mode: 'no-cors' });
+            logMessage('Email successfully appended to Google Sheet whitelist.');
+          } catch (err) {
+            logMessage('Beacon sent to Apps Script.');
+          }
+
           localStorage.removeItem('pending_artist_email');
         } else {
-          logMessage('No pending email found in browser storage.');
+          logMessage('No email provided for logging.');
         }
 
         // Clean the URL bar
@@ -112,6 +124,7 @@
         unlockToolkit();
       }
     });
+
     // --- WHITELIST CHECK & ACCESS GATE ---
     async function checkAccessAndProceed() {
       const emailInput = prompt("Enter your artist email:");
@@ -149,10 +162,7 @@
 
     // --- PAYSTACK HOSTED REDIRECT GATE ---
     function payWithPaystack(email) {
-      // Save email locally so we can log it to the sheet when they return
       localStorage.setItem('pending_artist_email', email);
-
-      // Redirect user to your hosted Paystack payment page with prefilled email
       const targetUrl = `${PAYSTACK_PAGE_URL}?email=${encodeURIComponent(email)}`;
       window.location.href = targetUrl;
     }
@@ -258,7 +268,7 @@
 
         const metadata = {
           name: hlsFile.name,
-        parents: [driveFolderId]
+          parents: [driveFolderId]
         };
 
         const form = new FormData();
