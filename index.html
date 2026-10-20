@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chaos Theory Protocol - Artist Toolkit</title>
+  <!-- COI Service Worker for ffmpeg.wasm support -->
+  <script src="coi-serviceworker.js"></script>
+  <!-- Video.js CSS & JS -->
+  <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+  <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+  <!-- Paystack Inline JS -->
+  <script src="https://js.paystack.co/v1/inline.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 2rem; }
+    .card { border: 1px solid #30363d; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; background: #161b22; }
+    button { background: #238636; color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; }
+    button:hover { background: #2ea043; }
+  </style>
+</head>
+<body>
+  <h1>Chaos Theory Protocol</h1>
+  <p>Self-Hosted Audio Encryption & Direct Distribution Toolkit</p>
+
+  <div class="card">
+    <h3>1. Drive Authorization & File Selection</h3>
+    <button id="auth-btn">Connect Google Drive</button>
+  </div>
+
+  <div class="card">
+    <h3>2. In-Browser Packaging (ffmpeg.wasm)</h3>
+    <button id="encrypt-btn" disabled>Encrypt & Segment Track</button>
+  </div>
+
+  <div class="card">
+    <h3>3. Playback & Monetization Preview</h3>
+    <audio id="player" class="video-js vjs-default-skin" controls preload="auto" width="600" height="80"></audio>
+  </div>
+</body>
+</html>
