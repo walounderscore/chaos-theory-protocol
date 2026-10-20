@@ -340,46 +340,65 @@
       }
     }
 
-    // --- GOOGLE DRIVE DIRECT UPLOADER ---
+    // --- GOOGLE DRIVE DIRECT UPLOADER (STRICT MULTIPART) ---
     async function uploadGeneratedChunksToDrive() {
       const files = globalFFmpegInstance.FS('readdir', '/');
       const hlsFiles = files.filter(f => f.endsWith('.m3u8') || f.endsWith('.ts'));
 
       logMessage(`Found ${hlsFiles.length} generated HLS assets. Uploading to Drive folder...`);
 
+      const boundary = '-------314159265358979323846';
+      const delimiter = "\r\n--" + boundary + "\r\n";
+      const close_delim = "\r\n--" + boundary + "--";
+
       for (const fileName of hlsFiles) {
         logMessage(`Uploading ${fileName}...`);
-        const data = globalFFmpegInstance.FS('readFile', fileName);
-        const blob = new Blob([data.buffer], { 
-          type: fileName.endsWith('.m3u8') ? 'application/x-mpegURL' : 'video/mp2t' 
-        });
-
-        const metadata = {
-          name: fileName,
-          parents: [driveFolderId]
-        };
-
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        form.append('file', blob);
-
+        
         try {
+          const fileData = globalFFmpegInstance.FS('readFile', fileName);
+          const mimeType = fileName.endsWith('.m3u8') ? 'application/x-mpegURL' : 'video/mp2t';
+
+          const metadata = {
+            name: fileName,
+            parents: [driveFolderId]
+          };
+
+          // Build raw multipart body string & binary array
+          const metadataPart = 
+            delimiter +
+            'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+            JSON.stringify(metadata) +
+            delimiter +
+            'Content-Type: ' + mimeType + '\r\n\r\n';
+
+          const multipartRequestBody = new Blob([
+            metadataPart,
+            fileData,
+            close_delim
+          ], { type: 'multipart/related; boundary=' + boundary });
+
           const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
             method: 'POST',
-            headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
-            body: form
+            headers: new Headers({
+              'Authorization': 'Bearer ' + accessToken,
+              'Content-Type': 'multipart/related; boundary=' + boundary
+            }),
+            body: multipartRequestBody
           });
+
           if (res.ok) {
             logMessage(`✅ Uploaded: ${fileName}`);
           } else {
-            logMessage(`❌ Failed uploading ${fileName}`);
+            const errData = await res.json().catch(() => ({}));
+            const errMsg = errData.error ? errData.error.message : res.statusText;
+            logMessage(`❌ Failed uploading ${fileName}: ${errMsg} (${res.status})`);
           }
         } catch (err) {
-          logMessage(`Error uploading ${fileName}: ${err.message}`);
+          logMessage(`❌ Error uploading ${fileName}: ${err.message}`);
         }
       }
 
-      logMessage('🎉 All HLS track assets successfully processed and saved to your Google Drive!');
+      logMessage('🎉 Processing and direct Google Drive upload routine finished!');
     }
   </script>
 </body>
