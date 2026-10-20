@@ -179,30 +179,53 @@
       window.location.href = targetUrl;
     }
 
-    // --- GOOGLE DRIVE GIS TOKEN CLIENT ---
+    // --- GOOGLE DRIVE GIS TOKEN CLIENT (DEBUGGER VERSION) ---
     function authGoogleDrive() {
-      const client = google.accounts.oauth2.initTokenClient({
-        client_id: '104287153665-c7sbnq3lm32u8kgt8gohqne0kr1i8vn4.apps.googleusercontent.com',
-        scope: 'https://www.googleapis.com/auth/drive.file',
-        callback: async (response) => {
-          if (response.error) {
-            logMessage('Auth Error: ' + response.error);
-            return;
-          }
-          accessToken = response.access_token;
-          
-          // Update UI immediately upon successful token return
-          const statusEl = document.getElementById('auth-status');
-          if (statusEl) {
-            statusEl.innerText = 'Connected ✅';
-            statusEl.style.color = '#7ee787';
-          }
-          logMessage('Google Drive authorized successfully.');
-          
-          await createDriveFolder();
-        },
-      });
-      client.requestAccessToken();
+      logMessage('Initiating Google OAuth request...');
+      console.log("authGoogleDrive called.");
+
+      try {
+        const client = google.accounts.oauth2.initTokenClient({
+          client_id: '104287153665-c7sbnq3lm32u8kgt8gohqne0kr1i8vn4.apps.googleusercontent.com',
+          scope: 'https://www.googleapis.com/auth/drive.file',
+          callback: async (response) => {
+            console.log("Google Auth Callback Response object:", response);
+            logMessage('Auth callback received response from Google.');
+
+            if (response.error) {
+              logMessage('❌ Google Auth Error: ' + JSON.stringify(response));
+              console.error("Auth error details:", response);
+              return;
+            }
+
+            if (!response.access_token) {
+              logMessage('❌ Error: No access token found in response.');
+              return;
+            }
+
+            accessToken = response.access_token;
+            console.log("Access token acquired successfully.");
+
+            // Force update UI element explicitly
+            const statusEl = document.getElementById('auth-status');
+            if (statusEl) {
+              statusEl.innerText = 'Connected ✅';
+              statusEl.style.color = '#7ee787';
+              console.log("UI status element updated.");
+            } else {
+              console.warn("Could not find element #auth-status");
+            }
+
+            logMessage('Google Drive authorized successfully.');
+            await createDriveFolder();
+          },
+        });
+
+        client.requestAccessToken();
+      } catch (err) {
+        logMessage('❌ Exception in token client: ' + err.message);
+        console.error("Exception in authGoogleDrive:", err);
+      }
     }
 
     // --- ORIGINAL DRIVE FOLDER CREATOR ---
