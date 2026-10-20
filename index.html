@@ -85,6 +85,14 @@
       </video>
     </div>
 
+    <!-- Step 5: Distribution Embed Snippet -->
+    <div class="card" id="embed-card">
+      <h3>5. Release Embed Code</h3>
+      <p>Copy this HTML snippet to embed your sovereign audio release anywhere on the web.</p>
+      <textarea id="embed-output-box" class="embed-box" readonly placeholder="Awaiting audio processing and Drive sync to generate embed code..."></textarea>
+      <button class="copy-btn" onclick="copyEmbedCode()">📋 Copy Embed Code</button>
+    </div>
+
   </div>
 
   <script>
@@ -563,7 +571,7 @@
       }
     }
 
-    // --- GENERATE COPYABLE EMBED UI ---
+    // --- GENERATE COPYABLE EMBED UI (DEDICATED CARD) ---
     function generateEmbedUI(playlistFileId) {
       if (!playlistFileId) {
         logMessage('⚠️ Warning: Cannot generate embed UI because playlistFileId is missing.');
@@ -578,46 +586,31 @@
   <script src="https://vjs.zencdn.net/8.10.0/video.min.js"><\/script>
 </div>`;
 
-      logMessage('🎉 Building copyable embed box...');
+      // Target the dedicated textarea directly
+      const embedBox = document.getElementById('embed-output-box');
+      if (embedBox) {
+        embedBox.value = embedCode;
+        logMessage('🎉 Embed code successfully populated in the distribution box!');
+      } else {
+        logMessage('⚠️ Error: Embed output box element not found.');
+      }
+    }
 
-      const logDiv = document.getElementById('log');
-      if (!logDiv) {
-        console.error("Log div element not found!");
+    // --- COPY BUTTON HANDLER ---
+    function copyEmbedCode() {
+      const embedBox = document.getElementById('embed-output-box');
+      if (!embedBox || !embedBox.value) {
+        alert('No embed code available yet. Process an audio file first!');
         return;
       }
-
-      const container = document.createElement('div');
-      container.style.marginTop = '12px';
-      container.style.borderTop = '1px solid #30363d';
-      container.style.paddingTop = '10px';
-
-      const label = document.createElement('strong');
-      label.innerText = 'Copy HTML Embed Snippet:';
-      label.style.display = 'block';
-      label.style.color = '#c9d1d9';
-
-      const textarea = document.createElement('textarea');
-      textarea.className = 'embed-box';
-      textarea.value = embedCode;
-      textarea.readOnly = true;
-
-      const copyBtn = document.createElement('button');
-      copyBtn.className = 'copy-btn';
-      copyBtn.innerText = '📋 Copy Embed Code';
-      copyBtn.onclick = () => {
-        textarea.select();
-        navigator.clipboard.writeText(embedCode);
-        copyBtn.innerText = '✅ Copied!';
-        setTimeout(() => { copyBtn.innerText = '📋 Copy Embed Code'; }, 2000);
-      };
-
-      container.appendChild(label);
-      container.appendChild(textarea);
-      container.appendChild(copyBtn);
-      logDiv.appendChild(container);
-      logDiv.scrollTop = logDiv.scrollHeight;
+      embedBox.select();
+      navigator.clipboard.writeText(embedBox.value);
       
-      logMessage('✅ Embed snippet successfully injected into UI.');
+      const btn = document.querySelector('#embed-card .copy-btn');
+      if (btn) {
+        btn.innerText = '✅ Copied to Clipboard!';
+        setTimeout(() => { btn.innerText = '📋 Copy Embed Code'; }, 2000);
+      }
     }
   </script>
 </body>
