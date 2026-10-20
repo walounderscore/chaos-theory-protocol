@@ -419,7 +419,7 @@
       return fileId;
     }
 
-    // --- GOOGLE DRIVE DIRECT UPLOADER & DUAL-PLAYLIST MAPPER ---
+    // --- GOOGLE DRIVE DIRECT UPLOADER & APPS SCRIPT GATEWAY MAPPER ---
     async function uploadGeneratedChunksToDrive() {
       try {
         const files = globalFFmpegInstance.FS('readdir', '/');
@@ -446,11 +446,11 @@
         const playlistTextDecoder = new TextDecoder('utf-8');
         let rawM3u8Content = playlistTextDecoder.decode(globalFFmpegInstance.FS('readFile', 'playlist.m3u8'));
         
-        // 3. Create Cloud-Linked M3u8 (Rewriting relative names to absolute Google Drive URLs for external embeds)
+        // 3. Create Cloud-Linked M3u8 (Rewriting relative names to Apps Script Gateway URLs for CORS compliance)
         let cloudM3u8Content = rawM3u8Content;
         for (const [segmentName, fileId] of Object.entries(segmentMap)) {
-          const driveSegmentUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
-          cloudM3u8Content = cloudM3u8Content.split(segmentName).join(driveSegmentUrl);
+          const gatewaySegmentUrl = `${APPS_SCRIPT_URL}?fileId=${fileId}`;
+          cloudM3u8Content = cloudM3u8Content.split(segmentName).join(gatewaySegmentUrl);
         }
 
         // Upload the cloud-linked playlist to Drive vault
@@ -463,7 +463,7 @@
         // 4. Play locally using WebAssembly Memory Blobs (Bypasses CORS for your immediate preview)
         playLocalWasmStream();
 
-        // 5. Populate the dedicated Embed Box with the persistent Google Drive links
+        // 5. Populate the dedicated Embed Box with the Apps Script Gateway URLs
         generateEmbedUI(playlistFileId);
 
       } catch (err) {
@@ -536,7 +536,6 @@
         });
       }
 
-      // Create a local Blob URL for the manifest to bypass CORS and relative resolution issues
       const manifestBlob = new Blob([m3u8ManifestContent], { type: 'application/x-mpegURL' });
       const blobUrl = URL.createObjectURL(manifestBlob);
 
@@ -582,19 +581,19 @@
         return;
       }
 
+      // Updated to point to the Apps Script Gateway URL instead of direct Google Drive links
       const embedCode = `<div style="max-width:640px; background:#161b22; padding:1rem; border-radius:8px; border:1px solid #30363d;">
   <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
   <video id="chaos-embed-${playlistFileId}" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" width="100%" height="268" data-setup='{}'>
-    <source src="https://www.googleapis.com/drive/v3/files/${playlistFileId}?alt=media" type="application/x-mpegURL">
+    <source src="${APPS_SCRIPT_URL}?fileId=${playlistFileId}" type="application/x-mpegURL">
   </video>
   <script src="https://vjs.zencdn.net/8.10.0/video.min.js"><\/script>
 </div>`;
 
-      // Target the dedicated textarea directly
       const embedBox = document.getElementById('embed-output-box');
       if (embedBox) {
         embedBox.value = embedCode;
-        logMessage('🎉 Embed code successfully populated in the distribution box!');
+        logMessage('🎉 Embed code successfully populated with Apps Script gateway links!');
       } else {
         logMessage('⚠️ Error: Embed output box element not found.');
       }
