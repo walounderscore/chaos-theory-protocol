@@ -9,9 +9,8 @@
   <script src="https://js.paystack.co/v2/inline.js"></script>
   <!-- Google Identity Services (GIS) API -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <!-- FFmpeg WASM Core & Utilities (v0.12.10 via jsDelivr) -->
+  <!-- FFmpeg WASM Core (v0.12.10 via jsDelivr) - util.js removed to prevent 404 -->
   <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.10/dist/umd/util.js"></script>
 
   <style>
     body { font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 2rem; max-width: 800px; margin: auto; }
@@ -65,13 +64,10 @@
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyZSrEmHzdLVLwMHDyJa_F5Vi1V9f_CE7Dt9Nm5bZ6vK0OnMGCP2bIaQCOO05JJ5BqaeA/exec';
     const SHEET_ID = '1UjT3R0QXXoLxkekS7-9MnpsdPP72oAPWYg4OUOlJaTA';
     const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
-    
     const PAYSTACK_PAGE_URL = 'https://paystack.shop/pay/mlxva1fop1'; 
 
     let accessToken = null;
     let driveFolderId = null;
-    const { FFmpeg } = FFmpegWASM;
-    const { fetchFile } = FFmpegUtil;
     let ffmpeg = null;
 
     function logMessage(msg) {
@@ -82,22 +78,9 @@
       }
     }
 
-   // --- AUTOMATIC RETURN & SESSION CHECK ---
+    // --- AUTOMATIC RETURN CHECK FROM PAYSTACK ---
     window.addEventListener('DOMContentLoaded', () => {
       console.log("DOMContentLoaded event fired.");
-      
-      // Check if we already have an active Google Drive session saved
-      accessToken = sessionStorage.getItem('ct_access_token');
-      driveFolderId = sessionStorage.getItem('ct_folder_id');
-
-      if (accessToken && driveFolderId) {
-        document.getElementById('auth-status').innerText = 'Connected (Restored) ✅';
-        document.getElementById('auth-status').style.color = '#7ee787';
-        document.getElementById('audio-file').disabled = false;
-        document.getElementById('process-btn').disabled = false;
-        logMessage('Google Drive session restored from secure storage.');
-      }
-
       const urlParams = new URLSearchParams(window.location.search);
       const reference = urlParams.get('trxref') || urlParams.get('reference');
       
@@ -116,28 +99,15 @@
 
     function unlockToolkit() {
       logMessage('Unlocking user workspace...');
-      console.log("Executing unlockToolkit()...");
-
       const gateCard = document.getElementById('gate-card');
       const toolkit = document.getElementById('toolkit');
       
-      if (gateCard) {
-        gateCard.style.display = 'none';
-        console.log("Gate card hidden.");
-      } else {
-        console.warn("Element #gate-card not found!");
-      }
-
+      if (gateCard) gateCard.style.display = 'none';
       if (toolkit) {
         toolkit.classList.remove('locked');
-        console.log("Toolkit .locked class removed.");
         logMessage('✅ Toolkit successfully unlocked!');
-      } else {
-        console.warn("Element #toolkit not found!");
-        logMessage('❌ Error: #toolkit element missing from DOM.');
       }
       
-      // Initialize FFmpeg safely in the background
       setTimeout(() => {
         initFFmpeg();
       }, 500);
@@ -179,56 +149,32 @@
       window.location.href = targetUrl;
     }
 
-    // --- GOOGLE DRIVE GIS TOKEN CLIENT (DEBUGGER VERSION) ---
+    // --- GOOGLE DRIVE GIS TOKEN CLIENT ---
     function authGoogleDrive() {
-      logMessage('Initiating Google OAuth request...');
-      console.log("authGoogleDrive called.");
-
-      try {
-        const client = google.accounts.oauth2.initTokenClient({
-          client_id: '104287153665-c7sbnq3lm32u8kgt8gohqne0kr1i8vn4.apps.googleusercontent.com',
-          scope: 'https://www.googleapis.com/auth/drive.file',
-          callback: async (response) => {
-            console.log("Google Auth Callback Response object:", response);
-            logMessage('Auth callback received response from Google.');
-
-            if (response.error) {
-              logMessage('❌ Google Auth Error: ' + JSON.stringify(response));
-              console.error("Auth error details:", response);
-              return;
-            }
-
-            if (!response.access_token) {
-              logMessage('❌ Error: No access token found in response.');
-              return;
-            }
-
-            accessToken = response.access_token;
-            console.log("Access token acquired successfully.");
-
-            // Force update UI element explicitly
-            const statusEl = document.getElementById('auth-status');
-            if (statusEl) {
-              statusEl.innerText = 'Connected ✅';
-              statusEl.style.color = '#7ee787';
-              console.log("UI status element updated.");
-            } else {
-              console.warn("Could not find element #auth-status");
-            }
-
-            logMessage('Google Drive authorized successfully.');
-            await createDriveFolder();
-          },
-        });
-
-        client.requestAccessToken();
-      } catch (err) {
-        logMessage('❌ Exception in token client: ' + err.message);
-        console.error("Exception in authGoogleDrive:", err);
-      }
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id: '104287153665-c7sbnq3lm32u8kgt8gohqne0kr1i8vn4.apps.googleusercontent.com',
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        callback: async (response) => {
+          if (response.error) {
+            logMessage('Auth Error: ' + response.error);
+            return;
+          }
+          accessToken = response.access_token;
+          
+          const statusEl = document.getElementById('auth-status');
+          if (statusEl) {
+            statusEl.innerText = 'Connected ✅';
+            statusEl.style.color = '#7ee787';
+          }
+          logMessage('Google Drive authorized successfully.');
+          
+          await createDriveFolder();
+        },
+      });
+      client.requestAccessToken();
     }
 
-    // --- ORIGINAL DRIVE FOLDER CREATOR ---
+    // --- DRIVE FOLDER CREATOR ---
     async function createDriveFolder() {
       logMessage('Creating Chaos_Theory_Releases folder on Google Drive...');
       try {
@@ -248,7 +194,6 @@
         driveFolderId = data.id;
         logMessage(`Folder created successfully! ID: ${driveFolderId}`);
         
-        // Enable file processing controls
         document.getElementById('audio-file').disabled = false;
         document.getElementById('process-btn').disabled = false;
       } catch (err) {
@@ -256,11 +201,10 @@
       }
     }
 
-    // --- FFMPEG.WASM INITIALIZATION & PROCESSING ---
+    // --- FFMPEG.WASM INITIALIZATION ---
     async function initFFmpeg() {
       logMessage('Initializing local ffmpeg.wasm engine...');
       
-      // Check if SharedArrayBuffer is available (required for ffmpeg.wasm)
       if (typeof SharedArrayBuffer === 'undefined') {
         logMessage('⚠️ WARNING: SharedArrayBuffer is not enabled. coi-serviceworker may still be registering.');
         logMessage('Please refresh the page once more to activate WebAssembly CPU isolation.');
@@ -268,10 +212,15 @@
       }
 
       try {
-        ffmpeg = new FFmpeg();
+        const FFmpegClass = window.FFmpegWASM ? window.FFmpegWASM.FFmpeg : window.FFmpeg;
+        if (!FFmpegClass) {
+          throw new Error("FFmpeg script scope not detected.");
+        }
+
+        ffmpeg = new FFmpegClass();
         await ffmpeg.load({
-          coreURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
-          wasmURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
+          coreURL: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.js",
+          wasmURL: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.wasm",
         });
         logMessage('✅ ffmpeg.wasm loaded and ready in browser CPU.');
       } catch (err) {
@@ -280,6 +229,7 @@
       }
     }
 
+    // --- NATIVE FILE PROCESSING & SEGMENTATION ---
     async function processAudio() {
       const fileInput = document.getElementById('audio-file');
       if (fileInput.files.length === 0) {
@@ -290,7 +240,6 @@
       logMessage(`Loading local file: ${file.name} (${(file.size / (1024*1024)).toFixed(2)} MB)...`);
 
       try {
-        // Read file natively using ArrayBuffer (bypasses external utility helper bugs)
         const arrayBuffer = await file.arrayBuffer();
         const fileData = new Uint8Array(arrayBuffer);
 
