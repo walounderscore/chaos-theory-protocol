@@ -451,16 +451,11 @@
 
         logMessage(`🎉 Processing complete! Playlist ID: ${playlistFileId}`);
 
-        // 3. Play locally using WebAssembly Memory Blobs
+        // 3. Play locally using WebAssembly Memory Blobs (Zero CORS)
         playLocalWasmStream();
 
-        // 4. Generate Embed UI with error safety
-        try {
-          generateEmbedUI(playlistFileId);
-        } catch (embedErr) {
-          logMessage('❌ Error rendering embed UI: ' + embedErr.message);
-          console.error("Embed UI Error:", embedErr);
-        }
+        // 4. Populate the dedicated Embed Box immediately
+        generateEmbedUI(playlistFileId);
 
       } catch (err) {
         logMessage('❌ Error in upload pipeline: ' + err.message);
