@@ -10,7 +10,7 @@
   <!-- Google Identity Services (GIS) API -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <!-- FFmpeg WASM Core (v0.12.10 via jsDelivr) - util.js removed to prevent 404 -->
-  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
 
   <style>
     body { font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 2rem; max-width: 800px; margin: auto; }
@@ -68,7 +68,6 @@
 
     let accessToken = null;
     let driveFolderId = null;
-    let ffmpeg = null;
     let globalFFmpegInstance = null;
 
     function logMessage(msg) {
@@ -110,7 +109,7 @@
       }
       
       setTimeout(() => {
-        initFFmpeg();
+        ();
       }, 500);
     }
 
@@ -195,7 +194,7 @@
         driveFolderId = data.id;
         logMessage(`Folder created successfully! ID: ${driveFolderId}`);
         
-        // Enable file selection, but let initFFmpeg enable the process button when ready
+        // Enable file selection, but let  enable the process button when ready
         document.getElementById('audio-file').disabled = false;
         if (globalFFmpegInstance) {
           document.getElementById('process-btn').disabled = false;
@@ -205,7 +204,7 @@
       }
     }
 
-    // --- FFMPEG.WASM INITIALIZATION ---
+    // --- FFMPEG.WASM INITIALIZATION (v0.11) ---
     async function initFFmpeg() {
       logMessage('Initializing local ffmpeg.wasm engine...');
       
@@ -216,20 +215,15 @@
       }
 
       try {
-        const FFmpegClass = window.FFmpegWASM ? window.FFmpegWASM.FFmpeg : (window.FFmpeg ? window.FFmpeg.FFmpeg : null);
-        if (!FFmpegClass) {
-          throw new Error("FFmpeg library scope not found.");
-        }
-
-        globalFFmpegInstance = new FFmpegClass();
-        await globalFFmpegInstance.load({
-          coreURL: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.js",
-          wasmURL: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.wasm",
+        const { createFFmpeg } = FFmpeg;
+        globalFFmpegInstance = createFFmpeg({ 
+          log: true,
+          corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
         });
-        
+
+        await globalFFmpegInstance.load();
         logMessage('✅ ffmpeg.wasm loaded and ready in browser CPU.');
         
-        // Enable the process button ONLY after FFmpeg is fully loaded and Drive is connected
         if (driveFolderId) {
           document.getElementById('process-btn').disabled = false;
         }
@@ -239,11 +233,10 @@
       }
     }
 
-    // --- NATIVE FILE PROCESSING & SEGMENTATION ---
+    // --- NATIVE FILE PROCESSING & SEGMENTATION (v0.11 FS syntax) ---
     async function processAudio() {
-      if (!globalFFmpegInstance) {
+      if (!globalFFmpegInstance || !globalFFmpegInstance.isLoaded()) {
         alert('FFmpeg engine is still initializing. Please wait a moment and try again.');
-        logMessage('⚠️ Processing halted: FFmpeg instance is not ready yet.');
         return;
       }
 
@@ -260,10 +253,10 @@
         const fileData = new Uint8Array(arrayBuffer);
 
         logMessage('Writing file to virtual WebAssembly filesystem...');
-        await globalFFmpegInstance.writeFile('input.mp3', fileData);
+        globalFFmpegInstance.FS('writeFile', 'input.mp3', fileData);
 
         logMessage('Executing local AES encryption & HLS segmentation...');
-        await globalFFmpegInstance.exec([
+        await globalFFmpegInstance.run(
           '-i', 'input.mp3',
           '-c:a', 'aac',
           '-b:a', '128k',
@@ -271,7 +264,7 @@
           '-hls_list_size', '0',
           '-hls_segment_filename', 'segment_%03d.ts',
           'playlist.m3u8'
-        ]);
+        );
 
         logMessage('Segmentation complete. Preparing Google Drive upload...');
         await uploadGeneratedChunksToDrive();
@@ -282,22 +275,23 @@
       }
     }
 
-    // --- GOOGLE DRIVE DIRECT UPLOADER ---
+    // --- GOOGLE DRIVE DIRECT UPLOADER (v0.11 FS read syntax) ---
     async function uploadGeneratedChunksToDrive() {
-      const files = await ffmpeg.listDir('/');
-      const hlsFiles = files.filter(f => f.name.endsWith('.m3u8') || f.name.endsWith('.ts'));
+      // v0.11 uses FS('readdir', '/')
+      const files = globalFFmpegInstance.FS('readdir', '/');
+      const hlsFiles = files.filter(f => f.endsWith('.m3u8') || f.endsWith('.ts'));
 
       logMessage(`Found ${hlsFiles.length} generated HLS assets. Uploading to Drive folder...`);
 
-      for (const hlsFile of hlsFiles) {
-        logMessage(`Uploading ${hlsFile.name}...`);
-        const data = await ffmpeg.readFile(hlsFile.name);
+      for (const fileName of hlsFiles) {
+        logMessage(`Uploading ${fileName}...`);
+        const data = globalFFmpegInstance.FS('readFile', fileName);
         const blob = new Blob([data.buffer], { 
-          type: hlsFile.name.endsWith('.m3u8') ? 'application/x-mpegURL' : 'video/mp2t' 
+          type: fileName.endsWith('.m3u8') ? 'application/x-mpegURL' : 'video/mp2t' 
         });
 
         const metadata = {
-          name: hlsFile.name,
+          name: fileName,
           parents: [driveFolderId]
         };
 
@@ -312,14 +306,17 @@
             body: form
           });
           if (res.ok) {
-            logMessage(`✅ Uploaded: ${hlsFile.name}`);
+            logMessage(`✅ Uploaded: ${fileName}`);
           } else {
-            logMessage(`❌ Failed uploading ${hlsFile.name}`);
+            logMessage(`❌ Failed uploading ${fileName}`);
           }
         } catch (err) {
-          logMessage(`Error uploading ${hlsFile.name}: ${err.message}`);
+          logMessage(`Error uploading ${fileName}: ${err.message}`);
         }
       }
+
+      logMessage('🎉 All HLS track assets successfully processed and saved to your Google Drive!');
+    }
 
       logMessage('🎉 All HLS track assets successfully processed and saved to your Google Drive!');
     }
