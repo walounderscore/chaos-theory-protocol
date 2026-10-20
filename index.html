@@ -212,17 +212,23 @@
       }
 
       try {
-        const FFmpegClass = window.FFmpegWASM ? window.FFmpegWASM.FFmpeg : window.FFmpeg;
+        const FFmpegClass = window.FFmpegWASM ? window.FFmpegWASM.FFmpeg : (window.FFmpeg ? window.FFmpeg.FFmpeg : null);
         if (!FFmpegClass) {
-          throw new Error("FFmpeg script scope not detected.");
+          throw new Error("FFmpeg library scope not found.");
         }
 
-        ffmpeg = new FFmpegClass();
-        await ffmpeg.load({
+        globalFFmpegInstance = new FFmpegClass();
+        await globalFFmpegInstance.load({
           coreURL: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.js",
           wasmURL: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.wasm",
         });
+        
         logMessage('✅ ffmpeg.wasm loaded and ready in browser CPU.');
+        
+        // Enable the process button ONLY after FFmpeg is fully loaded and Drive is connected
+        if (driveFolderId) {
+          document.getElementById('process-btn').disabled = false;
+        }
       } catch (err) {
         logMessage('❌ FFmpeg failed to load: ' + err.message);
         console.error(err);
@@ -231,6 +237,12 @@
 
     // --- NATIVE FILE PROCESSING & SEGMENTATION ---
     async function processAudio() {
+      if (!globalFFmpegInstance) {
+        alert('FFmpeg engine is still initializing. Please wait a moment and try again.');
+        logMessage('⚠️ Processing halted: FFmpeg instance is not ready yet.');
+        return;
+      }
+
       const fileInput = document.getElementById('audio-file');
       if (fileInput.files.length === 0) {
         alert('Please select an audio file first.');
@@ -244,10 +256,10 @@
         const fileData = new Uint8Array(arrayBuffer);
 
         logMessage('Writing file to virtual WebAssembly filesystem...');
-        await ffmpeg.writeFile('input.mp3', fileData);
+        await globalFFmpegInstance.writeFile('input.mp3', fileData);
 
         logMessage('Executing local AES encryption & HLS segmentation...');
-        await ffmpeg.exec([
+        await globalFFmpegInstance.exec([
           '-i', 'input.mp3',
           '-c:a', 'aac',
           '-b:a', '128k',
