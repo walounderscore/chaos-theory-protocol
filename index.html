@@ -81,49 +81,25 @@
     }
 
     // --- AUTOMATIC RETURN CHECK FROM PAYSTACK ---
-    window.addEventListener('DOMContentLoaded', async () => {
+    window.addEventListener('DOMContentLoaded', () => {
       const urlParams = new URLSearchParams(window.location.search);
       const reference = urlParams.get('trxref') || urlParams.get('reference');
       
       if (reference) {
         logMessage(`Returning from Paystack checkout. Ref: ${reference}`);
-
-        // Try getting email from localStorage or URL query params
-        let emailToLog = localStorage.getItem('pending_artist_email') || urlParams.get('email');
-
-        // Fallback: prompt user if email was lost during redirect
-        if (!emailToLog) {
-          emailToLog = prompt("Payment confirmed! Please enter your email to finalize whitelist registration:");
-        }
-
-        if (emailToLog) {
-          emailToLog = emailToLog.trim().toLowerCase();
-          logMessage(`Logging payment for ${emailToLog} to Google Sheet...`);
-
-          const targetEndpoint = `${APPS_SCRIPT_URL}?email=${encodeURIComponent(emailToLog)}&reference=${encodeURIComponent(reference)}`;
-
-          // 1. Dispatch via Image Beacon (immune to CORS restrictions)
-          const beacon = new Image();
-          beacon.src = targetEndpoint;
-
-          // 2. Secondary fetch trigger to guarantee delivery
-          try {
-            await fetch(targetEndpoint, { method: 'GET', mode: 'no-cors' });
-            logMessage('Email successfully appended to Google Sheet whitelist.');
-          } catch (err) {
-            logMessage('Beacon sent to Apps Script.');
-          }
-
-          localStorage.removeItem('pending_artist_email');
-        } else {
-          logMessage('No email provided for logging.');
-        }
+        logMessage('Payment captured. Unlocking toolkit...');
 
         // Clean the URL bar
         window.history.replaceState({}, document.title, window.location.pathname);
         unlockToolkit();
       }
     });
+
+    // --- PAYSTACK HOSTED REDIRECT GATE ---
+    function payWithPaystack(email) {
+      logMessage('Redirecting to Paystack secure checkout page...');
+      window.location.href = PAYSTACK_PAGE_URL;
+    }
 
     // --- WHITELIST CHECK & ACCESS GATE ---
     async function checkAccessAndProceed() {
