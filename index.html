@@ -419,7 +419,7 @@
       return fileId;
     }
 
-    // --- GOOGLE DRIVE DIRECT UPLOADER & LOCAL BLOB PLAYER ---
+    // --- GOOGLE DRIVE DIRECT UPLOADER & DUAL-PLAYLIST MAPPER ---
     async function uploadGeneratedChunksToDrive() {
       try {
         const files = globalFFmpegInstance.FS('readdir', '/');
@@ -441,20 +441,29 @@
           }
         }
 
-        // 2. Upload playlist.m3u8 to Drive vault
-        logMessage('Uploading playlist.m3u8 to Drive vault...');
+        // 2. Read raw local playlist
+        logMessage('Preparing cloud playlist for external distribution...');
         const playlistTextDecoder = new TextDecoder('utf-8');
-        let m3u8Content = playlistTextDecoder.decode(globalFFmpegInstance.FS('readFile', 'playlist.m3u8'));
+        let rawM3u8Content = playlistTextDecoder.decode(globalFFmpegInstance.FS('readFile', 'playlist.m3u8'));
         
+        // 3. Create Cloud-Linked M3u8 (Rewriting relative names to absolute Google Drive URLs for external embeds)
+        let cloudM3u8Content = rawM3u8Content;
+        for (const [segmentName, fileId] of Object.entries(segmentMap)) {
+          const driveSegmentUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+          cloudM3u8Content = cloudM3u8Content.split(segmentName).join(driveSegmentUrl);
+        }
+
+        // Upload the cloud-linked playlist to Drive vault
+        logMessage('Uploading cloud manifest to Drive vault...');
         const textEncoder = new TextEncoder();
-        const playlistFileId = await uploadFileToDrive('playlist.m3u8', textEncoder.encode(m3u8Content), 'application/x-mpegURL');
+        const playlistFileId = await uploadFileToDrive('playlist.m3u8', textEncoder.encode(cloudM3u8Content), 'application/x-mpegURL');
 
-        logMessage(`🎉 Processing complete! Playlist ID: ${playlistFileId}`);
+        logMessage(`🎉 Processing complete! Cloud Playlist ID: ${playlistFileId}`);
 
-        // 3. Play locally using WebAssembly Memory Blobs (Zero CORS)
+        // 4. Play locally using WebAssembly Memory Blobs (Bypasses CORS for your immediate preview)
         playLocalWasmStream();
 
-        // 4. Populate the dedicated Embed Box immediately
+        // 5. Populate the dedicated Embed Box with the persistent Google Drive links
         generateEmbedUI(playlistFileId);
 
       } catch (err) {
