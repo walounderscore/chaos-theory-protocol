@@ -41,7 +41,7 @@
     <div class="card">
       <h3>2. Google Drive Authorization</h3>
       <p>Connect your personal Google Drive to store encrypted HLS assets.</p>
-      <button id="auth-btn" onclick="authGoogleDrive()">Connect Google Drive</button>
+      <button id="auth-btn" onclick="authGoogleDrive()" disabled>Connect Google Drive</button>
       <span id="auth-status" style="margin-left: 10px; color: #8b949e;">Not Connected</span>
     </div>
 
@@ -154,16 +154,15 @@
       const processBtn = document.getElementById('process-btn');
       const fileInput = document.getElementById('audio-file');
 
-      // Unlock the file picker as soon as FFmpeg is ready
+      // Unlock the file picker when FFmpeg is ready
       if (globalFFmpegInstance && globalFFmpegInstance.isLoaded()) {
         fileInput.disabled = false;
-        logMessage('✅ FFmpeg engine ready. You can now select your audio file.');
       }
 
-      // Unlock the upload button only when BOTH FFmpeg is ready AND Drive is connected
+      // Unlock the final upload button only when both FFmpeg is ready and Drive is connected
       if (globalFFmpegInstance && globalFFmpegInstance.isLoaded() && driveFolderId) {
         processBtn.disabled = false;
-        logMessage('🚀 Google Drive connected & toolkit fully active! Ready to process.');
+        logMessage('🚀 Toolkit fully active! Ready to process audio.');
       }
     }
 
@@ -240,7 +239,7 @@
       }
     }
 
-    // --- FFMPEG.WASM INITIALIZATION (v0.11) ---
+    // --- FFMPEG.WASM INITIALIZATION ---
     async function initFFmpeg() {
       logMessage('Initializing local ffmpeg.wasm engine...');
       
@@ -260,6 +259,13 @@
         await globalFFmpegInstance.load();
         logMessage('✅ ffmpeg.wasm loaded and ready in browser CPU.');
         
+        // Enable the Google Drive button ONLY now that CPU is free
+        const authBtn = document.getElementById('auth-btn');
+        if (authBtn) {
+          authBtn.disabled = false;
+          logMessage('🔓 Google Drive authorization unlocked.');
+        }
+
         updateButtonState();
       } catch (err) {
         logMessage('❌ FFmpeg failed to load: ' + err.message);
