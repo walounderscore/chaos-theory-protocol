@@ -65,6 +65,20 @@
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyZSrEmHzdLVLwMHDyJa_F5Vi1V9f_CE7Dt9Nm5bZ6vK0OnMGCP2bIaQCOO05JJ5BqaeA/exec';
     const SHEET_ID = '1UjT3R0QXXoLxkekS7-9MnpsdPP72oAPWYg4OUOlJaTA';
     const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
+
+    // Check URL parameters on page load for returning successful Paystack payments
+    window.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const reference = urlParams.get('reference');
+      
+      if (reference) {
+        logMessage(`Returning from Paystack. Reference: ${reference}`);
+        // Clean the URL bar so the reference parameter disappears
+        window.history.replaceState({}, document.title, window.location.pathname);
+        // Automatically unlock the toolkit for the returning user
+        unlockToolkit();
+      }
+    });
     
     let accessToken = null;
     let driveFolderId = null;
