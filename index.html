@@ -446,7 +446,7 @@
         const playlistTextDecoder = new TextDecoder('utf-8');
         let rawM3u8Content = playlistTextDecoder.decode(globalFFmpegInstance.FS('readFile', 'playlist.m3u8'));
         
-        // 3. Create Cloud-Linked M3u8 (Rewriting relative names to Apps Script Gateway URLs for CORS compliance)
+        // 3. Create Cloud-Linked M3u8 (Routing chunks through Apps Script Gateway for CORS bypass)
         let cloudM3u8Content = rawM3u8Content;
         for (const [segmentName, fileId] of Object.entries(segmentMap)) {
           const gatewaySegmentUrl = `${APPS_SCRIPT_URL}?fileId=${fileId}`;
