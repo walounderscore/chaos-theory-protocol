@@ -181,12 +181,6 @@
 
     // --- GOOGLE DRIVE GIS TOKEN CLIENT ---
     function authGoogleDrive() {
-      // If already connected in this session, don't re-prompt
-      if (accessToken && driveFolderId) {
-        logMessage('Google Drive is already connected.');
-        return;
-      }
-
       const client = google.accounts.oauth2.initTokenClient({
         client_id: '104287153665-c7sbnq3lm32u8kgt8gohqne0kr1i8vn4.apps.googleusercontent.com',
         scope: 'https://www.googleapis.com/auth/drive.file',
@@ -196,61 +190,46 @@
             return;
           }
           accessToken = response.access_token;
-          sessionStorage.setItem('ct_access_token', accessToken); // Save token
-
-          document.getElementById('auth-status').innerText = 'Connected ✅';
-          document.getElementById('auth-status').style.color = '#7ee787';
+          
+          // Update UI immediately upon successful token return
+          const statusEl = document.getElementById('auth-status');
+          if (statusEl) {
+            statusEl.innerText = 'Connected ✅';
+            statusEl.style.color = '#7ee787';
+          }
           logMessage('Google Drive authorized successfully.');
           
-          await getOrCreateDriveFolder();
+          await createDriveFolder();
         },
       });
       client.requestAccessToken();
     }
 
-    // --- SMART FOLDER FINDER & CREATOR (Prevents duplicates) ---
-    async function getOrCreateDriveFolder() {
-      logMessage('Checking for existing Chaos_Theory_Releases folder on Google Drive...');
+    // --- ORIGINAL DRIVE FOLDER CREATOR ---
+    async function createDriveFolder() {
+      logMessage('Creating Chaos_Theory_Releases folder on Google Drive...');
       try {
-        // 1. Search if folder already exists to avoid creating duplicates
-        const searchRes = await fetch(
-          `https://www.googleapis.com/drive/v3/files?q=name='Chaos_Theory_Releases' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-          {
-            headers: new Headers({ 'Authorization': 'Bearer ' + accessToken })
-          }
-        );
-        const searchData = await searchRes.json();
-
-        if (searchData.files && searchData.files.length > 0) {
-          driveFolderId = searchData.files[0].id;
-          logMessage(`Found existing Drive folder! ID: [hidden]`);
-        } else {
-          // 2. Create if it doesn't exist
-          logMessage('Creating new Chaos_Theory_Releases folder on Google Drive...');
-          const metadata = {
-            name: 'Chaos_Theory_Releases',
-            mimeType: 'application/vnd.google-apps.folder'
-          };
-          const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
-            method: 'POST',
-            headers: new Headers({
-              'Authorization': 'Bearer ' + accessToken,
-              'Content-Type': 'application/json'
-            }),
-            body: JSON.stringify(metadata)
-          });
-          const createData = await createRes.json();
-          driveFolderId = createData.id;
-          logMessage(`Folder created successfully!`);
-        }
-
-        // Save folder ID to session storage so user never has to reconnect
-        sessionStorage.setItem('ct_folder_id', driveFolderId);
-
+        const metadata = {
+          name: 'Chaos_Theory_Releases',
+          mimeType: 'application/vnd.google-apps.folder'
+        };
+        const res = await fetch('https://www.googleapis.com/upload/drive/v3/files', {
+          method: 'POST',
+          headers: new Headers({
+            'Authorization': 'Bearer ' + accessToken,
+            'Content-Type': 'application/json'
+          }),
+          body: JSON.stringify(metadata)
+        });
+        const data = await res.json();
+        driveFolderId = data.id;
+        logMessage(`Folder created successfully! ID: ${driveFolderId}`);
+        
+        // Enable file processing controls
         document.getElementById('audio-file').disabled = false;
         document.getElementById('process-btn').disabled = false;
       } catch (err) {
-        logMessage('Error managing Drive folder: ' + err.message);
+        logMessage('Error creating Drive folder: ' + err.message);
       }
     }
 
