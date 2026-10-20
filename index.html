@@ -78,56 +78,57 @@
       }
     }
 
-    // --- OAUTH REDIRECT & CROSS-TAB LISTENER ---
+    // --- COOP-SAFE TOKEN CATCHER & SESSION RESTORER ---
     window.addEventListener('DOMContentLoaded', async () => {
       console.log("DOMContentLoaded event fired.");
-
-      // 1. Check if this page instance IS the OAuth return tab
+      
+      // 1. Check for access token in URL hash (returned from Google redirect)
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const searchParams = new URLSearchParams(window.location.search);
-      const token = hashParams.get('access_token') || searchParams.get('access_token');
+      const token = hashParams.get('access_token');
 
       if (token) {
-        // Clean the URL
+        accessToken = token;
+        localStorage.setItem('chaos_google_token', token);
+        
+        // Clean the token from the URL bar cleanly without reloading
         window.history.replaceState({}, document.title, window.location.pathname);
-
-        if (window.opener) {
-          // Send token back to the main tab and close this popup/tab
-          window.opener.postMessage({ type: 'CHAOS_OAUTH_TOKEN', token }, '*');
-          window.close();
-          return;
-        } else {
-          // Fallback if opened directly
-          localStorage.setItem('chaos_google_token', token);
-        }
+        logMessage('Google Drive authorized successfully via redirect.');
+      } else {
+        // Fallback to saved local storage token
+        accessToken = localStorage.getItem('chaos_google_token');
+        driveFolderId = localStorage.getItem('chaos_google_folder');
       }
 
-      // 2. Load token from storage for the main tab
-      accessToken = localStorage.getItem('chaos_google_token') || sessionStorage.getItem('chaos_google_token');
-      driveFolderId = localStorage.getItem('chaos_google_folder') || sessionStorage.getItem('chaos_google_folder');
-
+      // If we have an access token, activate the Drive connected state
       if (accessToken) {
-        setDriveConnectedUI();
+        const statusEl = document.getElementById('auth-status');
+        if (statusEl) {
+          statusEl.innerText = 'Connected ✅';
+          statusEl.style.color = '#7ee787';
+        }
+        
+        // Create or verify the folder if we don't have its ID saved yet
+        if (!driveFolderId) {
+          await createDriveFolder();
+        } else {
+          updateButtonState();
+        }
       }
 
-      // 3. Listen for messages from the OAuth new tab
-      window.addEventListener('message', async (event) => {
-        if (event.data && event.data.type === 'CHAOS_OAUTH_TOKEN') {
-          accessToken = event.data.token;
-          localStorage.setItem('chaos_google_token', accessToken);
-          
-          setDriveConnectedUI();
-          logMessage('Google Drive authorized successfully via new tab.');
-          await createDriveFolder();
-        }
-      });
-
-      // 4. Check for Paystack return reference
-      const reference = searchParams.get('trxref') || searchParams.get('reference');
+      // 2. Check for Paystack return reference
+      const urlParams = new URLSearchParams(window.location.search);
+      const reference = urlParams.get('trxref') || urlParams.get('reference');
+      
       if (reference) {
         logMessage(`Returning from Paystack checkout. Ref: ${reference}`);
         window.history.replaceState({}, document.title, window.location.pathname);
-        try { unlockToolkit(); } catch (err) { console.error(err); }
+        
+        try {
+          unlockToolkit();
+        } catch (err) {
+          console.error("Error inside unlockToolkit:", err);
+          logMessage("❌ Unlock error: " + err.message);
+        }
       }
     });
 
@@ -139,22 +140,19 @@
       }
     }
 
-    // --- OPEN OAUTH IN A NEW TAB ---
+    // --- COOP-SAFE SAME-TAB OAUTH REDIRECT ---
     function authGoogleDrive() {
-      logMessage('Opening Google OAuth in a new tab...');
+      logMessage('Redirecting to Google for authorization...');
 
       const clientId = '104287153665-c7sbnq3lm32u8kgt8gohqne0kr1i8vn4.apps.googleusercontent.com';
+      // Use exact origin + pathname so it redirects back precisely to your GitHub Pages app
       const redirectUri = window.location.origin + window.location.pathname;
       const scope = 'https://www.googleapis.com/auth/drive.file';
 
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scope)}&prompt=select_account`;
 
-      // Open strictly in a new tab
-      const newTab = window.open(authUrl, '_blank');
-      if (!newTab) {
-        logMessage('❌ Popup blocked by browser! Please allow popups for this site.');
-        alert('Please allow popups to open the Google authorization tab.');
-      }
+      // Redirect the current tab (bypasses all COOP popup/messaging blocks)
+      window.location.href = authUrl;
     }
 
     function unlockToolkit() {
