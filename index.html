@@ -21,7 +21,7 @@
     button:hover { background: #2ea043; }
     button:disabled { background: #30363d; color: #8b949e; cursor: not-allowed; }
     input[type="file"] { margin: 10px 0; }
-    #log { background: #010409; padding: 1rem; border-radius: 6px; font-family: monospace; font-size: 0.85rem; max-height: 150px; overflow-y: auto; color: #7ee787; }
+    #log { background: #010409; padding: 1rem; border-radius: 6px; font-family: monospace; font-size: 0.85rem; max-height: 180px; overflow-y: auto; color: #7ee787; }
   </style>
 </head>
 <body>
@@ -31,11 +31,11 @@
   <!-- Step 1: Commitment Gate -->
   <div id="gate-card" class="card">
     <h3>1. Unlock Protocol Toolkit</h3>
-    <p>A commitment fee of <b>₦100</b> is required to initialize local WebAssembly encryption & Drive tools.</p>
-    <button onclick="payWithPaystack()">Unlock Toolkit (₦100)</button>
+    <p>A commitment fee of <b>₦100</b> is required to initialize local WebAssembly encryption & Drive tools. (Whitelisted or returning users bypass payment upon email check).</p>
+    <button onclick="checkAccessAndProceed()">Verify Email & Unlock</button>
   </div>
 
-  <!-- Step 2: Main Workspace (Locked until payment) -->
+  <!-- Step 2: Main Workspace (Locked until payment/verification) -->
   <div id="toolkit" class="locked">
     
     <!-- Google Drive Integration -->
@@ -62,6 +62,10 @@
   </div>
 
   <script>
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyZSrEmHzdLVLwMHDyJa_F5Vi1V9f_CE7Dt9Nm5bZ6vK0OnMGCP2bIaQCOO05JJ5BqaeA/exec';
+    const SHEET_ID = '1UjT3R0QXXoLxkekS7-9MnpsdPP72oAPWYg4OUOlJaTA';
+    const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
+    
     let accessToken = null;
     let driveFolderId = null;
     const { FFmpeg } = FFmpegWASM;
@@ -74,22 +78,69 @@
       logDiv.scrollTop = logDiv.scrollHeight;
     }
 
-    // --- PAYSTACK GATE ---
-    function payWithPaystack() {
-      const email = prompt("Enter your artist email for transaction reference:");
-      if (!email) return;
+    // --- WHITELIST CHECK & ACCESS GATE ---
+    async function checkAccessAndProceed() {
+      const emailInput = prompt("Enter your artist email:");
+      if (!emailInput) return;
 
+      const userEmail = emailInput.trim().toLowerCase();
+      logMessage(`Checking whitelist access for: ${userEmail}...`);
+
+      try {
+        const response = await fetch(SHEET_CSV_URL);
+        const csvData = await response.text();
+
+        const whitelistedEmails = csvData
+          .split('\n')
+          .map(row => row.replace(/"/g, '').split(',')[0].trim().toLowerCase());
+
+        if (whitelistedEmails.includes(userEmail)) {
+          logMessage('Access granted: Email found on Google Sheet whitelist.');
+          unlockToolkit();
+        } else {
+          logMessage('Email not found on whitelist. Launching ₦100 Paystack payment gate...');
+          payWithPaystack(userEmail);
+        }
+      } catch (error) {
+        logMessage('Whitelist check failed/skipped: ' + error.message + '. Proceeding to payment.');
+        payWithPaystack(userEmail);
+      }
+    }
+
+    function unlockToolkit() {
+      document.getElementById('gate-card').style.display = 'none';
+      document.getElementById('toolkit').classList.remove('locked');
+      initFFmpeg();
+    }
+
+    // --- PAYSTACK GATE & APPS SCRIPT LOGGING ---
+    function payWithPaystack(email) {
       const popup = new PaystackPop();
       popup.newTransaction({
-        key: 'pk_test_078a52ae522dacc57ba8546539a611bca777d472', // Replace with your Paystack Public Key
+        key: 'pk_test_078a52ae522dacc57ba8546539a611bca777d472',
         email: email,
         amount: 10000, // 100 NGN in kobo
         currency: 'NGN',
-        onSuccess: function(transaction) {
-          logMessage('Protocol Unlocked. Ref: ' + transaction.reference);
-          document.getElementById('gate-card').style.display = 'none';
-          document.getElementById('toolkit').classList.remove('locked');
-          initFFmpeg();
+        onSuccess: async function(transaction) {
+          logMessage('Payment verified! Ref: ' + transaction.reference);
+
+          // Automatically append email to Google Sheet via Apps Script Web App
+          try {
+            await fetch(APPS_SCRIPT_URL, {
+              method: 'POST',
+              mode: 'no-cors',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: email,
+                reference: transaction.reference
+              })
+            });
+            logMessage('Email successfully appended to Google Sheet whitelist.');
+          } catch (err) {
+            console.error('Failed to append email to sheet:', err);
+          }
+
+          unlockToolkit();
         },
         onCancel: function() {
           alert('Commitment payment cancelled.');
@@ -100,7 +151,7 @@
     // --- GOOGLE DRIVE GIS TOKEN CLIENT ---
     function authGoogleDrive() {
       const client = google.accounts.oauth2.initTokenClient({
-        client_id: '104287153665-c7sbnq3lm32u8kgt8gohqne0kr1i8vn4.apps.googleusercontent.com', // Replace with your Google OAuth Client ID
+        client_id: '104287153665-c7sbnq3lm32u8kgt8gohqne0kr1i8vn4.apps.googleusercontent.com',
         scope: 'https://www.googleapis.com/auth/drive.file',
         callback: async (response) => {
           if (response.error) {
@@ -112,7 +163,6 @@
           document.getElementById('auth-status').style.color = '#7ee787';
           logMessage('Google Drive authorized successfully.');
           
-          // Automatically create the dedicated release folder
           await createDriveFolder();
         },
       });
@@ -149,10 +199,6 @@
     async function initFFmpeg() {
       logMessage('Initializing local ffmpeg.wasm engine...');
       ffmpeg = new FFmpeg();
-      ffmpeg.on('log', ({ message }) => {
-        // Uncomment if you want deep console logging from ffmpeg
-        // console.log(message);
-      });
       await ffmpeg.load({
         coreURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
         wasmURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
@@ -173,7 +219,6 @@
       await ffmpeg.writeFile('input.mp3', fileData);
 
       logMessage('Executing local AES encryption & HLS segmentation...');
-      // Run ffmpeg command to chunk audio into .ts segments and build an .m3u8 playlist
       await ffmpeg.exec([
         '-i', 'input.mp3',
         '-c:a', 'aac',
@@ -184,8 +229,50 @@
         'playlist.m3u8'
       ]);
 
-      logMessage('Segmentation complete. Ready to upload chunks to Google Drive folder.');
-      // Next step in pipeline: read output files from ffmpeg virtual filesystem and upload to driveFolderId via REST API
+      logMessage('Segmentation complete. Preparing Google Drive upload...');
+      await uploadGeneratedChunksToDrive();
+    }
+
+    // --- GOOGLE DRIVE DIRECT UPLOADER ---
+    async function uploadGeneratedChunksToDrive() {
+      const files = await ffmpeg.listDir('/');
+      const hlsFiles = files.filter(f => f.name.endsWith('.m3u8') || f.name.endsWith('.ts'));
+
+      logMessage(`Found ${hlsFiles.length} generated HLS assets. Uploading to Drive folder...`);
+
+      for (const hlsFile of hlsFiles) {
+        logMessage(`Uploading ${hlsFile.name}...`);
+        const data = await ffmpeg.readFile(hlsFile.name);
+        const blob = new Blob([data.buffer], { 
+          type: hlsFile.name.endsWith('.m3u8') ? 'application/x-mpegURL' : 'video/mp2t' 
+        });
+
+        const metadata = {
+          name: hlsFile.name,
+          parents: [driveFolderId]
+        };
+
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        form.append('file', blob);
+
+        try {
+          const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+            method: 'POST',
+            headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
+            body: form
+          });
+          if (res.ok) {
+            logMessage(`✅ Uploaded: ${hlsFile.name}`);
+          } else {
+            logMessage(`❌ Failed uploading ${hlsFile.name}`);
+          }
+        } catch (err) {
+          logMessage(`Error uploading ${hlsFile.name}: ${err.message}`);
+        }
+      }
+
+      logMessage('🎉 All HLS track assets successfully processed and saved to your Google Drive!');
     }
   </script>
 </body>
