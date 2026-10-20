@@ -154,10 +154,16 @@
       const processBtn = document.getElementById('process-btn');
       const fileInput = document.getElementById('audio-file');
 
+      // Unlock the file picker as soon as FFmpeg is ready
+      if (globalFFmpegInstance && globalFFmpegInstance.isLoaded()) {
+        fileInput.disabled = false;
+        logMessage('✅ FFmpeg engine ready. You can now select your audio file.');
+      }
+
+      // Unlock the upload button only when BOTH FFmpeg is ready AND Drive is connected
       if (globalFFmpegInstance && globalFFmpegInstance.isLoaded() && driveFolderId) {
         processBtn.disabled = false;
-        fileInput.disabled = false;
-        logMessage('🚀 Toolkit fully active! Select an audio file to begin.');
+        logMessage('🚀 Google Drive connected & toolkit fully active! Ready to process.');
       }
     }
 
