@@ -119,7 +119,6 @@
     window.addEventListener('DOMContentLoaded', async () => {
       console.log("DOMContentLoaded event fired.");
 
-      // 1. Check for access token returned from Google redirect (same-tab flow)
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
       const token = hashParams.get('access_token');
 
@@ -133,7 +132,6 @@
         driveFolderId = localStorage.getItem('chaos_google_folder');
       }
 
-      // 2. Restore Toolkit Unlock State if previously unlocked
       const isUnlocked = localStorage.getItem('chaos_toolkit_unlocked');
       if (isUnlocked === 'true') {
         const gateCard = document.getElementById('gate-card');
@@ -144,12 +142,10 @@
         initFFmpeg();
       }
 
-      // 3. Handle Drive UI State if token exists
       if (accessToken) {
         setDriveConnectedUI();
       }
 
-      // 4. Check for Paystack return reference
       const urlParams = new URLSearchParams(window.location.search);
       const reference = urlParams.get('trxref') || urlParams.get('reference');
       
@@ -359,187 +355,57 @@
       }
     }
 
-    // --- GOOGLE DRIVE DIRECT UPLOADER (STRICT MULTIPART) ---
-    async function uploadGeneratedChunksToDrive() {
-      const files = globalFFmpegInstance.FS('readdir', '/');
-      const hlsFiles = files.filter(f => f.endsWith('.m3u8') || f.endsWith('.ts'));
-
-      logMessage(`Found ${hlsFiles.length} generated HLS assets. Uploading to Drive folder...`);
-
+    // --- UPLOAD MULTIPART FILE HELPER ---
+    async function uploadFileToDrive(fileName, fileData, mimeType) {
       const boundary = '-------314159265358979323846';
       const delimiter = "\r\n--" + boundary + "\r\n";
       const close_delim = "\r\n--" + boundary + "--";
 
-      for (const fileName of hlsFiles) {
+      const metadata = {
+        name: fileName,
+        parents: [driveFolderId]
+      };
+
+      const metadataPart = 
+        delimiter +
+        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+        JSON.stringify(metadata) +
+        delimiter +
+        'Content-Type: ' + mimeType + '\r\n\r\n';
+
+      const multipartRequestBody = new Blob([
+        metadataPart,
+        fileData,
+        close_delim
+      ], { type: 'multipart/related; boundary=' + boundary });
+
+      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        method: 'POST',
+        headers: new Headers({
+          'Authorization': 'Bearer ' + accessToken,
+          'Content-Type': 'multipart/related; boundary=' + boundary
+        }),
+        body: multipartRequestBody
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error ? data.error.message : res.statusText);
+      }
+      return data.id;
+    }
+
+    // --- GOOGLE DRIVE DIRECT UPLOADER & HLS RE-LINKER ---
+    async function uploadGeneratedChunksToDrive() {
+      const files = globalFFmpegInstance.FS('readdir', '/');
+      const segmentFiles = files.filter(f => f.endsWith('.ts')).sort();
+      logMessage(`Found ${segmentFiles.length} `.concat('audio chunks. Uploading segments to Drive...'));
+
+      const segmentMap = {};
+
+      // 1. Upload all .ts chunks first and record their Drive file IDs
+      for (const fileName of segmentFiles) {
         logMessage(`Uploading ${fileName}...`);
-        
         try {
           const fileData = globalFFmpegInstance.FS('readFile', fileName);
-          const mimeType = fileName.endsWith('.m3u8') ? 'application/x-mpegURL' : 'video/mp2t';
-
-          const metadata = {
-            name: fileName,
-            parents: [driveFolderId]
-          };
-
-          const metadataPart = 
-            delimiter +
-            'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-            JSON.stringify(metadata) +
-            delimiter +
-            'Content-Type: ' + mimeType + '\r\n\r\n';
-
-          const multipartRequestBody = new Blob([
-            metadataPart,
-            fileData,
-            close_delim
-          ], { type: 'multipart/related; boundary=' + boundary });
-
-          const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-            method: 'POST',
-            headers: new Headers({
-              'Authorization': 'Bearer ' + accessToken,
-              'Content-Type': 'multipart/related; boundary=' + boundary
-            }),
-            body: multipartRequestBody
-          });
-
-          if (res.ok) {
-            logMessage(`✅ Uploaded: ${fileName}`);
-          } else {
-            const errData = await res.json().catch(() => ({}));
-            const errMsg = errData.error ? errData.error.message : res.statusText;
-            logMessage(`❌ Failed uploading ${fileName}: ${errMsg} (${res.status})`);
-          }
-        } catch (err) {
-          logMessage(`❌ Error uploading ${fileName}: ${err.message}`);
-        }
-      }
-
-      logMessage('🎉 Processing and direct Google Drive upload routine finished!');
-
-      // Retrieve playlist file ID from Drive
-      const query = encodeURIComponent(`name = 'playlist.m3u8' and '${driveFolderId}' in parents and trashed = false`);
-      const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}`, {
-        headers: { 'Authorization': 'Bearer ' + accessToken }
-      });
-      const searchData = await searchRes.json();
-      
-      if (searchData.files && searchData.files.length > 0) {
-        const playlistFileId = searchData.files[0].id;
-        
-        // 1. Make entire release folder public (playlist + chunks)
-        await makeFolderPublic(driveFolderId);
-        
-        // 2. Initialize in-page player
-        initSovereignPlayer(playlistFileId);
-
-        // 3. Render copyable embed UI
-        generateEmbedUI(playlistFileId);
-      } else {
-        logMessage('⚠️ Could not locate playlist.m3u8 in Drive folder for player initialization.');
-      }
-    }
-
-    // --- INITIALIZE SOVEREIGN PLAYER (PUBLIC HLS STREAM) ---
-    function initSovereignPlayer(playlistFileId) {
-      if (!player) {
-        player = videojs('chaos-player');
-
-        // Capture and log any player/stream errors
-        player.on('error', () => {
-          const err = player.error();
-          console.error("Video.js Error:", err);
-          logMessage(`❌ Player Error [Code ${err.code}]: ${err.message || 'Unknown HLS/Network failure'}`);
-        });
-
-        player.on('loadedmetadata', () => {
-          logMessage('📊 Stream metadata loaded successfully.');
-        });
-      }
-
-      // Public direct streaming URL from Google Drive
-      const playlistUrl = `https://www.googleapis.com/drive/v3/files/${playlistFileId}?alt=media`;
-
-      logMessage('Loading public stream into Sovereign Video.js player...');
-      player.src({
-        src: playlistUrl,
-        type: 'application/x-mpegURL'
-      });
-
-      player.ready(() => {
-        logMessage('▶️ Sovereign player ready for playback.');
-        player.play().catch(e => {
-          logMessage('ℹ️ Auto-play restricted by browser. Click play on the player controls.');
-        });
-      });
-    }
-    
-    // --- MAKE DRIVE FOLDER PUBLIC (GIVES PUBLIC ACCESS TO PLAYLIST & ALL TS CHUNKS) ---
-    async function makeFolderPublic(folderId) {
-      logMessage('Setting public read access on Drive release folder...');
-      try {
-        await fetch(`https://www.googleapis.com/drive/v3/files/${folderId}/permissions`, {
-          method: 'POST',
-          headers: new Headers({
-            'Authorization': 'Bearer ' + accessToken,
-            'Content-Type': 'application/json'
-          }),
-          body: JSON.stringify({
-            role: 'reader',
-            type: 'anyone'
-          })
-        });
-        logMessage('✅ Release folder permissions configured for public streaming.');
-      } catch (err) {
-        logMessage('⚠️ Error configuring folder permissions: ' + err.message);
-      }
-    }
-
-    // --- GENERATE COPYABLE EMBED UI ---
-    function generateEmbedUI(playlistFileId) {
-      const embedCode = `<div style="max-width:640px; background:#161b22; padding:1rem; border-radius:8px; border:1px solid #30363d;">
-  <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
-  <video id="chaos-embed-${playlistFileId}" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" width="100%" height="268" data-setup='{}'>
-    <source src="https://www.googleapis.com/drive/v3/files/${playlistFileId}?alt=media" type="application/x-mpegURL">
-  </video>
-  <script src="https://vjs.zencdn.net/8.10.0/video.min.js"><\/script>
-</div>`;
-
-      logMessage('🎉 Embed code generated successfully!');
-
-      const logDiv = document.getElementById('log');
-      if (logDiv) {
-        const container = document.createElement('div');
-        container.style.marginTop = '12px';
-
-        const label = document.createElement('strong');
-        label.innerText = 'Copy HTML Embed Snippet:';
-        label.style.display = 'block';
-        label.style.color = '#c9d1d9';
-
-        const textarea = document.createElement('textarea');
-        textarea.className = 'embed-box';
-        textarea.value = embedCode;
-        textarea.readOnly = true;
-
-        const copyBtn = document.createElement('button');
-        copyBtn.className = 'copy-btn';
-        copyBtn.innerText = '📋 Copy Embed Code';
-        copyBtn.onclick = () => {
-          textarea.select();
-          navigator.clipboard.writeText(embedCode);
-          copyBtn.innerText = '✅ Copied!';
-          setTimeout(() => { copyBtn.innerText = '📋 Copy Embed Code'; }, 2000);
-        };
-
-        container.appendChild(label);
-        container.appendChild(textarea);
-        container.appendChild(copyBtn);
-        logDiv.appendChild(container);
-        logDiv.scrollTop = logDiv.scrollHeight;
-      }
-    }
-  </script>
-</body>
-</html>
+          const fileId =
