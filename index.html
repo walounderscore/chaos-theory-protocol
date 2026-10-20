@@ -9,7 +9,7 @@
   <script src="https://js.paystack.co/v2/inline.js"></script>
   <!-- Google Identity Services (GIS) API -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <!-- FFmpeg WASM Core (v0.12.10 via jsDelivr) - util.js removed to prevent 404 -->
+  <!-- FFmpeg v0.11.6 UMD build -->
   <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
 
   <style>
@@ -34,7 +34,7 @@
     <button onclick="checkAccessAndProceed()">Verify Email & Unlock</button>
   </div>
 
-  <!-- Step 2: Main Workspace (Locked until payment/verification) -->
+  <!-- Step 2: Main Workspace -->
   <div id="toolkit" class="locked">
     
     <!-- Google Drive Integration -->
@@ -149,8 +149,22 @@
       window.location.href = targetUrl;
     }
 
+    // --- CENTRALIZED UI STATE CHECKER ---
+    function updateButtonState() {
+      const processBtn = document.getElementById('process-btn');
+      const fileInput = document.getElementById('audio-file');
+
+      if (globalFFmpegInstance && globalFFmpegInstance.isLoaded() && driveFolderId) {
+        processBtn.disabled = false;
+        fileInput.disabled = false;
+        logMessage('🚀 Toolkit fully active! Select an audio file to begin.');
+      }
+    }
+
     // --- GOOGLE DRIVE GIS TOKEN CLIENT ---
     function authGoogleDrive() {
+      logMessage('Initiating Google OAuth request...');
+
       const client = google.accounts.oauth2.initTokenClient({
         client_id: '104287153665-c7sbnq3lm32u8kgt8gohqne0kr1i8vn4.apps.googleusercontent.com',
         scope: 'https://www.googleapis.com/auth/drive.file',
@@ -194,27 +208,13 @@
         driveFolderId = data.id;
         logMessage(`Folder created successfully! ID: ${driveFolderId}`);
         
-        // Check if FFmpeg is already loaded
         updateButtonState();
       } catch (err) {
         logMessage('Error creating Drive folder: ' + err.message);
       }
     }
 
-    // --- CENTRALIZED UI STATE CHECKER ---
-    function updateButtonState() {
-      const processBtn = document.getElementById('process-btn');
-      const fileInput = document.getElementById('audio-file');
-
-      // Enable inputs only when both FFmpeg is loaded and Drive folder exists
-      if (globalFFmpegInstance && globalFFmpegInstance.isLoaded() && driveFolderId) {
-        processBtn.disabled = false;
-        fileInput.disabled = false;
-        logMessage('🚀 Toolkit fully active! Select an audio file to begin.');
-      }
-    }
-
-    // --- FFMPEG.WASM INITIALIZATION ---
+    // --- FFMPEG.WASM INITIALIZATION (v0.11) ---
     async function initFFmpeg() {
       logMessage('Initializing local ffmpeg.wasm engine...');
       
@@ -234,7 +234,6 @@
         await globalFFmpegInstance.load();
         logMessage('✅ ffmpeg.wasm loaded and ready in browser CPU.');
         
-        // Check if Drive is already connected
         updateButtonState();
       } catch (err) {
         logMessage('❌ FFmpeg failed to load: ' + err.message);
@@ -242,7 +241,7 @@
       }
     }
 
-    // --- NATIVE FILE PROCESSING & SEGMENTATION (v0.11 FS syntax) ---
+    // --- NATIVE FILE PROCESSING & SEGMENTATION ---
     async function processAudio() {
       if (!globalFFmpegInstance || !globalFFmpegInstance.isLoaded()) {
         alert('FFmpeg engine is still initializing. Please wait a moment and try again.');
@@ -284,9 +283,8 @@
       }
     }
 
-    // --- GOOGLE DRIVE DIRECT UPLOADER (v0.11 FS read syntax) ---
+    // --- GOOGLE DRIVE DIRECT UPLOADER ---
     async function uploadGeneratedChunksToDrive() {
-      // v0.11 uses FS('readdir', '/')
       const files = globalFFmpegInstance.FS('readdir', '/');
       const hlsFiles = files.filter(f => f.endsWith('.m3u8') || f.endsWith('.ts'));
 
