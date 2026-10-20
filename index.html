@@ -441,19 +441,10 @@
       }
     }
 
-// --- INITIALIZE VIDEO.JS WITH AUTH INJECTION & ERROR LOGGING ---
+    // --- INITIALIZE SOVEREIGN PLAYER (PUBLIC HLS STREAM) ---
     function initSovereignPlayer(playlistFileId) {
       if (!player) {
         player = videojs('chaos-player');
-
-        // Intercept network requests made by Video.js to pass OAuth Bearer token
-        videojs.xhr.beforeRequest(function (options) {
-          if (options.uri && options.uri.includes('googleapis.com')) {
-            options.headers = options.headers || {};
-            options.headers['Authorization'] = 'Bearer ' + accessToken;
-          }
-          return options;
-        });
 
         // Capture and log any player/stream errors
         player.on('error', () => {
@@ -467,9 +458,10 @@
         });
       }
 
+      // Public direct streaming URL from Google Drive
       const playlistUrl = `https://www.googleapis.com/drive/v3/files/${playlistFileId}?alt=media`;
 
-      logMessage('Loading stream into Sovereign Video.js player...');
+      logMessage('Loading public stream into Sovereign Video.js player...');
       player.src({
         src: playlistUrl,
         type: 'application/x-mpegURL'
@@ -477,6 +469,9 @@
 
       player.ready(() => {
         logMessage('▶️ Sovereign player ready for playback.');
+        player.play().catch(e => {
+          logMessage('ℹ️ Auto-play restricted by browser. Click play on the player controls.');
+        });
       });
     }
     
