@@ -446,11 +446,11 @@
         const playlistTextDecoder = new TextDecoder('utf-8');
         let rawM3u8Content = playlistTextDecoder.decode(globalFFmpegInstance.FS('readFile', 'playlist.m3u8'));
         
-        // 3. Create Cloud-Linked M3u8 (Rewriting relative names to Apps Script Gateway URLs for CORS compliance)
+        // 3. Create Cloud-Linked M3u8 (Mapping segments directly to Google Drive public binary download URLs)
         let cloudM3u8Content = rawM3u8Content;
         for (const [segmentName, fileId] of Object.entries(segmentMap)) {
-          const gatewaySegmentUrl = `${APPS_SCRIPT_URL}?fileId=${fileId}`;
-          cloudM3u8Content = cloudM3u8Content.split(segmentName).join(gatewaySegmentUrl);
+          const directSegmentUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+          cloudM3u8Content = cloudM3u8Content.split(segmentName).join(directSegmentUrl);
         }
 
         // Upload the cloud-linked playlist to Drive vault
