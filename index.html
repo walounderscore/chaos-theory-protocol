@@ -61,25 +61,14 @@
     </div>
   </div>
 
-  <script>
+ <script>
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyZSrEmHzdLVLwMHDyJa_F5Vi1V9f_CE7Dt9Nm5bZ6vK0OnMGCP2bIaQCOO05JJ5BqaeA/exec';
     const SHEET_ID = '1UjT3R0QXXoLxkekS7-9MnpsdPP72oAPWYg4OUOlJaTA';
     const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
-
-    // Check URL parameters on page load for returning successful Paystack payments
-    window.addEventListener('DOMContentLoaded', () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const reference = urlParams.get('reference');
-      
-      if (reference) {
-        logMessage(`Returning from Paystack. Reference: ${reference}`);
-        // Clean the URL bar so the reference parameter disappears
-        window.history.replaceState({}, document.title, window.location.pathname);
-        // Automatically unlock the toolkit for the returning user
-        unlockToolkit();
-      }
-    });
     
+    // Replace with your actual Paystack Payment Page URL from Step 1
+    const PAYSTACK_PAGE_URL = 'https://paystack.shop/pay/mlxva1fop1'; 
+
     let accessToken = null;
     let driveFolderId = null;
     const { FFmpeg } = FFmpegWASM;
@@ -91,6 +80,38 @@
       logDiv.innerHTML += `<div>> ${msg}</div>`;
       logDiv.scrollTop = logDiv.scrollHeight;
     }
+
+    // --- AUTOMATIC RETURN CHECK FROM PAYSTACK ---
+    window.addEventListener('DOMContentLoaded', async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const reference = urlParams.get('trxref') || urlParams.get('reference');
+      
+      if (reference) {
+        logMessage(`Returning from Paystack checkout. Ref: ${reference}`);
+        window.history.replaceState({}, document.title, window.location.pathname);
+
+        // Retrieve the email stored before redirecting
+        const savedEmail = localStorage.getItem('pending_artist_email');
+        
+        if (savedEmail) {
+          logMessage(`Logging payment for ${savedEmail} to Google Sheet...`);
+          try {
+            await fetch(APPS_SCRIPT_URL, {
+              method: 'POST',
+              mode: 'no-cors',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: savedEmail, reference: reference })
+            });
+            logMessage('Email successfully appended to Google Sheet whitelist.');
+          } catch (err) {
+            console.error('Failed to append email to sheet:', err);
+          }
+          localStorage.removeItem('pending_artist_email');
+        }
+
+        unlockToolkit();
+      }
+    });
 
     // --- WHITELIST CHECK & ACCESS GATE ---
     async function checkAccessAndProceed() {
@@ -112,7 +133,7 @@
           logMessage('Access granted: Email found on Google Sheet whitelist.');
           unlockToolkit();
         } else {
-          logMessage('Email not found on whitelist. Launching ₦100 Paystack payment gate...');
+          logMessage('Email not found on whitelist. Redirecting to Paystack payment page...');
           payWithPaystack(userEmail);
         }
       } catch (error) {
@@ -127,43 +148,14 @@
       initFFmpeg();
     }
 
-    // --- PAYSTACK DIRECT REDIRECT GATE ---
-    async function payWithPaystack(email) {
-      logMessage('Generating Paystack secure checkout link...');
+    // --- PAYSTACK HOSTED REDIRECT GATE ---
+    function payWithPaystack(email) {
+      // Save email locally so we can log it to the sheet when they return
+      localStorage.setItem('pending_artist_email', email);
 
-      const publicKey = 'pk_test_078a52ae522dacc57ba8546539a611bca777d472';
-      const amount = 10000; // 100 NGN in kobo
-      const callbackUrl = window.location.href.split('?')[0]; // Returns user to your live page after payment
-
-      try {
-        // Initialize transaction via Paystack's standard HTTP API
-        const response = await fetch('https://api.paystack.co/transaction/initialize', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${publicKey}`, // Note: In production use your secret key on a backend, or use inline initialize. For client test, we can use standard redirect endpoint or standard API.
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            email: email,
-            amount: amount,
-            callback_url: callbackUrl,
-            currency: 'NGN'
-          })
-        });
-
-        const data = await response.json();
-        
-        if (data.status) {
-          logMessage('Redirecting to Paystack checkout...');
-          // Redirect browser directly to Paystack payment page
-          window.location.href = data.data.authorization_url;
-        } else {
-          logMessage('Error initializing payment: ' + data.message);
-          alert('Could not initialize payment. Check console.');
-        }
-      } catch (err) {
-        logMessage('Network error during payment initialization: ' + err.message);
-      }
+      // Redirect user to your hosted Paystack payment page with prefilled email
+      const targetUrl = `${PAYSTACK_PAGE_URL}?email=${encodeURIComponent(email)}`;
+      window.location.href = targetUrl;
     }
 
     // --- GOOGLE DRIVE GIS TOKEN CLIENT ---
@@ -267,7 +259,7 @@
 
         const metadata = {
           name: hlsFile.name,
-          parents: [driveFolderId]
+        parents: [driveFolderId]
         };
 
         const form = new FormData();
