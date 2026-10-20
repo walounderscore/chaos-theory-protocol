@@ -430,48 +430,91 @@
 
       return fileId;
     }
-    // --- GOOGLE DRIVE DIRECT UPLOADER & HLS RE-LINKER ---
+
+    // --- GOOGLE DRIVE DIRECT UPLOADER & LOCAL BLOB PLAYER ---
     async function uploadGeneratedChunksToDrive() {
       const files = globalFFmpegInstance.FS('readdir', '/');
       const segmentFiles = files.filter(f => f.endsWith('.ts')).sort();
-      logMessage(`Found ${segmentFiles.length} `.concat('audio chunks. Uploading segments to Drive...'));
+      logMessage(`Found ${segmentFiles.length} audio chunks. Uploading segments to Drive backup vault...`);
 
       const segmentMap = {};
 
-      // 1. Upload all .ts chunks first and record their Drive file IDs
+      // 1. Upload all .ts chunks to Google Drive vault
       for (const fileName of segmentFiles) {
         logMessage(`Uploading ${fileName}...`);
         try {
           const fileData = globalFFmpegInstance.FS('readFile', fileName);
           const fileId = await uploadFileToDrive(fileName, fileData, 'video/mp2t');
           segmentMap[fileName] = fileId;
-          logMessage(`✅ Uploaded ${fileName}`);
+          logMessage(`✅ Backed up ${fileName}`);
         } catch (err) {
           logMessage(`❌ Failed uploading ${fileName}: ${err.message}`);
         }
       }
 
-      // 2. Read and update relative segment paths inside playlist.m3u8 to absolute Drive URLs
-      logMessage('Rewriting playlist.m3u8 with absolute Drive segment URLs...');
+      // 2. Upload playlist.m3u8 to Drive vault
+      logMessage('Uploading playlist.m3u8 to Drive vault...');
       const playlistTextDecoder = new TextDecoder('utf-8');
       let m3u8Content = playlistTextDecoder.decode(globalFFmpegInstance.FS('readFile', 'playlist.m3u8'));
+      
+      const textEncoder = new TextEncoder();
+      const playlistFileId = await uploadFileToDrive('playlist.m3u8', textEncoder.encode(m3u8Content), 'application/x-mpegURL');
 
-      for (const [segmentName, fileId] of Object.entries(segmentMap)) {
-        const driveSegmentUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
-        m3u8Content = m3u8Content.split(segmentName).join(driveSegmentUrl);
+      logMessage('🎉 Processing and Google Drive vault sync completed!');
+
+      // 3. Play locally using WebAssembly Memory Blobs (Bypasses Google Drive CORS completely)
+      playLocalWasmStream();
+
+      // 4. Generate Embed UI for external distribution
+      generateEmbedUI(playlistFileId);
+    }
+
+    // --- PLAY LOCAL WASM STREAM (Zero CORS, Instant Preview) ---
+    function playLocalWasmStream() {
+      if (!player) {
+        player = videojs('chaos-player');
+
+        player.on('error', () => {
+          const err = player.error();
+          console.error("Video.js Error:", err);
+          logMessage(`❌ Player Error [Code ${err.code}]: ${err.message || 'HLS stream initialization failed.'}`);
+        });
+
+        player.on('loadedmetadata', () => {
+          logMessage('📊 Stream metadata loaded successfully.');
+        });
       }
 
-      // 3. Upload the rewritten master playlist.m3u8
-      logMessage('Uploading rewritten playlist.m3u8 to Drive...');
-      const textEncoder = new TextEncoder();
-      const updatedM3u8Bytes = textEncoder.encode(m3u8Content);
-      const playlistFileId = await uploadFileToDrive('playlist.m3u8', updatedM3u8Bytes, 'application/x-mpegURL');
+      // Read files directly from FFmpeg virtual memory
+      const m3u8Data = globalFFmpegInstance.FS('readFile', 'playlist.m3u8');
+      const files = globalFFmpegInstance.FS('readdir', '/');
+      const segmentFiles = files.filter(f => f.endsWith('.ts')).sort();
+      
+      let modifiedM3u8 = new TextDecoder('utf-8').decode(m3u8Data);
+      
+      // Map every relative .ts filename in the playlist to a local memory blob URL
+      for (const seg of segmentFiles) {
+        const segData = globalFFmpegInstance.FS('readFile', seg);
+        const segBlob = new Blob([segData], { type: 'video/mp2t' });
+        const segBlobUrl = URL.createObjectURL(segBlob);
+        modifiedM3u8 = modifiedM3u8.split(seg).join(segBlobUrl);
+      }
 
-      logMessage('🎉 All HLS assets uploaded and linked in Google Drive!');
+      const playlistBlob = new Blob([modifiedM3u8], { type: 'application/x-mpegURL' });
+      const playlistBlobUrl = URL.createObjectURL(playlistBlob);
 
-      // 4. Configure public permissions on folder and initialize player with manifest Blob
-      initSovereignPlayer(m3u8Content);
-      generateEmbedUI(playlistFileId);
+      logMessage('Loading local zero-CORS stream into Sovereign Video.js player...');
+      player.src({
+        src: playlistBlobUrl,
+        type: 'application/x-mpegURL'
+      });
+
+      player.ready(() => {
+        logMessage('▶️ Sovereign player ready for playback.');
+        player.play().catch(() => {
+          logMessage('ℹ️ Auto-play restricted by browser. Click play on the player controls.');
+        });
+      });
     }
 
     // --- INITIALIZE SOVEREIGN PLAYER (PUBLIC HLS MANIFEST BLOB) ---
