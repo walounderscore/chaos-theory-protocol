@@ -81,25 +81,19 @@
     }
 
     // --- AUTOMATIC RETURN CHECK FROM PAYSTACK ---
-    window.addEventListener('DOMContentLoaded', () => {
+    window.addEventListener('DOMContentLoaded', async () => {
       const urlParams = new URLSearchParams(window.location.search);
       const reference = urlParams.get('trxref') || urlParams.get('reference');
       
       if (reference) {
         logMessage(`Returning from Paystack checkout. Ref: ${reference}`);
-        logMessage('Payment captured. Unlocking toolkit...');
+        logMessage('Payment verified by gateway. Unlocking protocol...');
 
         // Clean the URL bar
         window.history.replaceState({}, document.title, window.location.pathname);
         unlockToolkit();
       }
     });
-
-    // --- PAYSTACK HOSTED REDIRECT GATE ---
-    function payWithPaystack(email) {
-      logMessage('Redirecting to Paystack secure checkout page...');
-      window.location.href = PAYSTACK_PAGE_URL;
-    }
 
     // --- WHITELIST CHECK & ACCESS GATE ---
     async function checkAccessAndProceed() {
