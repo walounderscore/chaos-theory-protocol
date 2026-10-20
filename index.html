@@ -355,7 +355,7 @@
       }
     }
 
-    // --- UPLOAD MULTIPART FILE HELPER & MAKE PUBLIC ---
+    // --- UPLOAD MULTIPART FILE HELPER & VERIFY PUBLIC PROPAGATION ---
     async function uploadFileToDrive(fileName, fileData, mimeType) {
       const boundary = '-------314159265358979323846';
       const delimiter = "\r\n--" + boundary + "\r\n";
@@ -395,7 +395,7 @@
 
       const fileId = data.id;
 
-      // EXPLICIT PERMISSION FIX: Grant public reader access to this specific file
+      // 1. Explicitly grant public reader access
       await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
         method: 'POST',
         headers: new Headers({
@@ -408,9 +408,28 @@
         })
       });
 
+      // 2. Propagation verification loop: Wait until Google's edge servers honor the public link
+      let isReady = false;
+      let attempts = 0;
+      while (!isReady && attempts < 8) {
+        attempts++;
+        await new Promise(r => setTimeout(r, 1000)); // wait 1 second between checks
+        
+        try {
+          // Test fetch using the public alternate media link (without auth header to verify public status)
+          const checkRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+            method: 'HEAD'
+          });
+          if (checkRes.ok) {
+            isReady = true;
+          }
+        } catch (e) {
+          // Network hiccup or still propagating, retry
+        }
+      }
+
       return fileId;
     }
-
     // --- GOOGLE DRIVE DIRECT UPLOADER & HLS RE-LINKER ---
     async function uploadGeneratedChunksToDrive() {
       const files = globalFFmpegInstance.FS('readdir', '/');
