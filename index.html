@@ -746,18 +746,63 @@
       logMessage(`📁 Created reorderable track cards for ${selectedUnifiedFiles.length} file(s).`);
     }
 
-    // --- SESSION EXPORT (SNAPSHOT JSON) ---
+    // --- GENERATE CLEAN FILENAME FROM ALBUM TITLE ---
+    function getCleanAlbumFilename(releaseTitle, suffix = "session_snapshot") {
+      const sanitized = releaseTitle
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '_')   // Replace spaces & special chars with underscores
+        .replace(/_+/g, '_');          // Collapse duplicate underscores
+      return `${sanitized}_${suffix}.json`;
+    }
+
+    // --- UPLOAD SESSION JSON SNAPSHOT TO GOOGLE DRIVE VAULT ---
+    async function uploadManifestToDrive(manifest) {
+      if (!accessToken || !driveFolderId) {
+        logMessage('⚠️ Google Drive not fully authorized. Skipping cloud JSON backup.');
+        return;
+      }
+
+      const fileName = getCleanAlbumFilename(manifest.title);
+      logMessage(`☁️ Uploading "${fileName}" to Google Drive vault...`);
+      
+      const fileMetadata = {
+        name: fileName,
+        parents: [driveFolderId],
+        mimeType: 'application/json'
+      };
+
+      const fileContent = JSON.stringify(manifest, null, 2);
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
+      form.append('file', new Blob([fileContent], { type: 'application/json' }));
+
+      try {
+        const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+          method: 'POST',
+          headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
+          body: form
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ? data.error.message : res.statusText);
+        logMessage(`✅ Session snapshot securely backed up to Drive as "${fileName}"!`);
+      } catch (err) {
+        logMessage(`❌ Failed to upload session JSON to Drive: ${err.message}`);
+      }
+    }
+
+    // --- LOCAL SESSION EXPORT (NAMED AFTER ALBUM) ---
     function exportSessionManifest(manifest) {
+      const fileName = getCleanAlbumFilename(manifest.title);
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(manifest, null, 2));
       const downloadAnchor = document.createElement('a');
       downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `${manifest.title.toLowerCase().replace(/\s+/g, '_')}_session_snapshot.json`);
+      downloadAnchor.setAttribute("download", fileName);
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
-      logMessage('💾 Session JSON snapshot saved to your computer/Drive folder!');
+      logMessage(`💾 Local session backup saved as "${fileName}"!`);
     }
-
+    
     // --- GOOGLE PICKER API INTEGRATION ---
     let pickerApiLoaded = false;
 
@@ -912,9 +957,10 @@
         });
       });
 
-      // Automatically trigger session JSON snapshot download for future editing
+      // Automatically upload to Google Drive vault AND trigger local backup
+      await uploadManifestToDrive(manifest);
       exportSessionManifest(manifest);
-      logMessage(`✅ Release manifest compiled & session snapshot saved! Ready for WASM processing.`);
+      logMessage(`✅ Release manifest compiled & session saved to Cloud & Local!`);
     }
 
     function triggerFanCheckout(releaseTitle, priceInNaira, driveAssetId) {
