@@ -9,8 +9,6 @@
   <script src="https://js.paystack.co/v2/inline.js"></script>
   <!-- Google Identity Services (GIS) API -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <!-- Google API / Picker Client -->
-  <script src="https://apis.google.com/js/api.js"></script>
   <!-- FFmpeg v0.11.6 UMD build -->
   <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
   <!-- JS Media Tags for Extracting Local Audio ID3 Metadata & Cover Art -->
@@ -44,12 +42,11 @@
     .icon-btn:hover { background: #30363d; color: #c9d1d9; }
     .thumb-preview { width: 42px; height: 42px; border-radius: 4px; object-fit: cover; border: 1px solid #30363d; background: #161b22; }
     
-    /* Left-Aligned Album Art Preview & Live Badge styling */
+    /* Left-Aligned 2x Album Art Preview & Live Badge styling */
     .album-art-preview-large { width: 90px; height: 90px; border-radius: 6px; object-fit: cover; border: 1px solid #30363d; background: #0d1117; }
     .album-live-badge { display: flex; align-items: center; gap: 15px; background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #21262d; margin-bottom: 12px; }
     .badge-details h3 { margin: 0; font-size: 1.1rem; color: #58a6ff; font-weight: bold; }
-    .badge-details p { margin: 2px 0 0 0; font-size: 0.85rem; color: #8b949e; }
-    .badge-year { font-weight: bold; color: #7ee787; font-size: 0.85rem; }
+    .badge-details p { margin: 2px 0 0 0; font-size: 0.8rem; color: #8b949e; }
   </style>
 </head>
 <body>
@@ -76,13 +73,26 @@
         <span id="auth-status" style="color: #8b949e;">Not Connected</span>
       </div>
 
-      <!-- Dual Re-import Window (Drive Picker + Local File) -->
-      <div style="background: #010409; padding: 10px; border-radius: 6px; border: 1px solid #21262d; margin-top: 10px;">
-        <label style="font-size: 0.8rem; font-weight: bold; color: #58a6ff; display: block; margin-bottom: 6px;">📂 Resume Previous Metadata Session Snapshot (`.json`):</label>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: center;">
-          <button type="button" class="icon-btn" onclick="openDrivePicker()" style="padding: 8px; font-weight: bold; text-align: center;">☁️ Pick from Google Drive Vault</button>
-          <div style="display: flex; flex-direction: column;">
-            <label style="font-size: 0.7rem; color: #8b949e; margin-bottom: 2px;">Or load from local machine:</label>
+      <!-- Side-by-Side Re-import Window (Drive Vault Fetch + Local File) -->
+      <div style="background: #010409; padding: 12px; border-radius: 6px; border: 1px solid #21262d; margin-top: 10px;">
+        <label style="font-size: 0.8rem; font-weight: bold; color: #58a6ff; display: block; margin-bottom: 8px;">📂 Resume Previous Metadata Session Snapshot (`.json`):</label>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; align-items: start;">
+          <!-- Left: Native Drive Vault Button & Selector -->
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <button type="button" class="icon-btn" onclick="fetchDriveSessionsList()" style="padding: 10px; font-weight: bold; text-align: center; background: #238636; color: white; border: none;">☁️ Load from Google Drive</button>
+            <span style="font-size: 0.7rem; color: #8b949e;">Pulls saved snapshots directly from your Drive vault.</span>
+            
+            <!-- Inline Dropdown Container for Drive Sessions -->
+            <div id="drive-sessions-container" style="display: none; margin-top: 6px; background: #161b22; padding: 8px; border-radius: 4px; border: 1px solid #30363d;">
+              <select id="drive-sessions-select" style="width: 100%; font-size: 0.75rem; margin-bottom: 6px;"></select>
+              <button type="button" class="icon-btn" onclick="loadSelectedDriveSession()" style="width: 100%; padding: 6px; font-weight: bold; background: #1f6feb; color: white;">📥 Import Selected Snapshot</button>
+            </div>
+          </div>
+
+          <!-- Right: Local Machine File Picker -->
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 0.75rem; color: #8b949e;">Or load from local machine:</label>
             <input type="file" id="import-local-session-file" accept=".json" onchange="importLocalSessionManifest(this)" style="font-size: 0.75rem; margin: 0;">
           </div>
         </div>
@@ -104,19 +114,18 @@
           <div class="badge-details">
             <h3 id="preview-badge-title">chaos theory.</h3>
             <p id="preview-badge-artist">walo, the underscore.</p>
-            <p id="preview-badge-year" class="badge-year">2024</p>
+            <p id="preview-badge-year" style="font-style: italic; color: #7ee787;">2024</p>
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 2fr 1.2fr 1fr; gap: 10px; margin-bottom: 10px;">
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-bottom: 10px;">
           <div>
             <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Release / Album Title:</label>
             <input type="text" id="builder-release-title" placeholder="e.g., Chaos Theory LP" oninput="updateLiveAlbumBadge()" style="width: 100%;">
           </div>
           <div>
-            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Release Date (Calendar Picker):</label>
+            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Release Date (DD/MM/YYYY Picker):</label>
             <input type="date" id="builder-release-date" onchange="updateLiveAlbumBadge()" style="width: 100%;">
-            <div id="formatted-date-display" style="font-size: 0.7rem; color: #7ee787; margin-top: 2px;">Formatted: --/--/----</div>
           </div>
           <div>
             <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Global Genre:</label>
@@ -154,7 +163,7 @@
       <!-- Unified File Picker -->
       <div style="margin-bottom: 15px;">
         <label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.85rem;">Select Audio Stem(s) (Single or Multiple):</label>
-        <input type="file" id="batch-audio-files" accept="audio/*" multiple onchange="handleUnifiedFileSelect(this)" style="margin: 5px 0;">
+        <input type="file" id="batch-audio-files" accept="audio/*" multiple onchange="handleUnifiedFileSelect(this)" style="margin: 5px 0;" disabled>
       </div>
 
       <!-- Dynamic Track Queue Container -->
@@ -164,13 +173,13 @@
           <button type="button" class="icon-btn" onclick="collapseAllCards()">↕️ Toggle All Collapse</button>
         </div>
         <div id="track-queue-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 520px; overflow-y: auto;">
-          <div style="color: #8b949e; font-size: 0.85rem; font-style: italic;">No audio selected yet. Choose file(s) above or load a session snapshot.</div>
+          <div style="color: #8b949e; font-size: 0.85rem; font-style: italic;">No audio selected yet. Choose file(s) above to build track rows.</div>
         </div>
       </div>
 
       <!-- Action Bar: Manual Session Save & Release Compile Trigger -->
       <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px; margin-top: 15px;">
-        <button type="button" class="icon-btn" onclick="saveCurrentSessionManual()" style="padding: 10px; font-size: 0.85rem; background: #21262d; border-color: #30363d; color: #58a6ff; font-weight: bold;">💾 Save Session Snapshot</button>
+        <button type="button" id="save-session-btn" class="icon-btn" onclick="saveCurrentSessionManual()" style="padding: 10px; font-size: 0.85rem; background: #21262d; border-color: #30363d; color: #58a6ff;">💾 Save Session Snapshot</button>
         <button id="build-release-btn" onclick="processUnifiedRelease()" disabled>🚀 Encrypt, Upload & Build Sovereign Release</button>
       </div>
     </div>
@@ -218,6 +227,7 @@
     let player = null;
     let selectedUnifiedFiles = [];
     let currentAlbumArtBase64 = null;
+    let fetchedDriveFilesCache = [];
 
     const CONTRIBUTOR_ROLES = [
       "Main Artist", "Featured Artist", "Producer", "Remixer", 
@@ -241,31 +251,23 @@
       }
     }
 
-    // --- FORMAT DATE HELPER (DD/MM/YYYY) ---
-    function formatToDDMMYYYY(dateStr) {
-      if (!dateStr) return '';
-      const parts = dateStr.split('-');
-      if (parts.length === 3) {
-        return `${parts[2]}/${parts[1]}/${parts[0]}`;
-      }
-      return dateStr;
-    }
-
-    // --- UPDATE LIVE ALBUM BADGE PREVIEW ---
+    // --- UPDATE LIVE ALBUM BADGE PREVIEW & FORMATTED DATE (DD/MM/YYYY) ---
     function updateLiveAlbumBadge() {
       const title = document.getElementById('builder-release-title').value.trim() || 'chaos theory.';
       const artist = document.getElementById('global-album-artist').value.trim() || 'walo, the underscore.';
       const dateVal = document.getElementById('builder-release-date').value;
-      const year = dateVal ? new Date(dateVal).getFullYear() : '2024';
+      
+      let year = '2024';
+      if (dateVal) {
+        const parts = dateVal.split('-'); // YYYY-MM-DD from HTML date picker
+        if (parts.length === 3) {
+          year = parts[0];
+        }
+      }
 
       document.getElementById('preview-badge-title').innerText = title;
       document.getElementById('preview-badge-artist').innerText = artist;
       document.getElementById('preview-badge-year').innerText = year;
-
-      const dateDisp = document.getElementById('formatted-date-display');
-      if (dateDisp) {
-        dateDisp.innerText = dateVal ? `Formatted: ${formatToDDMMYYYY(dateVal)}` : 'Formatted: --/--/----';
-      }
     }
 
     window.addEventListener('DOMContentLoaded', async () => {
@@ -372,8 +374,12 @@
     }
 
     function updateButtonState() {
+      const batchFileInput = document.getElementById('batch-audio-files');
+      if (globalFFmpegInstance && globalFFmpegInstance.isLoaded()) {
+        if (batchFileInput) batchFileInput.disabled = false;
+      }
       if (globalFFmpegInstance && globalFFmpegInstance.isLoaded() && driveFolderId) {
-        logMessage('🚀 Toolkit fully active! Choose audio files or load session to build release.');
+        logMessage('🚀 Toolkit fully active! Choose audio files to build release.');
       }
     }
 
@@ -660,23 +666,33 @@
       jsmediatags.read(file, {
         onSuccess: function(tag) {
           const tags = tag.tags;
-          if (tags.title && !trackCard.querySelector('.t-title').dataset.userModified) {
-            trackCard.querySelector('.t-title').value = tags.title;
+          if (tags.title) {
+            const titleInput = trackCard.querySelector('.t-title');
+            if (titleInput) titleInput.value = tags.title;
           }
           if (tags.artist) {
-            const firstArtistName = trackCard.querySelector('.c-name');
-            if (firstArtistName && !firstArtistName.value) firstArtistName.value = tags.artist;
+            const artistInput = trackCard.querySelector('.c-name');
+            if (artistInput) artistInput.value = tags.artist;
             const globalArtistInput = document.getElementById('global-album-artist');
             if (globalArtistInput && !globalArtistInput.value) {
               globalArtistInput.value = tags.artist;
               updateLiveAlbumBadge();
             }
           }
-          if (tags.genre && !trackCard.querySelector('.t-genre').value) {
-            trackCard.querySelector('.t-genre').value = tags.genre;
+          if (tags.genre) {
+            const genreInput = trackCard.querySelector('.t-genre');
+            if (genreInput) genreInput.value = tags.genre;
           }
-          if (tags.lyrics && tags.lyrics.lyrics && !trackCard.querySelector('.t-caption').value) {
-            trackCard.querySelector('.t-caption').value = tags.lyrics.lyrics;
+          if (tags.lyrics && tags.lyrics.lyrics) {
+            const captionInput = trackCard.querySelector('.t-caption');
+            if (captionInput) captionInput.value = tags.lyrics.lyrics;
+          }
+          if (tags.album) {
+            const albumTitleInput = document.getElementById('builder-release-title');
+            if (albumTitleInput && !albumTitleInput.value) {
+              albumTitleInput.value = tags.album;
+              updateLiveAlbumBadge();
+            }
           }
           if (tags.picture) {
             const { data, format } = tags.picture;
@@ -689,195 +705,137 @@
             if (setArtBtn) { setArtBtn.style.display = 'inline-block'; }
           }
         },
-        onError: function(error) {}
+        onError: function() {}
       });
     }
 
-    // --- RE-LINK FILES OR BUILD QUEUE WITHOUT RESETTING ORDER/METADATA ---
     function handleUnifiedFileSelect(input) {
       const container = document.getElementById('track-queue-container');
       const releaseTitleInput = document.getElementById('builder-release-title');
       const bundleWrapper = document.getElementById('bundle-price-wrapper');
       
-      const newFiles = Array.from(input.files);
-      if (newFiles.length === 0) return;
+      selectedUnifiedFiles = Array.from(input.files);
+      if (selectedUnifiedFiles.length === 0) return;
 
-      selectedUnifiedFiles = newFiles;
-      const existingCards = Array.from(container.querySelectorAll('.track-card'));
-
-      // IF RESTORED SESSION HAS CARDS, LINK FILES TO EXISTING CARDS PRESERVING ARRANGEMENT
-      if (existingCards.length > 0) {
-        logMessage(`🔗 Re-linking ${newFiles.length} selected audio file(s) to existing restored session sequence...`);
-        
-        newFiles.forEach((file, idx) => {
-          const cleanName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-          
-          // Attempt match by file name or by current card position
-          let matchedCard = existingCards.find(c => {
-            const cardFileName = c.dataset.fileName;
-            const cardTitle = c.querySelector('.t-title')?.value;
-            return cardFileName === file.name || cardTitle === cleanName;
-          });
-
-          if (!matchedCard && existingCards[idx]) {
-            matchedCard = existingCards[idx];
-          }
-
-          if (matchedCard) {
-            matchedCard.dataset.fileName = file.name;
-            const fileLabel = matchedCard.querySelector('.t-file-label');
-            if (fileLabel) fileLabel.innerText = file.name;
-            parseLocalAudioMetadata(file, matchedCard);
-          }
-        });
-
-        document.getElementById('build-release-btn').disabled = false;
-        logMessage('✅ Audio files linked to session queue while preserving original track order & credits!');
-        return;
-      }
-
-      // OTHERWISE FRESH SETUP
-      container.innerHTML = '';
-      if (selectedUnifiedFiles.length === 1) {
-        if (!releaseTitleInput.value) {
-          releaseTitleInput.value = selectedUnifiedFiles[0].name.substring(0, selectedUnifiedFiles[0].name.lastIndexOf('.')) || selectedUnifiedFiles[0].name;
-        }
+      if (selectedUnifiedFiles.length === 1 && !releaseTitleInput.value) {
+        releaseTitleInput.value = selectedUnifiedFiles[0].name.substring(0, selectedUnifiedFiles[0].name.lastIndexOf('.')) || selectedUnifiedFiles[0].name;
         bundleWrapper.style.display = 'none';
         updateLiveAlbumBadge();
       } else {
         bundleWrapper.style.display = 'block';
       }
 
-      const defaultGlobalArtist = document.getElementById('global-album-artist').value.trim() || "Main Artist";
+      // If cards already exist (e.g. from restored JSON), intelligently match audio files to tracks by name or index
+      const existingCards = container.querySelectorAll('.track-card');
+      if (existingCards.length > 0) {
+        existingCards.forEach((card, index) => {
+          const fileMatch = selectedUnifiedFiles[index] || selectedUnifiedFiles[0];
+          card.dataset.audioIndex = index;
+          const nameSpan = card.querySelector('.track-file-name');
+          if (nameSpan) nameSpan.innerText = fileMatch.name;
+        });
+        logMessage(`🔗 Re-linked ${selectedUnifiedFiles.length} audio file(s) to your restored track cards!`);
+        return;
+      }
+
+      // Otherwise build fresh cards
+      container.innerHTML = '';
+      const defaultGlobalArtist = document.getElementById('global-album-artist').value.trim() || 
+                                  localStorage.getItem('chaos_artist_email')?.split('@')[0] || "Main Artist";
 
       selectedUnifiedFiles.forEach((file, index) => {
         const trackNum = index + 1;
         const cleanName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
         
-        const trackCard = renderTrackCardElement({
-          index: index,
-          trackNumber: trackNum,
-          fileName: file.name,
-          title: cleanName,
-          price: 500,
-          genre: '',
-          isrc: '',
-          caption: '',
-          aspectRatio: '1:1',
-          displayMode: 'full_track',
-          thumbData: '',
-          contributors: [{ role: 'Main Artist', customRole: '', name: defaultGlobalArtist }]
-        });
+        const trackCard = document.createElement('div');
+        trackCard.className = 'track-card';
+        trackCard.dataset.index = index;
+        
+        trackCard.innerHTML = `
+          <div class="track-card-header">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+              <span class="collapse-arrow" onclick="toggleCardCollapse(this.parentElement)" style="font-size: 0.75rem; color: #58a6ff; cursor: pointer;">▼</span>
+              <span style="background: #21262d; color: #58a6ff; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">#</span>
+              <input type="number" value="${trackNum}" class="t-num" style="width: 50px; text-align: center; font-weight: bold; font-size: 0.85rem;" onchange="handleTrackNumChange(this)">
+              <img src="" class="t-thumb-preview thumb-preview" style="display: none;" title="Embedded track cover">
+              <button type="button" class="icon-btn set-album-art-btn" style="display: none; font-size: 0.65rem;" onclick="setAsAlbumArt(this)">🖼️ Set as Album Art</button>
+              <strong class="track-file-name" style="color: #c9d1d9; font-size: 0.9rem;">${file.name}</strong>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <span style="font-size: 0.75rem; color: #8b949e;">${(file.size / (1024*1024)).toFixed(1)} MB</span>
+              <button type="button" class="subtle-btn" onclick="this.closest('.track-card').remove(); reindexTracks();" title="Remove Track">✕</button>
+            </div>
+          </div>
+          
+          <div class="track-body" style="margin-top: 10px; border-top: 1px solid #21262d; padding-top: 10px;">
+            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+              <div>
+                <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Track Title *</label>
+                <input type="text" value="${cleanName}" class="t-title" style="width: 100%; font-size: 0.8rem;">
+              </div>
+              <div>
+                <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Price (₦) *</label>
+                <input type="number" value="500" class="t-price" style="width: 100%; font-size: 0.8rem;">
+              </div>
+              <div>
+                <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Genre</label>
+                <input type="text" class="t-genre" placeholder="Genre" style="width: 100%; font-size: 0.8rem;">
+              </div>
+              <div>
+                <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">ISRC Code</label>
+                <input type="text" class="t-isrc" placeholder="Optional" style="width: 100%; font-size: 0.8rem;">
+              </div>
+            </div>
+
+            <!-- Per-Track Visual Asset & Display Mode -->
+            <div style="margin-bottom: 10px; background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
+              <label style="font-size: 0.75rem; font-weight: bold; color: #58a6ff; display: block; margin-bottom: 5px;">🎬 Visual Asset & Display Mode</label>
+              <div style="display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 8px; align-items: center;">
+                <input type="file" class="t-visual-file" accept="image/*,video/*" multiple style="font-size: 0.7rem;">
+                <select class="t-aspect-ratio" style="font-size: 0.75rem;">
+                  <option value="16:9">Landscape (16:9)</option>
+                  <option value="1:1" selected>Square (1:1)</option>
+                  <option value="9:16">Portrait (9:16)</option>
+                  <option value="4:5">Vertical (4:5)</option>
+                </select>
+                <select class="t-display-mode" style="font-size: 0.75rem;">
+                  <option value="full_track">Full Track Display</option>
+                  <option value="loop_video">Loop Videos / GIFs</option>
+                  <option value="slideshow_5s">Slideshow (5s)</option>
+                  <option value="slideshow_10s">Slideshow (10s)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Caption / Lyrics -->
+            <div style="margin-bottom: 10px;">
+              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Lyrics, Liner Notes & Stories:</label>
+              <textarea class="t-caption" rows="2" placeholder="Poetry, lyrics, or notes..." style="width: 100%; font-size: 0.8rem; font-family: inherit;"></textarea>
+            </div>
+
+            <!-- Contributors -->
+            <div style="background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="font-size: 0.75rem; font-weight: bold; color: #c9d1d9;">Contributors & Credits</label>
+                <div style="display: flex; gap: 6px;">
+                  <button type="button" class="icon-btn" onclick="addContributorToTrack(${index})">➕ Add Contributor</button>
+                  <button type="button" class="icon-btn" onclick="copyCurrentTrack1CreditsToAll()" title="Clone credits from current Track #1">👯 Clone Track 1 Credits to All</button>
+                </div>
+              </div>
+              <div id="contributors-list-${index}"></div>
+            </div>
+          </div>
+        `;
         
         container.appendChild(trackCard);
+        attachDragAndDropListeners(trackCard);
+        addContributorToTrack(index, "Main Artist", defaultGlobalArtist);
         parseLocalAudioMetadata(file, trackCard);
       });
 
       document.getElementById('build-release-btn').disabled = false;
       logMessage(`📁 Created reorderable track cards for ${selectedUnifiedFiles.length} file(s).`);
-    }
-
-    function renderTrackCardElement(tr) {
-      const trackCard = document.createElement('div');
-      trackCard.className = 'track-card';
-      trackCard.dataset.index = tr.index;
-      trackCard.dataset.fileName = tr.fileName || '';
-
-      trackCard.innerHTML = `
-        <div class="track-card-header">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
-            <span class="collapse-arrow" onclick="toggleCardCollapse(this.parentElement)" style="font-size: 0.75rem; color: #58a6ff; cursor: pointer;">▼</span>
-            <span style="background: #21262d; color: #58a6ff; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">#</span>
-            <input type="number" value="${tr.trackNumber}" class="t-num" style="width: 50px; text-align: center; font-weight: bold; font-size: 0.85rem;" onchange="handleTrackNumChange(this)">
-            <img src="${tr.thumbData || ''}" class="t-thumb-preview thumb-preview" style="${tr.thumbData ? 'display: block;' : 'display: none;'}" title="Embedded track cover">
-            <button type="button" class="icon-btn set-album-art-btn" style="${tr.thumbData ? 'display: inline-block;' : 'display: none;'} font-size: 0.65rem;" onclick="setAsAlbumArt(this)">🖼️ Set as Album Art</button>
-            <strong class="t-file-label" style="color: #c9d1d9; font-size: 0.9rem;">${tr.fileName || tr.title}</strong>
-          </div>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <button type="button" class="subtle-btn" onclick="this.closest('.track-card').remove(); reindexTracks();" title="Remove Track">✕</button>
-          </div>
-        </div>
-        
-        <div class="track-body" style="margin-top: 10px; border-top: 1px solid #21262d; padding-top: 10px;">
-          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px;">
-            <div>
-              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Track Title *</label>
-              <input type="text" value="${tr.title || ''}" class="t-title" oninput="this.dataset.userModified='true'" style="width: 100%; font-size: 0.8rem;">
-            </div>
-            <div>
-              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Price (₦) *</label>
-              <input type="number" value="${tr.price || 500}" class="t-price" style="width: 100%; font-size: 0.8rem;">
-            </div>
-            <div>
-              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Genre</label>
-              <input type="text" class="t-genre" value="${tr.genre || ''}" placeholder="Genre" style="width: 100%; font-size: 0.8rem;">
-            </div>
-            <div>
-              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">ISRC Code</label>
-              <input type="text" class="t-isrc" value="${tr.isrc || ''}" placeholder="Optional" style="width: 100%; font-size: 0.8rem;">
-            </div>
-          </div>
-
-          <div style="margin-bottom: 10px; background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
-            <label style="font-size: 0.75rem; font-weight: bold; color: #58a6ff; display: block; margin-bottom: 5px;">🎬 Visual Asset & Display Mode</label>
-            <div style="display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 8px; align-items: center;">
-              <input type="file" class="t-visual-file" accept="image/*,video/*" multiple style="font-size: 0.7rem;">
-              <select class="t-aspect-ratio" style="font-size: 0.75rem;">
-                <option value="16:9" ${tr.aspectRatio === '16:9' ? 'selected' : ''}>Landscape (16:9)</option>
-                <option value="1:1" ${tr.aspectRatio === '1:1' || !tr.aspectRatio ? 'selected' : ''}>Square (1:1)</option>
-                <option value="9:16" ${tr.aspectRatio === '9:16' ? 'selected' : ''}>Portrait (9:16)</option>
-                <option value="4:5" ${tr.aspectRatio === '4:5' ? 'selected' : ''}>Vertical (4:5)</option>
-              </select>
-              <select class="t-display-mode" style="font-size: 0.75rem;">
-                <option value="full_track" ${tr.displayMode === 'full_track' ? 'selected' : ''}>Full Track Display</option>
-                <option value="loop_video" ${tr.displayMode === 'loop_video' ? 'selected' : ''}>Loop Videos / GIFs</option>
-                <option value="slideshow_5s" ${tr.displayMode === 'slideshow_5s' ? 'selected' : ''}>Slideshow (5s)</option>
-                <option value="slideshow_10s" ${tr.displayMode === 'slideshow_10s' ? 'selected' : ''}>Slideshow (10s)</option>
-              </select>
-            </div>
-          </div>
-
-          <div style="margin-bottom: 10px;">
-            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Lyrics, Liner Notes & Stories:</label>
-            <textarea class="t-caption" rows="2" placeholder="Poetry, lyrics, or notes..." style="width: 100%; font-size: 0.8rem; font-family: inherit;">${tr.caption || ''}</textarea>
-          </div>
-
-          <div style="background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <label style="font-size: 0.75rem; font-weight: bold; color: #c9d1d9;">Contributors & Credits</label>
-              <div style="display: flex; gap: 6px;">
-                <button type="button" class="icon-btn" onclick="addContributorToTrack(${tr.index})">➕ Add Contributor</button>
-                <button type="button" class="icon-btn" onclick="copyCurrentTrack1CreditsToAll()" title="Clone credits from current Track #1">👯 Clone Track 1 Credits to All</button>
-              </div>
-            </div>
-            <div id="contributors-list-${tr.index}"></div>
-          </div>
-        </div>
-      `;
-
-      attachDragAndDropListeners(trackCard);
-
-      // Populate Contributor Rows
-      setTimeout(() => {
-        const listContainer = trackCard.querySelector(`#contributors-list-${tr.index}`);
-        if (listContainer && tr.contributors) {
-          listContainer.innerHTML = '';
-          tr.contributors.forEach(c => {
-            const row = createContributorRow(c.role, c.name);
-            if (c.role === 'Other' || c.customRole) {
-              const customInput = row.querySelector('.c-custom-role');
-              if (customInput) {
-                customInput.style.display = 'block';
-                customInput.value = c.customRole || c.role;
-              }
-            }
-            listContainer.appendChild(row);
-          });
-        }
-      }, 0);
-
-      return trackCard;
     }
 
     function getCleanAlbumFilename(releaseTitle, suffix = "session_snapshot") {
@@ -888,7 +846,6 @@
       return `${sanitized}_${suffix}.json`;
     }
 
-    // --- FULL MANIFEST COMPILER ---
     function compileCurrentManifest() {
       const releaseTitle = document.getElementById('builder-release-title').value.trim();
       const releaseDate = document.getElementById('builder-release-date').value.trim();
@@ -918,10 +875,11 @@
         const caption = card.querySelector('.t-caption').value.trim();
         const aspectRatio = card.querySelector('.t-aspect-ratio').value;
         const displayMode = card.querySelector('.t-display-mode').value;
-        const fileName = card.dataset.fileName || selectedUnifiedFiles[idx]?.name || `stem_${trackNum}.mp3`;
         
         const thumbImg = card.querySelector('.t-thumb-preview');
         const thumbData = (thumbImg && thumbImg.src && thumbImg.src !== window.location.href) ? thumbImg.src : null;
+        const fileNameEl = card.querySelector('.track-file-name');
+        const fileName = fileNameEl ? fileNameEl.innerText : "stem.mp3";
 
         const contributorRows = card.querySelectorAll('.contributor-row');
         const contributors = [];
@@ -953,36 +911,23 @@
     }
 
     async function uploadManifestToDrive(manifest) {
-      if (!accessToken || !driveFolderId) {
-        logMessage('⚠️ Google Drive not fully authorized. Skipping cloud JSON sync.');
-        return;
-      }
-
+      if (!accessToken || !driveFolderId) return;
       const fileName = getCleanAlbumFilename(manifest.title);
-      logMessage(`☁️ Uploading "${fileName}" to Google Drive vault...`);
-      
-      const fileMetadata = {
-        name: fileName,
-        parents: [driveFolderId],
-        mimeType: 'application/json'
-      };
-
+      const fileMetadata = { name: fileName, parents: [driveFolderId], mimeType: 'application/json' };
       const fileContent = JSON.stringify(manifest, null, 2);
       const form = new FormData();
       form.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
       form.append('file', new Blob([fileContent], { type: 'application/json' }));
 
       try {
-        const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
           method: 'POST',
           headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
           body: form
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ? data.error.message : res.statusText);
-        logMessage(`✅ Session snapshot backed up to Drive as "${fileName}"!`);
+        logMessage(`☁️ Cloud snapshot synced to Drive: "${fileName}"`);
       } catch (err) {
-        logMessage(`❌ Failed to upload session JSON to Drive: ${err.message}`);
+        logMessage(`❌ Cloud sync warning: ${err.message}`);
       }
     }
 
@@ -995,92 +940,82 @@
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
-      logMessage(`💾 Local session backup saved as "${fileName}"!`);
     }
 
-    // --- RESPONSIVE MANUAL SESSION SAVE FIX ---
+    // --- NON-BLOCKING INSTANT SAVE ---
     async function saveCurrentSessionManual() {
-      try {
-        logMessage('💾 Compiling session snapshot...');
-        const manifest = compileCurrentManifest();
-        
-        if (!manifest.title && manifest.tracks.length === 0) {
-          alert('Please enter a release title or add track information before saving.');
-          return;
-        }
+      const btn = document.getElementById('save-session-btn');
+      btn.innerText = '⏳ Saving...';
+      btn.disabled = true;
 
-        exportSessionManifest(manifest);
-        
-        if (accessToken && driveFolderId) {
-          await uploadManifestToDrive(manifest);
-        }
+      const manifest = compileCurrentManifest();
+      exportSessionManifest(manifest); // Instant local download
+      await uploadManifestToDrive(manifest); // Background Drive upload
 
-        const fileName = getCleanAlbumFilename(manifest.title);
-        logMessage(`✅ Session snapshot "${fileName}" successfully saved!`);
-        alert(`Session snapshot "${fileName}" saved successfully!`);
-      } catch (err) {
-        logMessage(`❌ Save session failed: ${err.message}`);
-        alert(`Could not save session: ${err.message}`);
-      }
+      logMessage(`💾 Session snapshot saved successfully!`);
+      setTimeout(() => {
+        btn.innerText = '💾 Save Session Snapshot';
+        btn.disabled = false;
+      }, 1500);
     }
-    
-    let pickerApiLoaded = false;
 
-    function onApiLoad() {
-      if (typeof gapi !== 'undefined' && gapi.load) {
-        gapi.load('picker', () => {
-          pickerApiLoaded = true;
-          logMessage('☁️ Google Picker API loaded and ready.');
-        });
-      }
-    }
-    window.addEventListener('load', onApiLoad);
-
-    const GOOGLE_API_KEY = 'AIzaSyABwHk6OoGOXgYfGySdsVltIMsS0SY-8Oc';
-    const GOOGLE_PROJECT_NUMBER = '104287153665';
-
-    function openDrivePicker() {
-      if (!accessToken) {
+    // --- NATIVE DRIVE VAULT BROWSER (NO IFRAME / NO API KEY REQUIRED) ---
+    async function fetchDriveSessionsList() {
+      if (!accessToken || !driveFolderId) {
         alert('Please connect Google Drive first.');
         return;
       }
-      if (!pickerApiLoaded) {
-        alert('Google Picker API is still loading. Please try again in a moment.');
-        return;
+
+      logMessage('☁️ Fetching session snapshots from your Google Drive vault...');
+      try {
+        const query = encodeURIComponent(`'${driveFolderId}' in parents and mimeType='application/json' and trashed=false`);
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}`, {
+          headers: { 'Authorization': 'Bearer ' + accessToken }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ? data.error.message : res.statusText);
+
+        fetchedDriveFilesCache = data.files || [];
+        if (fetchedDriveFilesCache.length === 0) {
+          alert('No session snapshots found in your Google Drive folder yet.');
+          return;
+        }
+
+        const selectEl = document.getElementById('drive-sessions-select');
+        selectEl.innerHTML = '';
+        fetchedDriveFilesCache.forEach((f, idx) => {
+          const opt = document.createElement('option');
+          opt.value = idx;
+          opt.innerText = f.name;
+          selectEl.appendChild(opt);
+        });
+
+        document.getElementById('drive-sessions-container').style.display = 'block';
+        logMessage(`✅ Found ${fetchedDriveFilesCache.length} session snapshot(s) in Drive vault.`);
+      } catch (err) {
+        logMessage(`❌ Failed to list Drive files: ${err.message}`);
+        alert('Could not retrieve files from Google Drive.');
       }
-
-      const view = new google.picker.View(google.picker.ViewId.DOCS);
-      view.setMimeTypes("application/json");
-
-      const picker = new google.picker.PickerBuilder()
-        .addView(view)
-        .setAppId(GOOGLE_PROJECT_NUMBER)
-        .setOAuthToken(accessToken)
-        .setDeveloperKey(GOOGLE_API_KEY)
-        .setCallback(pickerCallback)
-        .setTitle("Select your Chaos Theory Session JSON Snapshot")
-        .build();
-
-      picker.setVisible(true);
     }
 
-    async function pickerCallback(data) {
-      if (data.action === google.picker.Action.PICKED) {
-        const fileId = data.docs[0].id;
-        const fileName = data.docs[0].name;
-        logMessage(`☁️ Fetching session snapshot from Drive: "${fileName}"...`);
+    async function loadSelectedDriveSession() {
+      const selectEl = document.getElementById('drive-sessions-select');
+      const chosenIdx = parseInt(selectEl.value);
+      const file = fetchedDriveFilesCache[chosenIdx];
+      if (!file) return;
 
-        try {
-          const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-            headers: { 'Authorization': 'Bearer ' + accessToken }
-          });
-          const manifest = await res.json();
-          loadSessionIntoUI(manifest);
-          logMessage(`✅ Successfully loaded session snapshot "${manifest.title || fileName}" from Drive!`);
-        } catch (err) {
-          logMessage(`❌ Error loading Drive JSON session: ${err.message}`);
-          alert('Could not read selected Drive file.');
-        }
+      logMessage(`☁️ Downloading "${file.name}" from Drive vault...`);
+      try {
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+          headers: { 'Authorization': 'Bearer ' + accessToken }
+        });
+        const manifest = await res.json();
+        loadSessionIntoUI(manifest);
+        document.getElementById('drive-sessions-container').style.display = 'none';
+        logMessage(`✅ Successfully restored session snapshot "${manifest.title || file.name}"!`);
+      } catch (err) {
+        logMessage(`❌ Error downloading Drive session: ${err.message}`);
+        alert('Could not load selected session file.');
       }
     }
 
@@ -1100,7 +1035,6 @@
       reader.readAsText(file);
     }
 
-    // --- FULL RESTORATION HELPER ---
     function loadSessionIntoUI(manifest) {
       if (!manifest) return;
 
@@ -1121,31 +1055,107 @@
         const container = document.getElementById('track-queue-container');
         container.innerHTML = '';
 
-        manifest.tracks.sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0));
-
         manifest.tracks.forEach((tr, index) => {
-          const trackCard = renderTrackCardElement({
-            index: index,
-            trackNumber: tr.trackNumber || (index + 1),
-            fileName: tr.fileName || `Track_${index + 1}`,
-            title: tr.title || '',
-            price: tr.price || 500,
-            genre: tr.genre || '',
-            isrc: tr.isrc || '',
-            caption: tr.caption || '',
-            aspectRatio: tr.aspectRatio || '1:1',
-            displayMode: tr.displayMode || 'full_track',
-            thumbData: tr.thumbData || '',
-            contributors: tr.contributors && tr.contributors.length > 0 ? tr.contributors : [{ role: 'Main Artist', customRole: '', name: manifest.artist || '' }]
-          });
+          const trackCard = document.createElement('div');
+          trackCard.className = 'track-card';
+          trackCard.dataset.index = index;
+
+          trackCard.innerHTML = `
+            <div class="track-card-header">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+                <span class="collapse-arrow" onclick="toggleCardCollapse(this.parentElement)" style="font-size: 0.75rem; color: #58a6ff; cursor: pointer;">▼</span>
+                <span style="background: #21262d; color: #58a6ff; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">#</span>
+                <input type="number" value="${tr.trackNumber || (index + 1)}" class="t-num" style="width: 50px; text-align: center; font-weight: bold; font-size: 0.85rem;" onchange="handleTrackNumChange(this)">
+                <img src="${tr.thumbData || ''}" class="t-thumb-preview thumb-preview" style="${tr.thumbData ? 'display: block;' : 'display: none;'}" title="Embedded track cover">
+                <button type="button" class="icon-btn set-album-art-btn" style="${tr.thumbData ? 'display: inline-block;' : 'display: none;'} font-size: 0.65rem;" onclick="setAsAlbumArt(this)">🖼️ Set as Album Art</button>
+                <strong class="track-file-name" style="color: #c9d1d9; font-size: 0.9rem;">${tr.fileName || 'Audio Stem'}</strong>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <button type="button" class="subtle-btn" onclick="this.closest('.track-card').remove(); reindexTracks();" title="Remove Track">✕</button>
+              </div>
+            </div>
+            
+            <div class="track-body" style="margin-top: 10px; border-top: 1px solid #21262d; padding-top: 10px;">
+              <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+                <div>
+                  <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Track Title *</label>
+                  <input type="text" value="${tr.title || ''}" class="t-title" style="width: 100%; font-size: 0.8rem;">
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Price (₦) *</label>
+                  <input type="number" value="${tr.price || 500}" class="t-price" style="width: 100%; font-size: 0.8rem;">
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Genre</label>
+                  <input type="text" class="t-genre" value="${tr.genre || ''}" placeholder="Genre" style="width: 100%; font-size: 0.8rem;">
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">ISRC Code</label>
+                  <input type="text" class="t-isrc" value="${tr.isrc || ''}" placeholder="Optional" style="width: 100%; font-size: 0.8rem;">
+                </div>
+              </div>
+
+              <div style="margin-bottom: 10px; background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
+                <label style="font-size: 0.75rem; font-weight: bold; color: #58a6ff; display: block; margin-bottom: 5px;">🎬 Visual Asset & Display Mode</label>
+                <div style="display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 8px; align-items: center;">
+                  <input type="file" class="t-visual-file" accept="image/*,video/*" multiple style="font-size: 0.7rem;">
+                  <select class="t-aspect-ratio" style="font-size: 0.75rem;">
+                    <option value="16:9" ${tr.aspectRatio === '16:9' ? 'selected' : ''}>Landscape (16:9)</option>
+                    <option value="1:1" ${tr.aspectRatio === '1:1' || !tr.aspectRatio ? 'selected' : ''}>Square (1:1)</option>
+                    <option value="9:16" ${tr.aspectRatio === '9:16' ? 'selected' : ''}>Portrait (9:16)</option>
+                    <option value="4:5" ${tr.aspectRatio === '4:5' ? 'selected' : ''}>Vertical (4:5)</option>
+                  </select>
+                  <select class="t-display-mode" style="font-size: 0.75rem;">
+                    <option value="full_track" ${tr.displayMode === 'full_track' ? 'selected' : ''}>Full Track Display</option>
+                    <option value="loop_video" ${tr.displayMode === 'loop_video' ? 'selected' : ''}>Loop Videos / GIFs</option>
+                    <option value="slideshow_5s" ${tr.displayMode === 'slideshow_5s' ? 'selected' : ''}>Slideshow (5s)</option>
+                    <option value="slideshow_10s" ${tr.displayMode === 'slideshow_10s' ? 'selected' : ''}>Slideshow (10s)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style="margin-bottom: 10px;">
+                <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Lyrics, Liner Notes & Stories:</label>
+                <textarea class="t-caption" rows="2" placeholder="Poetry, lyrics, or notes..." style="width: 100%; font-size: 0.8rem; font-family: inherit;">${tr.caption || ''}</textarea>
+              </div>
+
+              <div style="background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <label style="font-size: 0.75rem; font-weight: bold; color: #c9d1d9;">Contributors & Credits</label>
+                  <div style="display: flex; gap: 6px;">
+                    <button type="button" class="icon-btn" onclick="addContributorToTrack(${index})">➕ Add Contributor</button>
+                    <button type="button" class="icon-btn" onclick="copyCurrentTrack1CreditsToAll()" title="Clone credits from current Track #1">👯 Clone Track 1 Credits to All</button>
+                  </div>
+                </div>
+                <div id="contributors-list-${index}"></div>
+              </div>
+            </div>
+          `;
 
           container.appendChild(trackCard);
+          attachDragAndDropListeners(trackCard);
+
+          const listContainer = document.getElementById(`contributors-list-${index}`);
+          if (tr.contributors && tr.contributors.length > 0) {
+            tr.contributors.forEach(c => {
+              const row = createContributorRow(c.role, c.name);
+              if (c.role === 'Other' || c.customRole) {
+                const customInput = row.querySelector('.c-custom-role');
+                customInput.style.display = 'block';
+                customInput.value = c.customRole || c.role;
+              }
+              listContainer.appendChild(row);
+            });
+          } else {
+            addContributorToTrack(index, "Main Artist", manifest.artist || "Main Artist");
+          }
         });
 
         document.getElementById('build-release-btn').disabled = false;
       }
 
-      alert(`Session "${manifest.title || 'Untitled'}" restored! You can now link your local audio stem files when ready.`);
+      alert(`Session "${manifest.title || 'Untitled'}" restored! Please re-select your audio stems to link binary files.`);
     }
 
     async function processUnifiedRelease() {
@@ -1158,7 +1168,7 @@
       logMessage(`🚀 Compiling release "${manifest.title}" (${manifest.tracks.length} tracks)...`);
       await uploadManifestToDrive(manifest);
       exportSessionManifest(manifest);
-      logMessage(`✅ Release manifest compiled & session saved!`);
+      logMessage(`✅ Release manifest compiled & session saved to Cloud & Local!`);
     }
 
     function triggerFanCheckout(releaseTitle, priceInNaira, driveAssetId) {
@@ -1171,7 +1181,7 @@
         amount: priceInNaira * 100,
         currency: 'NGN',
         metadata: { type: 'track_purchase', drive_asset_id: driveAssetId, release_title: releaseTitle },
-        onSuccess: (transaction) => { alert(`Payment successful! Google Drive access granted for ${listenerEmail}.`); },
+        onSuccess: () => { alert(`Payment successful! Google Drive access granted for ${listenerEmail}.`); },
         onCancel: () => { logMessage('Checkout cancelled.'); }
       });
     }
