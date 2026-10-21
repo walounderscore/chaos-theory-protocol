@@ -1285,13 +1285,12 @@
       try {
         const ffmpeg = globalFFmpegInstance;
 
-        // Iterate through all track cards and encrypt local audio files
+        // Iterate through all track cards and encrypt local audio files with memory purges
         for (let i = 0; i < cards.length; i++) {
           const card = cards[i];
           const trackNum = card.querySelector('.t-num').value || (i + 1);
           const trackTitle = card.querySelector('.t-title').value || `Track ${trackNum}`;
           
-          // Match track to local selected file
           const audioFile = selectedUnifiedFiles[i] || selectedUnifiedFiles[0];
           logMessage(`⚡ [${i + 1}/${cards.length}] Encrypting Track ${trackNum}: "${trackTitle}" (${audioFile.name})...`);
 
@@ -1301,9 +1300,21 @@
           const keyFileName = `enc_${trackNum}.key`;
           const keyInfoName = `keyinfo_${trackNum}.txt`;
 
-          // 1. Read binary audio file into FFmpeg virtual filesystem
-          const audioBuffer = await audioFile.arrayBuffer();
+          // --- PRE-ENCRYPTION MEMORY CLEANUP ---
+          try {
+            // Remove lingering files from previous iterations to free MEMFS heap
+            const preClean = ffmpeg.FS('readdir', '/');
+            preClean.forEach(f => {
+              if (f !== '.' && f !== '..') {
+                try { ffmpeg.FS('unlink', f); } catch(e) {}
+              }
+            });
+          } catch(e) {}
+
+          // 1. Read binary audio into WASM virtual filesystem using Uint8Array
+          let audioBuffer = await audioFile.arrayBuffer();
           ffmpeg.FS('writeFile', inFileName, new Uint8Array(audioBuffer));
+          audioBuffer = null; // Instantly free JS main-thread reference for GC
 
           // 2. Generate random 16-byte key for AES-128 encryption
           const keyHex = generateAESKeyHex();
@@ -1315,7 +1326,6 @@
           ffmpeg.FS('writeFile', keyInfoName, new TextEncoder().encode(keyInfoContent));
 
           // 4. Run FFmpeg HLS conversion command
-          // Segment duration: 6 seconds, AES-128 encrypted
           await ffmpeg.run(
             '-i', inFileName,
             '-c:a', 'aac',
@@ -1333,32 +1343,32 @@
           const keyData = ffmpeg.FS('readFile', keyFileName);
           const keyDriveFile = await uploadBinaryToDrive(keyFileName, 'application/octet-stream', keyData, albumFolderId);
 
-          // 6. Upload .ts segment files
+          // 6. Read & Upload .ts segment files
           const allFSFiles = ffmpeg.FS('readdir', '/');
           const segFiles = allFSFiles.filter(f => f.startsWith(`track_${trackNum}_seg_`) && f.endsWith('.ts'));
 
           for (const segName of segFiles) {
             const segBytes = ffmpeg.FS('readFile', segName);
             await uploadBinaryToDrive(segName, 'video/MP2T', segBytes, albumFolderId);
-            ffmpeg.FS('unlink', segName); // Clean memory
+            try { ffmpeg.FS('unlink', segName); } catch(e) {} // Immediately purge segment from WASM heap
           }
 
-          // 7. Upload .m3u8 playlist manifest
+          // 7. Read & Upload .m3u8 playlist manifest
           const m3u8Bytes = ffmpeg.FS('readFile', outM3u8Name);
           const m3u8DriveFile = await uploadBinaryToDrive(outM3u8Name, 'application/x-mpegURL', m3u8Bytes, albumFolderId);
 
-          // Unlink processed files from Virtual FS memory
-          ffmpeg.FS('unlink', inFileName);
-          ffmpeg.FS('unlink', keyFileName);
-          ffmpeg.FS('unlink', keyInfoName);
-          ffmpeg.FS('unlink', outM3u8Name);
+          // --- POST-ENCRYPTION MEMORY PURGE ---
+          try { ffmpeg.FS('unlink', inFileName); } catch(e) {}
+          try { ffmpeg.FS('unlink', keyFileName); } catch(e) {}
+          try { ffmpeg.FS('unlink', keyInfoName); } catch(e) {}
+          try { ffmpeg.FS('unlink', outM3u8Name); } catch(e) {}
 
           // Save HLS stream references directly into the manifest track item
           manifest.tracks[i].hlsStreamId = m3u8DriveFile.id;
           manifest.tracks[i].keyFileId = keyDriveFile.id;
           manifest.tracks[i].status = "encrypted";
 
-          logMessage(`✅ Track ${trackNum} encrypted and synced! Manifest ID: ${m3u8DriveFile.id}`);
+          logMessage(`✅ Track ${trackNum} encrypted and synced! Stream ID: ${m3u8DriveFile.id}`);
         }
 
         // Finalize Release Manifest & Save to Drive
