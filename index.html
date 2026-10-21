@@ -99,7 +99,6 @@
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwpBGkMTxlJh6hC3tlj2W_j1tmga-KwDmHcYDQ2a8BipWHosVkfn_ZPQdjBCwOCJjLUwQ/exec';
     const SHEET_ID = '1UjT3R0QXXoLxkekS7-9MnpsdPP72oAPWYg4OUOlJaTA';
     const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
-    const PAYSTACK_PAGE_URL = 'https://paystack.shop/pay/mlxva1fop1'; 
 
     let accessToken = null;
     let driveFolderId = null;
@@ -216,13 +215,29 @@
       }
     }
 
-    // --- PAYSTACK REDIRECT GATE ---
+    // --- PAYSTACK INLINE CHECKOUT FOR ARTISTS ---
     function payWithPaystack(email) {
       localStorage.setItem('pending_artist_email', email);
-      const targetUrl = `${PAYSTACK_PAGE_URL}?email=${encodeURIComponent(email)}`;
-      window.location.href = targetUrl;
+      
+      const popup = new PaystackPop();
+      popup.newTransaction({
+        key: 'pk_test_078a52ae522dacc57ba8546539a611bca777d472',
+        email: email,
+        amount: 10000, // ₦100.00 in kobo
+        currency: 'NGN',
+        metadata: {
+          type: 'artist_onboarding'
+        },
+        onSuccess: (transaction) => {
+          logMessage(`Payment successful! Ref: ${transaction.reference}`);
+          unlockToolkit();
+        },
+        onCancel: () => {
+          logMessage('Payment window closed.');
+        }
+      });
     }
-
+    
     // --- CENTRALIZED UI STATE CHECKER ---
     function updateButtonState() {
       const processBtn = document.getElementById('process-btn');
@@ -594,6 +609,34 @@
         btn.innerText = '✅ Copied to Clipboard!';
         setTimeout(() => { btn.innerText = '📋 Copy Embed Code'; }, 2000);
       }
+    }
+
+    // --- OPTION B: DYNAMIC FAN CHECKOUT & DRIVE UNLOCK ---
+    function triggerFanCheckout(releaseTitle, priceInNaira, driveAssetId) {
+      const listenerEmail = prompt("Enter your email address to receive secure Google Drive access:");
+      if (!listenerEmail) return;
+    
+      const amountInKobo = priceInNaira * 100; // e.g., ₦500 = 50000 kobo
+    
+      const popup = new PaystackPop();
+      popup.newTransaction({
+        key: 'pk_test_078a52ae522dacc57ba8546539a611bca777d472',
+        email: listenerEmail.trim().toLowerCase(),
+        amount: amountInKobo,
+        currency: 'NGN',
+        metadata: {
+          type: 'track_purchase',
+          drive_asset_id: driveAssetId, // The specific Google Drive File/Folder ID to unlock
+          release_title: releaseTitle
+        },
+        onSuccess: (transaction) => {
+          alert(`Payment successful! Check your email (${listenerEmail}). Google Drive permissions have been granted to your account.`);
+          logMessage(`Fan purchase verified for ${releaseTitle}. Ref: ${transaction.reference}`);
+        },
+        onCancel: () => {
+          logMessage('Fan checkout cancelled.');
+        }
+      });
     }
   </script>
 </body>
