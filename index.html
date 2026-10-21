@@ -20,7 +20,7 @@
   <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
 
   <style>
-    body { font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 2rem; max-width: 900px; margin: auto; }
+    body { font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 2rem; max-width: 920px; margin: auto; }
     .card { border: 1px solid #30363d; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; background: #161b22; }
     .track-card { border: 1px solid #30363d; border-radius: 6px; padding: 1rem; margin-bottom: 10px; background: #010409; transition: border-color 0.2s ease, opacity 0.2s ease; }
     .track-card.dragging { opacity: 0.4; border: 1px dashed #58a6ff; }
@@ -43,7 +43,12 @@
     .icon-btn { background: #21262d; border: 1px solid #30363d; color: #8b949e; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
     .icon-btn:hover { background: #30363d; color: #c9d1d9; }
     .thumb-preview { width: 42px; height: 42px; border-radius: 4px; object-fit: cover; border: 1px solid #30363d; background: #161b22; }
-    .album-art-preview-large { width: 84px; height: 84px; border-radius: 6px; object-fit: cover; border: 1px solid #30363d; background: #0d1117; display: none; margin-top: 6px; }
+    
+    /* Left-Aligned 2x Album Art Preview & Live Badge styling */
+    .album-art-preview-large { width: 90px; height: 90px; border-radius: 6px; object-fit: cover; border: 1px solid #30363d; background: #0d1117; }
+    .album-live-badge { display: flex; align-items: center; gap: 15px; background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #21262d; margin-bottom: 12px; }
+    .badge-details h3 { margin: 0; font-size: 1.1rem; color: #58a6ff; font-weight: bold; }
+    .badge-details p { margin: 2px 0 0 0; font-size: 0.8rem; color: #8b949e; }
   </style>
 </head>
 <body>
@@ -92,18 +97,28 @@
       <div style="background: #010409; padding: 12px; border-radius: 6px; border: 1px solid #21262d; margin-bottom: 15px;">
         <h4 style="margin: 0 0 10px 0; font-size: 0.9rem; color: #58a6ff;">🎨 Release-Level Defaults & Cover Art</h4>
         
+        <!-- Live Album Preview Card (Left-Aligned Cover Art + Dynamic Text) -->
+        <div class="album-live-badge">
+          <img id="album-cover-preview-img" class="album-art-preview-large" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90' viewBox='0 0 90 90'><rect width='90' height='90' fill='%23161b22'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%238b949e' font-size='10'>No Cover</text></svg>" alt="Album Cover Preview">
+          <div class="badge-details">
+            <h3 id="preview-badge-title">chaos theory.</h3>
+            <p id="preview-badge-artist">walo, the underscore.</p>
+            <p id="preview-badge-credit" style="font-style: italic; color: #7ee787;">Art by the Underscore • <span id="preview-badge-year">2024</span></p>
+          </div>
+        </div>
+
         <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-bottom: 10px;">
           <div>
             <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Release / Album Title:</label>
-            <input type="text" id="builder-release-title" placeholder="e.g., Chaos Theory LP" style="width: 100%;">
+            <input type="text" id="builder-release-title" placeholder="e.g., Chaos Theory LP" oninput="updateLiveAlbumBadge()" style="width: 100%;">
           </div>
           <div>
             <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Release Date (Calendar Picker):</label>
-            <input type="date" id="builder-release-date" style="width: 100%;">
+            <input type="date" id="builder-release-date" onchange="updateLiveAlbumBadge()" style="width: 100%;">
           </div>
           <div>
             <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Global Genre:</label>
-            <input type="text" id="builder-genre" placeholder="e.g. Electronic" style="width: 100%;">
+            <input type="text" id="builder-genre" placeholder="e.g. Nigerian Rock" style="width: 100%;">
             <button type="button" class="icon-btn" onclick="applyGlobalGenreToAll()" style="margin-top: 5px; font-size: 0.7rem;">📋 Apply Genre to All Tracks</button>
           </div>
         </div>
@@ -111,17 +126,15 @@
         <div style="display: grid; grid-template-columns: 1.5fr 1.5fr 1fr; gap: 10px; align-items: center; margin-bottom: 10px;">
           <div>
             <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Album Artist / Primary Creator:</label>
-            <input type="text" id="global-album-artist" placeholder="e.g., walo, the underscore." style="width: 100%;">
+            <input type="text" id="global-album-artist" placeholder="e.g., walo, the underscore." oninput="updateLiveAlbumBadge()" style="width: 100%;">
           </div>
           <div>
             <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Album Cover / Visual Artist Credit:</label>
-            <input type="text" id="global-cover-artist" placeholder="e.g., Art by X" style="width: 100%;">
+            <input type="text" id="global-cover-artist" placeholder="e.g., Art by the Underscore" oninput="updateLiveAlbumBadge()" style="width: 100%;">
           </div>
           <div>
             <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Album Cover Asset:</label>
             <input type="file" id="album-cover-file" accept="image/*,video/*" onchange="previewLocalAlbumCover(this)" style="font-size: 0.75rem; width: 100%;">
-            <!-- 2x Size Album Art Preview Thumbnail -->
-            <img id="album-cover-preview-img" class="album-art-preview-large" alt="Album Cover Preview">
           </div>
         </div>
 
@@ -202,6 +215,7 @@
     let globalFFmpegInstance = null;
     let player = null;
     let selectedUnifiedFiles = [];
+    let currentAlbumArtBase64 = null;
 
     const CONTRIBUTOR_ROLES = [
       "Main Artist", "Featured Artist", "Producer", "Remixer", 
@@ -225,12 +239,25 @@
       }
     }
 
+    // --- UPDATE LIVE ALBUM BADGE PREVIEW ---
+    function updateLiveAlbumBadge() {
+      const title = document.getElementById('builder-release-title').value.trim() || 'chaos theory.';
+      const artist = document.getElementById('global-album-artist').value.trim() || 'walo, the underscore.';
+      const credit = document.getElementById('global-cover-artist').value.trim() || 'Art by the Underscore';
+      const dateVal = document.getElementById('builder-release-date').value;
+      const year = dateVal ? new Date(dateVal).getFullYear() : '2024';
+
+      document.getElementById('preview-badge-title').innerText = title;
+      document.getElementById('preview-badge-artist').innerText = artist;
+      document.getElementById('preview-badge-credit').innerHTML = `${credit} • <span>${year}</span>`;
+    }
+
     window.addEventListener('DOMContentLoaded', async () => {
       const dateInput = document.getElementById('builder-release-date');
-      if (dateInput) {
-        // Default calendar value to today's date (YYYY-MM-DD for HTML date input)
+      if (dateInput && !dateInput.value) {
         dateInput.value = new Date().toISOString().split('T')[0];
       }
+      updateLiveAlbumBadge();
 
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
       const token = hashParams.get('access_token');
@@ -404,7 +431,7 @@
       }
     }
 
-    // --- PREVIEW LOCAL ALBUM COVER (2X SIZE) ---
+    // --- PREVIEW LOCAL ALBUM COVER & SAVE BASE64 ---
     function previewLocalAlbumCover(input) {
       const file = input.files[0];
       const previewImg = document.getElementById('album-cover-preview-img');
@@ -412,21 +439,23 @@
         const reader = new FileReader();
         reader.onload = function(e) {
           previewImg.src = e.target.result;
-          previewImg.style.display = 'block';
+          currentAlbumArtBase64 = e.target.result;
         };
         reader.readAsDataURL(file);
-      } else {
-        previewImg.style.display = 'none';
       }
     }
 
-    // --- SET TRACK THUMBNAIL AS ALBUM ART (UPDATED FOR 2X PREVIEW) ---
+    // --- SET TRACK THUMBNAIL AS ALBUM ART ---
     function setAsAlbumArt(btnElement) {
       const img = btnElement.closest('.track-card').querySelector('.t-thumb-preview');
       if (!img || !img.src || img.src === window.location.href) {
         alert('No embedded artwork found on this track to set as album art.');
         return;
       }
+
+      const previewImg = document.getElementById('album-cover-preview-img');
+      previewImg.src = img.src;
+      currentAlbumArtBase64 = img.src;
 
       fetch(img.src)
         .then(res => res.blob())
@@ -435,12 +464,6 @@
           const dataTransfer = new DataTransfer();
           dataTransfer.items.add(file);
           document.getElementById('album-cover-file').files = dataTransfer.files;
-
-          // Update the 2x large preview image directly
-          const previewImg = document.getElementById('album-cover-preview-img');
-          previewImg.src = img.src;
-          previewImg.style.display = 'block';
-
           logMessage('🖼️ Track artwork successfully assigned as global album cover!');
           alert('Track artwork set as Release Album Cover successfully!');
         });
@@ -551,10 +574,11 @@
       logMessage(`📋 Applied global artist "${globalArtist}" across all tracks.`);
     }
 
+    // DYNAMIC CLONING: Always query whichever card currently sits at position #1 in DOM
     function copyCurrentTrack1CreditsToAll() {
       const container = document.getElementById('track-queue-container');
       const currentTrack1Card = container.querySelector('.track-card');
-      if (!currentTrack1Card) { alert('No tracks available.'); return; }
+      if (!currentTrack1Card) { alert('No tracks available in the queue.'); return; }
 
       const track1Credits = [];
       currentTrack1Card.querySelectorAll('.contributor-row').forEach(row => {
@@ -564,9 +588,14 @@
         track1Credits.push({ role, customRole, name });
       });
 
+      if (track1Credits.length === 0) {
+        alert('Current Track 1 has no contributors to clone.');
+        return;
+      }
+
       const allCards = container.querySelectorAll('.track-card');
       allCards.forEach((card, idx) => {
-        if (idx === 0) return;
+        if (card === currentTrack1Card) return; // Skip Track 1
         const listContainer = card.querySelector(`[id^="contributors-list-"]`);
         if (listContainer) {
           listContainer.innerHTML = '';
@@ -631,7 +660,10 @@
             const artistInput = trackCard.querySelector('.c-name');
             if (artistInput) artistInput.value = tags.artist;
             const globalArtistInput = document.getElementById('global-album-artist');
-            if (globalArtistInput && !globalArtistInput.value) globalArtistInput.value = tags.artist;
+            if (globalArtistInput && !globalArtistInput.value) {
+              globalArtistInput.value = tags.artist;
+              updateLiveAlbumBadge();
+            }
           }
           if (tags.genre) {
             const genreInput = trackCard.querySelector('.t-genre');
@@ -643,7 +675,10 @@
           }
           if (tags.album) {
             const albumTitleInput = document.getElementById('builder-release-title');
-            if (albumTitleInput && !albumTitleInput.value) albumTitleInput.value = tags.album;
+            if (albumTitleInput && !albumTitleInput.value) {
+              albumTitleInput.value = tags.album;
+              updateLiveAlbumBadge();
+            }
           }
           if (tags.picture) {
             const { data, format } = tags.picture;
@@ -673,6 +708,7 @@
       if (selectedUnifiedFiles.length === 1) {
         releaseTitleInput.value = selectedUnifiedFiles[0].name.substring(0, selectedUnifiedFiles[0].name.lastIndexOf('.')) || selectedUnifiedFiles[0].name;
         bundleWrapper.style.display = 'none';
+        updateLiveAlbumBadge();
       } else {
         bundleWrapper.style.display = 'block';
       }
@@ -757,7 +793,7 @@
                 <label style="font-size: 0.75rem; font-weight: bold; color: #c9d1d9;">Contributors & Credits</label>
                 <div style="display: flex; gap: 6px;">
                   <button type="button" class="icon-btn" onclick="addContributorToTrack(${index})">➕ Add Contributor</button>
-                  ${index === 0 ? '<button type="button" class="icon-btn" onclick="copyCurrentTrack1CreditsToAll()" title="Clone Track 1 credits to all">👯 Clone Track 1 Credits to All</button>' : ''}
+                  <button type="button" class="icon-btn" onclick="copyCurrentTrack1CreditsToAll()" title="Clone credits from current Track #1">👯 Clone Track 1 Credits to All</button>
                 </div>
               </div>
               <div id="contributors-list-${index}"></div>
@@ -783,6 +819,7 @@
       return `${sanitized}_${suffix}.json`;
     }
 
+    // --- FULL MANIFEST COMPILER WITH BASE64 COVER & FULL CREDITS ---
     function compileCurrentManifest() {
       const releaseTitle = document.getElementById('builder-release-title').value.trim();
       const releaseDate = document.getElementById('builder-release-date').value.trim();
@@ -799,6 +836,7 @@
         date: releaseDate,
         genre: globalGenre,
         bundlePrice: cards.length > 1 ? bundlePrice : null,
+        coverArtData: currentAlbumArtBase64 || null,
         tracks: []
       };
 
@@ -812,17 +850,19 @@
         const caption = card.querySelector('.t-caption').value.trim();
         const aspectRatio = card.querySelector('.t-aspect-ratio').value;
         const displayMode = card.querySelector('.t-display-mode').value;
+        
+        const thumbImg = card.querySelector('.t-thumb-preview');
+        const thumbData = (thumbImg && thumbImg.src && thumbImg.src !== window.location.href) ? thumbImg.src : null;
 
         const contributorRows = card.querySelectorAll('.contributor-row');
         const contributors = [];
         contributorRows.forEach(row => {
           let role = row.querySelector('.c-role').value;
-          if (role === 'Other') {
-            const customRoleInput = row.querySelector('.c-custom-role').value.trim();
-            role = customRoleInput || 'Contributor';
+          let customRole = row.querySelector('.c-custom-role').value.trim();
+          let name = row.querySelector('.c-name').value.trim();
+          if (name) {
+            contributors.push({ role, customRole, name });
           }
-          const name = row.querySelector('.c-name').value.trim();
-          if (name) contributors.push({ role, name });
         });
 
         manifest.tracks.push({
@@ -835,6 +875,7 @@
           caption: caption,
           aspectRatio: aspectRatio,
           displayMode: displayMode,
+          thumbData: thumbData,
           contributors: contributors
         });
       });
@@ -966,6 +1007,7 @@
       reader.readAsText(file);
     }
 
+    // --- FULL RESTORATION HELPER FOR MANIFEST JSON ---
     function loadSessionIntoUI(manifest) {
       if (!manifest) return;
 
@@ -976,7 +1018,120 @@
       document.getElementById('global-cover-artist').value = manifest.coverArtist || '';
       if (manifest.bundlePrice) document.getElementById('builder-bundle-price').value = manifest.bundlePrice;
 
-      alert(`Session "${manifest.title || 'Untitled'}" restored! Please re-select your audio stems to link binary files before building the HLS release.`);
+      // Restore Album Cover Preview
+      if (manifest.coverArtData) {
+        currentAlbumArtBase64 = manifest.coverArtData;
+        document.getElementById('album-cover-preview-img').src = manifest.coverArtData;
+      }
+      updateLiveAlbumBadge();
+
+      // Rebuild Track Cards if manifest contains track data
+      if (manifest.tracks && manifest.tracks.length > 0) {
+        const container = document.getElementById('track-queue-container');
+        container.innerHTML = '';
+
+        manifest.tracks.forEach((tr, index) => {
+          const trackCard = document.createElement('div');
+          trackCard.className = 'track-card';
+          trackCard.dataset.index = index;
+
+          trackCard.innerHTML = `
+            <div class="track-card-header">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+                <span class="collapse-arrow" onclick="toggleCardCollapse(this.parentElement)" style="font-size: 0.75rem; color: #58a6ff; cursor: pointer;">▼</span>
+                <span style="background: #21262d; color: #58a6ff; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">#</span>
+                <input type="number" value="${tr.trackNumber || (index + 1)}" class="t-num" style="width: 50px; text-align: center; font-weight: bold; font-size: 0.85rem;" onchange="handleTrackNumChange(this)">
+                <img src="${tr.thumbData || ''}" class="t-thumb-preview thumb-preview" style="${tr.thumbData ? 'display: block;' : 'display: none;'}" title="Embedded track cover">
+                <button type="button" class="icon-btn set-album-art-btn" style="${tr.thumbData ? 'display: inline-block;' : 'display: none;'} font-size: 0.65rem;" onclick="setAsAlbumArt(this)">🖼️ Set as Album Art</button>
+                <strong style="color: #c9d1d9; font-size: 0.9rem;">${tr.title || tr.fileName}</strong>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <button type="button" class="subtle-btn" onclick="this.closest('.track-card').remove(); reindexTracks();" title="Remove Track">✕</button>
+              </div>
+            </div>
+            
+            <div class="track-body" style="margin-top: 10px; border-top: 1px solid #21262d; padding-top: 10px;">
+              <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+                <div>
+                  <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Track Title *</label>
+                  <input type="text" value="${tr.title || ''}" class="t-title" style="width: 100%; font-size: 0.8rem;">
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Price (₦) *</label>
+                  <input type="number" value="${tr.price || 500}" class="t-price" style="width: 100%; font-size: 0.8rem;">
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Genre</label>
+                  <input type="text" class="t-genre" value="${tr.genre || ''}" placeholder="Genre" style="width: 100%; font-size: 0.8rem;">
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">ISRC Code</label>
+                  <input type="text" class="t-isrc" value="${tr.isrc || ''}" placeholder="Optional" style="width: 100%; font-size: 0.8rem;">
+                </div>
+              </div>
+
+              <div style="margin-bottom: 10px; background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
+                <label style="font-size: 0.75rem; font-weight: bold; color: #58a6ff; display: block; margin-bottom: 5px;">🎬 Visual Asset & Display Mode</label>
+                <div style="display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 8px; align-items: center;">
+                  <input type="file" class="t-visual-file" accept="image/*,video/*" multiple style="font-size: 0.7rem;">
+                  <select class="t-aspect-ratio" style="font-size: 0.75rem;">
+                    <option value="16:9" ${tr.aspectRatio === '16:9' ? 'selected' : ''}>Landscape (16:9)</option>
+                    <option value="1:1" ${tr.aspectRatio === '1:1' || !tr.aspectRatio ? 'selected' : ''}>Square (1:1)</option>
+                    <option value="9:16" ${tr.aspectRatio === '9:16' ? 'selected' : ''}>Portrait (9:16)</option>
+                    <option value="4:5" ${tr.aspectRatio === '4:5' ? 'selected' : ''}>Vertical (4:5)</option>
+                  </select>
+                  <select class="t-display-mode" style="font-size: 0.75rem;">
+                    <option value="full_track" ${tr.displayMode === 'full_track' ? 'selected' : ''}>Full Track Display</option>
+                    <option value="loop_video" ${tr.displayMode === 'loop_video' ? 'selected' : ''}>Loop Videos / GIFs</option>
+                    <option value="slideshow_5s" ${tr.displayMode === 'slideshow_5s' ? 'selected' : ''}>Slideshow (5s)</option>
+                    <option value="slideshow_10s" ${tr.displayMode === 'slideshow_10s' ? 'selected' : ''}>Slideshow (10s)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style="margin-bottom: 10px;">
+                <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Lyrics, Liner Notes & Stories:</label>
+                <textarea class="t-caption" rows="2" placeholder="Poetry, lyrics, or notes..." style="width: 100%; font-size: 0.8rem; font-family: inherit;">${tr.caption || ''}</textarea>
+              </div>
+
+              <div style="background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <label style="font-size: 0.75rem; font-weight: bold; color: #c9d1d9;">Contributors & Credits</label>
+                  <div style="display: flex; gap: 6px;">
+                    <button type="button" class="icon-btn" onclick="addContributorToTrack(${index})">➕ Add Contributor</button>
+                    <button type="button" class="icon-btn" onclick="copyCurrentTrack1CreditsToAll()" title="Clone credits from current Track #1">👯 Clone Track 1 Credits to All</button>
+                  </div>
+                </div>
+                <div id="contributors-list-${index}"></div>
+              </div>
+            </div>
+          `;
+
+          container.appendChild(trackCard);
+          attachDragAndDropListeners(trackCard);
+
+          // Restore Contributors
+          const listContainer = document.getElementById(`contributors-list-${index}`);
+          if (tr.contributors && tr.contributors.length > 0) {
+            tr.contributors.forEach(c => {
+              const row = createContributorRow(c.role, c.name);
+              if (c.role === 'Other' || c.customRole) {
+                const customInput = row.querySelector('.c-custom-role');
+                customInput.style.display = 'block';
+                customInput.value = c.customRole || c.role;
+              }
+              listContainer.appendChild(row);
+            });
+          } else {
+            addContributorToTrack(index, "Main Artist", manifest.artist || "Main Artist");
+          }
+        });
+
+        document.getElementById('build-release-btn').disabled = false;
+      }
+
+      alert(`Session "${manifest.title || 'Untitled'}" fully restored! Please re-select your audio stems to link binary files before building the HLS release.`);
     }
 
     async function processUnifiedRelease() {
