@@ -11,34 +11,34 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <!-- FFmpeg v0.11.6 UMD build -->
   <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
-  <!-- Video.js CSS -->
+  <!-- JS Media Tags for Extracting Local Audio ID3 Metadata & Cover Art -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+  <!-- Video.js CSS & Core -->
   <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
-  <!-- Video.js Core -->
   <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
 
   <style>
-    body { font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 2rem; max-width: 800px; margin: auto; }
+    body { font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 2rem; max-width: 850px; margin: auto; }
     .card { border: 1px solid #30363d; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; background: #161b22; }
-    .track-card { border: 1px solid #30363d; border-radius: 6px; padding: 1rem; margin-bottom: 10px; background: #010409; } /* Deeper dark box per track */
+    .track-card { border: 1px solid #30363d; border-radius: 6px; padding: 1rem; margin-bottom: 10px; background: #010409; transition: border-color 0.2s ease, opacity 0.2s ease; cursor: grab; }
+    .track-card:active { cursor: grabbing; }
+    .track-card.dragging { opacity: 0.4; border: 1px dashed #58a6ff; }
+    .track-card.collapsed .track-body { display: none; }
+    .track-card-header { display: flex; justify-content: space-between; align-items: center; }
     .locked { opacity: 0.4; pointer-events: none; }
     button { background: #238636; color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }
     button:hover { background: #2ea043; }
     button:disabled { background: #30363d; color: #8b949e; cursor: not-allowed; }
-    input, select { background: #0d1117 !important; border: 1px solid #30363d !important; color: #c9d1d9 !important; padding: 8px !important; border-radius: 4px !important; box-sizing: border-box; }
-    input:focus { border-color: #58a6ff !important; outline: none; }
+    input, select, textarea { background: #0d1117 !important; border: 1px solid #30363d !important; color: #c9d1d9 !important; padding: 8px !important; border-radius: 4px !important; box-sizing: border-box; }
+    input:focus, select:focus, textarea:focus { border-color: #58a6ff !important; outline: none; }
     #log { background: #010409; padding: 1rem; border-radius: 6px; font-family: monospace; font-size: 0.85rem; max-height: 250px; overflow-y: auto; color: #7ee787; }
     .embed-box { margin-top: 10px; width: 100%; height: 90px; background: #0d1117; color: #7ee787; border: 1px solid #30363d; border-radius: 4px; font-family: monospace; font-size: 0.8rem; padding: 8px; box-sizing: border-box; }
     .copy-btn { margin-top: 6px; background: #1f6feb; font-size: 0.8rem; padding: 6px 12px; }
     .copy-btn:hover { background: #388bfd; }
-    .track-card { border: 1px solid #30363d; border-radius: 6px; padding: 1rem; margin-bottom: 10px; background: #010409; transition: all 0.2s ease; }
-    .track-card.collapsed .track-body { display: none; }
-    .track-card-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
-    input, select, textarea { background: #0d1117 !important; border: 1px solid #30363d !important; color: #c9d1d9 !important; padding: 8px !important; border-radius: 4px !important; box-sizing: border-box; }
-    input:focus, select:focus { border-color: #58a6ff !important; outline: none; }
-    .action-badge { background: #21262d; border: 1px solid #30363d; color: #8b949e; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; }
-    .action-badge:hover { background: #30363d; color: #c9d1d9; }
-    .subtle-delete { background: transparent; border: none; color: #8b949e; cursor: pointer; font-size: 0.9rem; padding: 2px 6px; }
-    .subtle-delete:hover { color: #f85149; }
+    .subtle-btn { background: transparent; border: none; color: #8b949e; cursor: pointer; font-size: 0.85rem; padding: 2px 6px; border-radius: 4px; }
+    .subtle-btn:hover { color: #f85149; background: #21262d; }
+    .icon-btn { background: #21262d; border: 1px solid #30363d; color: #8b949e; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+    .icon-btn:hover { background: #30363d; color: #c9d1d9; }
   </style>
 </head>
 <body>
@@ -63,51 +63,50 @@
       <span id="auth-status" style="margin-left: 10px; color: #8b949e;">Not Connected</span>
     </div>
 
-    <!-- Album Level Metadata & Global Defaults -->
-    <div style="background: #010409; padding: 12px; border-radius: 6px; border: 1px solid #21262d; margin-bottom: 15px;">
-      <h4 style="margin: 0 0 10px 0; font-size: 0.9rem; color: #58a6ff;">🎨 Release-Level Defaults & Cover Art</h4>
-        
-      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-bottom: 10px;">
-        <div>
-          <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Global Album Artist / Primary Creator</label>
-          <input type="text" id="global-album-artist" placeholder="e.g., walo, the underscore." style="width: 100%;">
-        </div>
-        <div>
-          <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Cover Art (Image / GIF / Video)</label>
-          <input type="file" id="album-cover-file" accept="image/*,video/*" style="font-size: 0.75rem; width: 100%;">
-        </div>
-      </div>
-
-      <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
-        <button type="button" onclick="applyGlobalArtistToAll()" style="background: #1f6feb; font-size: 0.75rem; padding: 6px 10px;">📋 Apply Album Artist to All Tracks</button>
-        <span style="font-size: 0.75rem; color: #8b949e;">(Saves typing across all stems automatically)</span>
-      </div>
-    </div>
-
     <!-- Unified Sovereign Release & Asset Queue -->
     <div class="card" id="release-builder-card">
       <h3>3. Sovereign Release & Asset Queue</h3>
-      <p>Select your audio file(s) to automatically configure your release, set tiered pricing, and add metadata.</p>
+      <p>Select your audio file(s) to automatically configure your release, set tiered pricing, and parse local metadata.</p>
       
-      <!-- Global Release Metadata -->
-      <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-bottom: 15px;">
-        <div>
-          <label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.85rem;">Release / Album Title:</label>
-          <input type="text" id="builder-release-title" placeholder="e.g., Chaos Theory LP or Single Name" style="width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; border-radius: 4px; box-sizing: border-box;">
+      <!-- Global Release Metadata & Cover Art -->
+      <div style="background: #010409; padding: 12px; border-radius: 6px; border: 1px solid #21262d; margin-bottom: 15px;">
+        <h4 style="margin: 0 0 10px 0; font-size: 0.9rem; color: #58a6ff;">🎨 Release-Level Defaults & Cover Art</h4>
+        
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+          <div>
+            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Release / Album Title:</label>
+            <input type="text" id="builder-release-title" placeholder="e.g., Chaos Theory LP" style="width: 100%;">
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Release Date:</label>
+            <input type="date" id="builder-release-date" style="width: 100%;">
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Global Genre:</label>
+            <input type="text" id="builder-genre" placeholder="e.g. Electronic" style="width: 100%;">
+          </div>
         </div>
-        <div>
-          <label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.85rem;">Release Date:</label>
-          <input type="date" id="builder-release-date" style="width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; border-radius: 4px; box-sizing: border-box;">
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px; align-items: center;">
+          <div>
+            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Global Album Artist / Primary Creator:</label>
+            <input type="text" id="global-album-artist" placeholder="e.g., walo, the underscore." style="width: 100%;">
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Cover Art Asset (Image / GIF / Video):</label>
+            <input type="file" id="album-cover-file" accept="image/*,video/*" style="font-size: 0.75rem; width: 100%;">
+          </div>
         </div>
-        <div>
-          <label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.85rem;">Genre:</label>
-          <input type="text" id="builder-genre" placeholder="e.g., Electronic / Afro" style="width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; border-radius: 4px; box-sizing: border-box;">
+
+        <div style="display: flex; gap: 10px; align-items: center; margin-top: 10px;">
+          <button type="button" class="icon-btn" onclick="applyGlobalArtistToAll()">📋 Apply Album Artist to All Tracks</button>
+          <span style="font-size: 0.75rem; color: #8b949e;">Auto-populates main artist slots.</span>
         </div>
       </div>
 
       <div style="margin-bottom: 15px;" id="bundle-price-wrapper">
         <label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.85rem;">Full Bundle / Album Price (₦): <span style="font-weight: normal; color: #8b949e;">(Ignored if only 1 track)</span></label>
-        <input type="number" id="builder-bundle-price" value="4500" style="width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; border-radius: 4px; box-sizing: border-box;">
+        <input type="number" id="builder-bundle-price" value="4500" style="width: 100%;">
       </div>
 
       <!-- Unified File Picker -->
@@ -116,10 +115,13 @@
         <input type="file" id="batch-audio-files" accept="audio/*" multiple onchange="handleUnifiedFileSelect(this)" style="margin: 5px 0;" disabled>
       </div>
 
-      <!-- Dynamic Track Queue / Rows Container -->
+      <!-- Dynamic Drag-and-Drop Track Queue Container -->
       <div style="margin-bottom: 15px;">
-        <label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.85rem;">Track Breakdown & Contributors:</label>
-        <div id="track-queue-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 280px; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+          <label style="font-weight: bold; font-size: 0.85rem;">Track Breakdown & Ordering (Drag cards to reorder):</label>
+          <button type="button" class="icon-btn" onclick="collapseAllCards()">↕️ Toggle All Collapse</button>
+        </div>
+        <div id="track-queue-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 480px; overflow-y: auto;">
           <div style="color: #8b949e; font-size: 0.85rem; font-style: italic;">No audio selected yet. Choose file(s) above to build track rows.</div>
         </div>
       </div>
@@ -146,8 +148,7 @@
         height="268"
         data-setup='{}'>
         <p class="vjs-no-js">
-          To view this video please enable JavaScript, and consider upgrading to a
-          web browser that <a href="https://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>
+          To view this video please enable JavaScript, and consider upgrading to a browser supporting HTML5 video.
         </p>
       </video>
     </div>
@@ -173,6 +174,12 @@
     let player = null;
     let selectedUnifiedFiles = [];
 
+    const CONTRIBUTOR_ROLES = [
+      "Main Artist", "Featured Artist", "Producer", "Remixer", 
+      "Studio Musician", "Ensemble", "Mixing Engineer", "Mastering Engineer", 
+      "Composer / Lyricist", "Cover Artist", "Other"
+    ];
+
     function logMessage(msg) {
       const logDiv = document.getElementById('log');
       if (logDiv) {
@@ -189,7 +196,6 @@
       }
     }
 
-    // --- SESSION RESTORER & OAUTH REDIRECT HANDLER ---
     window.addEventListener('DOMContentLoaded', async () => {
       const dateInput = document.getElementById('builder-release-date');
       if (dateInput) {
@@ -209,20 +215,16 @@
         driveFolderId = localStorage.getItem('chaos_google_folder');
       }
 
-      // Auto-unlock workspace if previously verified
       const isUnlocked = localStorage.getItem('chaos_toolkit_unlocked');
       if (isUnlocked === 'true') {
         const gateCard = document.getElementById('gate-card');
         const toolkit = document.getElementById('toolkit');
         if (gateCard) gateCard.style.display = 'none';
         if (toolkit) toolkit.classList.remove('locked');
-        
         initFFmpeg();
       }
 
-      if (accessToken) {
-        setDriveConnectedUI();
-      }
+      if (accessToken) setDriveConnectedUI();
     });
 
     function unlockToolkit() {
@@ -243,12 +245,9 @@
         logMessage('✅ Toolkit successfully unlocked!');
       }
       
-      setTimeout(() => {
-        initFFmpeg();
-      }, 500);
+      setTimeout(() => { initFFmpeg(); }, 500);
     }
 
-    // --- WHITELIST CHECK & ACCESS GATE ---
     async function checkAccessAndProceed() {
       const savedEmail = localStorage.getItem('chaos_artist_email');
       let userEmail = savedEmail;
@@ -283,13 +282,12 @@
       }
     }
 
-    // --- PAYSTACK INLINE CHECKOUT FOR ARTISTS ---
     function payWithPaystack(email) {
       const popup = new PaystackPop();
       popup.newTransaction({
         key: 'pk_test_078a52ae522dacc57ba8546539a611bca777d472',
         email: email,
-        amount: 10000, // ₦100.00
+        amount: 10000,
         currency: 'NGN',
         metadata: { type: 'artist_onboarding' },
         onSuccess: (transaction) => {
@@ -300,20 +298,16 @@
       });
     }
 
-    // --- FIXED CENTRALIZED UI STATE CHECKER ---
     function updateButtonState() {
       const batchFileInput = document.getElementById('batch-audio-files');
-
       if (globalFFmpegInstance && globalFFmpegInstance.isLoaded()) {
         if (batchFileInput) batchFileInput.disabled = false;
       }
-
       if (globalFFmpegInstance && globalFFmpegInstance.isLoaded() && driveFolderId) {
         logMessage('🚀 Toolkit fully active! Choose audio files to build release.');
       }
     }
 
-    // --- COOP-SAFE SAME-TAB OAUTH REDIRECT ---
     function authGoogleDrive() {
       logMessage('Redirecting to Google for authorization...');
       const clientId = '104287153665-c7sbnq3lm32u8kgt8gohqne0kr1i8vn4.apps.googleusercontent.com';
@@ -323,7 +317,6 @@
       window.location.href = authUrl;
     }
 
-    // --- DRIVE FOLDER CREATOR ---
     async function createDriveFolder() {
       logMessage('Creating Chaos_Theory_Releases folder on Google Drive...');
       try {
@@ -351,7 +344,6 @@
       }
     }
 
-    // --- FFMPEG.WASM INITIALIZATION (Stabilized) ---
     async function initFFmpeg() {
       logMessage('Initializing local ffmpeg.wasm engine...');
       if (typeof SharedArrayBuffer === 'undefined') {
@@ -361,8 +353,6 @@
 
       try {
         const { createFFmpeg } = FFmpeg;
-        
-        // Use a stable CDN path with a cache-buster to prevent truncated downloads
         globalFFmpegInstance = createFFmpeg({ 
           log: true,
           corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
@@ -381,25 +371,82 @@
         }
       } catch (err) {
         logMessage('❌ FFmpeg failed to load: ' + err.message);
-        console.error("FFmpeg Load Error:", err);
+        console.error(err);
       }
     }
 
-    const CONTRIBUTOR_ROLES = [
-      "Main Artist", "Featured Artist", "Producer", "Remixer", 
-      "Studio Musician", "Ensemble", "Mixing Engineer", "Mastering Engineer", 
-      "Composer / Lyricist", "Cover Artist", "Other"
-    ];
-
-    // --- TOGGLE CARD COLLAPSE FOR EASIER DRAGGING ---
+    // --- CARD COLLAPSE & EXPAND ---
     function toggleCardCollapse(headerElement) {
       const card = headerElement.closest('.track-card');
       card.classList.toggle('collapsed');
       const arrow = headerElement.querySelector('.collapse-arrow');
-      arrow.innerText = card.classList.contains('collapsed') ? '▶' : '▼';
+      if (arrow) arrow.innerText = card.classList.contains('collapsed') ? '▶' : '▼';
     }
 
-    // --- GLOBAL ARTIST PROPAGATION ---
+    function collapseAllCards() {
+      const cards = document.querySelectorAll('.track-card');
+      const shouldCollapse = Array.from(cards).some(c => !c.classList.contains('collapsed'));
+      cards.forEach(card => {
+        if (shouldCollapse) card.classList.add('collapsed');
+        else card.classList.remove('collapsed');
+        const arrow = card.querySelector('.collapse-arrow');
+        if (arrow) arrow.innerText = shouldCollapse ? '▶' : '▼';
+      });
+    }
+
+    // --- RE-INDEX TRACK NUMBERS AFTER DRAG OR DROP ---
+    function reindexTracks() {
+      const cards = document.querySelectorAll('.track-card');
+      cards.forEach((card, idx) => {
+        const numInput = card.querySelector('.t-num');
+        if (numInput) numInput.value = idx + 1;
+      });
+      logMessage('🔢 Track sequence updated.');
+    }
+
+    // --- HTML5 CLICK & DRAG REORDERING LISTENERS ---
+    let draggedCard = null;
+
+    function attachDragAndDropListeners(card) {
+      card.addEventListener('dragstart', (e) => {
+        draggedCard = card;
+        card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+
+      card.addEventListener('dragend', () => {
+        card.classList.remove('dragging');
+        draggedCard = null;
+        reindexTracks();
+      });
+
+      card.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const container = document.getElementById('track-queue-container');
+        const afterElement = getDragAfterElement(container, e.clientY);
+        if (afterElement == null) {
+          container.appendChild(draggedCard);
+        } else {
+          container.insertBefore(draggedCard, afterElement);
+        }
+      });
+    }
+
+    function getDragAfterElement(container, y) {
+      const draggableElements = [...container.querySelectorAll('.track-card:not(.dragging)')];
+      return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) {
+          return { offset: offset, element: child };
+        } else {
+          return closest;
+        }
+      }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
+    // --- GLOBAL ARTIST & CREDIT COPY ACTIONS ---
     function applyGlobalArtistToAll() {
       const globalArtist = document.getElementById('global-album-artist').value.trim();
       if (!globalArtist) {
@@ -408,20 +455,55 @@
       }
       
       document.querySelectorAll('.track-card').forEach(card => {
-        const firstRoleSelect = card.querySelector('.c-role');
-        const firstNameInput = card.querySelector('.c-name');
-        if (firstRoleSelect && firstNameInput && firstRoleSelect.value === 'Main Artist') {
-          firstNameInput.value = globalArtist;
-        }
+        const mainArtistNameInput = card.querySelector('.c-name');
+        if (mainArtistNameInput) mainArtistNameInput.value = globalArtist;
       });
-      logMessage(`📋 Applied global artist "${globalArtist}" to all track main artist slots.`);
+      logMessage(`📋 Applied global artist "${globalArtist}" across all tracks.`);
     }
 
-    // --- DYNAMIC CONTRIBUTOR BUILDER WITH CUSTOM "OTHER" ---
+    function copyTrack1CreditsToAll() {
+      const firstCard = document.querySelector('.track-card');
+      if (!firstCard) return;
+
+      const firstTrackContributors = [];
+      firstCard.querySelectorAll('.contributor-row').forEach(row => {
+        const role = row.querySelector('.c-role').value;
+        const customRole = row.querySelector('.c-custom-role').value;
+        const name = row.querySelector('.c-name').value;
+        firstTrackContributors.push({ role, customRole, name });
+      });
+
+      if (firstTrackContributors.length === 0) {
+        alert('Track 1 has no contributors to copy.');
+        return;
+      }
+
+      const allCards = document.querySelectorAll('.track-card');
+      allCards.forEach((card, idx) => {
+        if (idx === 0) return; // Skip Track 1
+        const listContainer = card.querySelector(`[id^="contributors-list-"]`);
+        if (listContainer) {
+          listContainer.innerHTML = '';
+          firstTrackContributors.forEach(c => {
+            const row = createContributorRow(c.role, c.name);
+            if (c.role === 'Other') {
+              const customInput = row.querySelector('.c-custom-role');
+              customInput.style.display = 'block';
+              customInput.value = c.customRole;
+            }
+            listContainer.appendChild(row);
+          });
+        }
+      });
+
+      logMessage('✨ Cloned Track 1 contributors to all other tracks!');
+    }
+
+    // --- COMPACT CONTRIBUTOR ROW BUILDER ---
     function createContributorRow(defaultRole = "Main Artist", defaultName = "") {
       const row = document.createElement('div');
       row.className = 'contributor-row';
-      row.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr 1.5fr auto; gap: 8px; align-items: center; margin-bottom: 6px;';
+      row.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr 1.5fr auto; gap: 6px; align-items: center; margin-bottom: 4px;';
 
       let isPreset = CONTRIBUTOR_ROLES.includes(defaultRole);
       let selectedRoleValue = isPreset ? defaultRole : "Other";
@@ -432,10 +514,10 @@
       ).join('');
 
       row.innerHTML = `
-        <select class="c-role" style="width: 100%; font-size: 0.8rem;" onchange="toggleCustomRoleInput(this)">${optionsHtml}</select>
-        <input type="text" class="c-custom-role" placeholder="Role..." value="${customRoleVal}" style="width: 100%; font-size: 0.8rem; ${selectedRoleValue === 'Other' ? 'display: block;' : 'display: none;'}">
-        <input type="text" class="c-name" placeholder="Name" value="${defaultName}" style="width: 100%; font-size: 0.8rem;">
-        <button type="button" class="subtle-delete" onclick="this.parentElement.remove()" title="Remove">✕</button>
+        <select class="c-role" style="width: 100%; font-size: 0.75rem;" onchange="toggleCustomRoleInput(this)">${optionsHtml}</select>
+        <input type="text" class="c-custom-role" placeholder="Custom role..." value="${customRoleVal}" style="width: 100%; font-size: 0.75rem; ${selectedRoleValue === 'Other' ? 'display: block;' : 'display: none;'}">
+        <input type="text" class="c-name" placeholder="Name" value="${defaultName}" style="width: 100%; font-size: 0.75rem;">
+        <button type="button" class="subtle-btn" onclick="this.parentElement.remove()" title="Remove">✕</button>
       `;
       return row;
     }
@@ -459,16 +541,50 @@
       }
     }
 
-    // --- RE-INDEX TRACK NUMBERS AFTER DRAG OR SORT ---
-    function reindexTracks() {
-      const cards = document.querySelectorAll('.track-card');
-      cards.forEach((card, idx) => {
-        const numInput = card.querySelector('.t-num');
-        if (numInput) numInput.value = idx + 1;
+    // --- LOCAL ID3 METADATA PARSER ---
+    function parseLocalAudioMetadata(file, trackCard, trackIndex) {
+      if (typeof jsmediatags === 'undefined') return;
+
+      jsmediatags.read(file, {
+        onSuccess: function(tag) {
+          const tags = tag.tags;
+          
+          if (tags.title) {
+            const titleInput = trackCard.querySelector('.t-title');
+            if (titleInput) titleInput.value = tags.title;
+          }
+          if (tags.artist) {
+            const artistInput = trackCard.querySelector('.c-name');
+            if (artistInput) artistInput.value = tags.artist;
+            
+            // Set global artist if empty
+            const globalArtistInput = document.getElementById('global-album-artist');
+            if (globalArtistInput && !globalArtistInput.value) globalArtistInput.value = tags.artist;
+          }
+          if (tags.genre) {
+            const genreInput = trackCard.querySelector('.t-genre');
+            if (genreInput) genreInput.value = tags.genre;
+          }
+          if (tags.lyrics && tags.lyrics.lyrics) {
+            const captionInput = trackCard.querySelector('.t-caption');
+            if (captionInput) captionInput.value = tags.lyrics.lyrics;
+          }
+
+          // Extract Album Title if present
+          if (tags.album) {
+            const albumTitleInput = document.getElementById('builder-release-title');
+            if (albumTitleInput && !albumTitleInput.value) albumTitleInput.value = tags.album;
+          }
+
+          logMessage(`🏷️ Parsed ID3 tags for: ${file.name}`);
+        },
+        onError: function(error) {
+          console.log("ID3 Tag Read Skipped/Error:", error.type, error.info);
+        }
       });
     }
 
-    // --- BUILD TRACK CARDS FROM FILE SELECTION ---
+    // --- HANDLE UNIFIED FILE SELECTION & CARD GENERATION ---
     function handleUnifiedFileSelect(input) {
       const container = document.getElementById('track-queue-container');
       const releaseTitleInput = document.getElementById('builder-release-title');
@@ -478,7 +594,7 @@
       selectedUnifiedFiles = Array.from(input.files);
 
       if (selectedUnifiedFiles.length === 0) {
-        container.innerHTML = '<div style="color: #8b949e; font-size: 0.85rem; font-style: italic;">No audio selected yet.</div>';
+        container.innerHTML = '<div style="color: #8b949e; font-size: 0.85rem; font-style: italic;">No audio selected yet. Choose file(s) above to build track rows.</div>';
         document.getElementById('build-release-btn').disabled = true;
         return;
       }
@@ -500,6 +616,7 @@
         
         const trackCard = document.createElement('div');
         trackCard.className = 'track-card';
+        trackCard.draggable = true;
         trackCard.dataset.index = index;
         
         trackCard.innerHTML = `
@@ -507,37 +624,42 @@
             <div style="display: flex; align-items: center; gap: 8px;">
               <span class="collapse-arrow" style="font-size: 0.75rem; color: #58a6ff;">▼</span>
               <span style="background: #21262d; color: #58a6ff; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">#</span>
-              <input type="number" value="${trackNum}" class="t-num" style="width: 50px; text-align: center; font-weight: bold; font-size: 0.85rem;" onchange="reindexTracks()">
+              <input type="number" value="${trackNum}" class="t-num" style="width: 50px; text-align: center; font-weight: bold; font-size: 0.85rem;" onclick="event.stopPropagation()" onchange="reindexTracks()">
               <strong style="color: #c9d1d9; font-size: 0.9rem;">${file.name}</strong>
             </div>
-            <div style="display: flex; gap: 10px; align-items: center;">
+            <div style="display: flex; gap: 8px; align-items: center;" onclick="event.stopPropagation()">
+              ${index === 0 ? '<button type="button" class="icon-btn" onclick="copyTrack1CreditsToAll()" title="Copy Track 1 Credits to All">👯 Clone Credits to All</button>' : ''}
               <span style="font-size: 0.75rem; color: #8b949e;">${(file.size / (1024*1024)).toFixed(1)} MB</span>
-              <button type="button" class="subtle-delete" onclick="event.stopPropagation(); this.closest('.track-card').remove(); reindexTracks();" title="Remove Track">🗑️</button>
+              <button type="button" class="subtle-btn" onclick="this.closest('.track-card').remove(); reindexTracks();" title="Remove Track">✕</button>
             </div>
           </div>
           
-          <div class="track-body" style="margin-top: 12px; border-top: 1px solid #21262d; padding-top: 10px;">
-            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+          <div class="track-body" style="margin-top: 10px; border-top: 1px solid #21262d; padding-top: 10px;">
+            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px;">
               <div>
-                <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Track Title</label>
-                <input type="text" value="${cleanName}" class="t-title" style="width: 100%; font-size: 0.85rem;">
+                <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Track Title *</label>
+                <input type="text" value="${cleanName}" class="t-title" style="width: 100%; font-size: 0.8rem;">
               </div>
               <div>
-                <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Price (₦)</label>
-                <input type="number" value="500" class="t-price" style="width: 100%; font-size: 0.85rem;">
+                <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Price (₦) *</label>
+                <input type="number" value="500" class="t-price" style="width: 100%; font-size: 0.8rem;">
+              </div>
+              <div>
+                <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Genre</label>
+                <input type="text" class="t-genre" placeholder="e.g. Afro-Fusion" style="width: 100%; font-size: 0.8rem;">
               </div>
               <div>
                 <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">ISRC Code</label>
-                <input type="text" class="t-isrc" placeholder="Optional" style="width: 100%; font-size: 0.85rem;">
+                <input type="text" class="t-isrc" placeholder="Optional" style="width: 100%; font-size: 0.8rem;">
               </div>
             </div>
 
-            <!-- Visual Component & Aspect Ratio Settings per Track -->
+            <!-- Per-Track Visual Asset & Aspect Ratio -->
             <div style="margin-bottom: 10px; background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
               <label style="font-size: 0.75rem; font-weight: bold; color: #58a6ff; display: block; margin-bottom: 5px;">🎬 Track Visual / Aspect Ratio (Video.js background)</label>
               <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">
-                <input type="file" class="t-visual-file" accept="image/*,video/*" style="font-size: 0.7rem;" title="Upload track-specific visual asset or loop">
-                <select class="t-aspect-ratio" style="font-size: 0.8rem;">
+                <input type="file" class="t-visual-file" accept="image/*,video/*" style="font-size: 0.7rem;">
+                <select class="t-aspect-ratio" style="font-size: 0.75rem;">
                   <option value="16:9">Landscape (16:9)</option>
                   <option value="1:1" selected>Square (1:1)</option>
                   <option value="9:16">Portrait (9:16)</option>
@@ -546,11 +668,17 @@
               </div>
             </div>
 
-            <!-- Dynamic Contributors -->
+            <!-- Per-Track Caption / Lyrics / Story Text Box -->
+            <div style="margin-bottom: 10px;">
+              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Lyrics, Liner Notes & Stories:</label>
+              <textarea class="t-caption" rows="2" placeholder="Add track poetry, lyrics, backstory, or notes..." style="width: 100%; font-size: 0.8rem; font-family: inherit;"></textarea>
+            </div>
+
+            <!-- Dynamic Compact Contributors -->
             <div style="background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                 <label style="font-size: 0.75rem; font-weight: bold; color: #c9d1d9;">Contributors & Credits</label>
-                <button type="button" onclick="addContributorToTrack(${index})" style="background: #1f6feb; font-size: 0.7rem; padding: 3px 8px;">➕ Add Contributor</button>
+                <button type="button" class="icon-btn" onclick="addContributorToTrack(${index})">➕ Add Contributor</button>
               </div>
               <div id="contributors-list-${index}"></div>
             </div>
@@ -558,32 +686,39 @@
         `;
         
         container.appendChild(trackCard);
+        attachDragAndDropListeners(trackCard);
         addContributorToTrack(index, "Main Artist", defaultGlobalArtist);
+        
+        // Asynchronously extract local ID3 tags if available
+        parseLocalAudioMetadata(file, trackCard, index);
       });
 
       document.getElementById('build-release-btn').disabled = false;
-      logMessage(`📁 Created collapsible metadata cards with visual aspect controls for ${selectedUnifiedFiles.length} track(s).`);
+      logMessage(`📁 Created reorderable track cards for ${selectedUnifiedFiles.length} file(s).`);
     }
-    // --- UPDATED PROCESS UNIFIED RELEASE ---
+
+    // --- PROCESS UNIFIED RELEASE PIPELINE ---
     async function processUnifiedRelease() {
       const releaseTitle = document.getElementById('builder-release-title').value.trim();
       const releaseDate = document.getElementById('builder-release-date').value;
-      const genre = document.getElementById('builder-genre').value.trim();
+      const globalGenre = document.getElementById('builder-genre').value.trim();
+      const globalArtist = document.getElementById('global-album-artist').value.trim();
       const bundlePrice = parseFloat(document.getElementById('builder-bundle-price').value) || 4500;
       const cards = document.querySelectorAll('.track-card');
 
-      if (!releaseTitle || selectedUnifiedFiles.length === 0) {
-        alert('Please complete release title and select audio files.');
+      if (!releaseTitle || cards.length === 0) {
+        alert('Please enter a release title and select audio files.');
         return;
       }
 
       logMessage(`🚀 Compiling release "${releaseTitle}" (${cards.length} tracks)...`);
-      
+
       const manifest = {
         title: releaseTitle,
+        artist: globalArtist || "Various Artists",
         date: releaseDate,
-        genre: genre,
-        bundlePrice: selectedUnifiedFiles.length > 1 ? bundlePrice : null,
+        genre: globalGenre,
+        bundlePrice: cards.length > 1 ? bundlePrice : null,
         tracks: []
       };
 
@@ -592,9 +727,11 @@
         const trackNum = parseInt(card.querySelector('.t-num').value) || (idx + 1);
         const title = card.querySelector('.t-title').value;
         const price = parseFloat(card.querySelector('.t-price').value) || 500;
+        const genre = card.querySelector('.t-genre').value.trim() || globalGenre;
         const isrc = card.querySelector('.t-isrc').value.trim();
+        const caption = card.querySelector('.t-caption').value.trim();
+        const aspectRatio = card.querySelector('.t-aspect-ratio').value;
 
-        // Extract dynamic contributors list
         const contributorRows = card.querySelectorAll('.contributor-row');
         const contributors = [];
         contributorRows.forEach(row => {
@@ -604,9 +741,7 @@
             role = customRoleInput || 'Contributor';
           }
           const name = row.querySelector('.c-name').value.trim();
-          if (name) {
-            contributors.push({ role, name });
-          }
+          if (name) contributors.push({ role, name });
         });
 
         manifest.tracks.push({
@@ -614,13 +749,16 @@
           file: selectedUnifiedFiles[idx],
           title: title,
           price: price,
+          genre: genre,
           isrc: isrc,
+          caption: caption,
+          aspectRatio: aspectRatio,
           contributors: contributors
         });
       });
 
-      console.log("Full Release Manifest Compiled:", manifest);
-      logMessage(`✅ Metadata locked for ${manifest.tracks.length} track(s) with full role attribution! Ready for WASM processing.`);
+      console.log("Full Compiled Manifest:", manifest);
+      logMessage(`✅ Release manifest compiled with ${manifest.tracks.length} tracks. Ready for WASM processing.`);
     }
 
     // --- OPTION B: DYNAMIC FAN CHECKOUT ---
