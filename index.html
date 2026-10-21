@@ -445,21 +445,18 @@
     }
 
     async function initFFmpeg() {
-      logMessage('Initializing local ffmpeg.wasm engine...');
-      if (typeof SharedArrayBuffer === 'undefined') {
-        logMessage('⚠️ WARNING: SharedArrayBuffer is not enabled.');
-        return;
-      }
-
+      logMessage('Initializing local single-threaded ffmpeg.wasm engine...');
+      
       try {
         const { createFFmpeg } = FFmpeg;
         globalFFmpegInstance = createFFmpeg({ 
           log: true,
-          corePath: 'https://unpkg.com/@ffmpeg/core-st@0.11.0/dist/ffmpeg-core.js'
+          mainName: 'main',
+          corePath: 'https://unpkg.com/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js'
         });
-        
+
         await globalFFmpegInstance.load();
-        logMessage('✅ ffmpeg.wasm loaded and ready in browser CPU.');
+        logMessage('✅ ffmpeg.wasm single-threaded core loaded successfully.');
         
         const authBtn = document.getElementById('auth-btn');
         if (authBtn) authBtn.disabled = false;
@@ -471,6 +468,7 @@
         }
       } catch (err) {
         logMessage('❌ FFmpeg failed to load: ' + err.message);
+        console.error(err);
       }
     }
 
