@@ -747,34 +747,36 @@
       const releaseTitleInput = document.getElementById('builder-release-title');
       const bundleWrapper = document.getElementById('bundle-price-wrapper');
       
-      selectedUnifiedFiles = Array.from(input.files);
-      if (selectedUnifiedFiles.length === 0) return;
+      const newlySelectedFiles = Array.from(input.files);
+      if (newlySelectedFiles.length === 0) return;
 
-      if (selectedUnifiedFiles.length === 1 && !releaseTitleInput.value) {
-        releaseTitleInput.value = selectedUnifiedFiles[0].name.substring(0, selectedUnifiedFiles[0].name.lastIndexOf('.')) || selectedUnifiedFiles[0].name;
-        bundleWrapper.style.display = 'none';
+      if (newlySelectedFiles.length === 1 && !releaseTitleInput.value) {
+        releaseTitleInput.value = newlySelectedFiles[0].name.substring(0, newlySelectedFiles[0].name.lastIndexOf('.')) || newlySelectedFiles[0].name;
+        if (bundleWrapper) bundleWrapper.style.display = 'none';
         updateLiveAlbumBadge();
-      } else {
+      } else if (bundleWrapper) {
         bundleWrapper.style.display = 'block';
       }
 
-      // If cards already exist (e.g. from restored JSON), intelligently match audio files to tracks by name or index
+      // Check if track cards already exist (e.g. from a restored JSON session)
       const existingCards = container.querySelectorAll('.track-card');
+      
       if (existingCards.length > 0) {
-        existingCards.forEach((card, index) => {
-          const fileMatch = selectedUnifiedFiles[index] || selectedUnifiedFiles[0];
-          card.dataset.audioIndex = index;
-          const nameSpan = card.querySelector('.track-file-name');
-          if (nameSpan) nameSpan.innerText = fileMatch.name;
+        // SMART MAPPING: Match uploaded files to existing cards strictly by file name
+        selectedUnifiedFiles = Array.from(existingCards).map((card, idx) => {
+          const fileNameEl = card.querySelector('.track-file-name');
+          const targetName = fileNameEl ? fileNameEl.innerText.trim() : '';
+          return newlySelectedFiles.find(f => f.name === targetName) || newlySelectedFiles[idx] || newlySelectedFiles[0];
         });
-        logMessage(`🔗 Re-linked ${selectedUnifiedFiles.length} audio file(s) to your restored track cards!`);
+
+        logMessage("🔗 Re-linked " + selectedUnifiedFiles.length + " audio file(s) to track cards by filename!");
         return;
       }
 
-      // Otherwise build fresh cards
+      // Otherwise, build fresh cards for a new session
+      selectedUnifiedFiles = newlySelectedFiles;
       container.innerHTML = '';
-      const defaultGlobalArtist = document.getElementById('global-album-artist').value.trim() || 
-                                  localStorage.getItem('chaos_artist_email')?.split('@')[0] || "Main Artist";
+      const defaultGlobalArtist = document.getElementById('global-album-artist').value.trim() || "Main Artist";
 
       selectedUnifiedFiles.forEach((file, index) => {
         const trackNum = index + 1;
@@ -821,7 +823,6 @@
               </div>
             </div>
 
-            <!-- Per-Track Visual Asset & Display Mode -->
             <div style="margin-bottom: 10px; background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
               <label style="font-size: 0.75rem; font-weight: bold; color: #58a6ff; display: block; margin-bottom: 5px;">🎬 Visual Asset & Display Mode</label>
               <div style="display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 8px; align-items: center;">
@@ -841,13 +842,11 @@
               </div>
             </div>
 
-            <!-- Caption / Lyrics -->
             <div style="margin-bottom: 10px;">
               <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Lyrics, Liner Notes & Stories:</label>
               <textarea class="t-caption" rows="2" placeholder="Poetry, lyrics, or notes..." style="width: 100%; font-size: 0.8rem; font-family: inherit;"></textarea>
             </div>
 
-            <!-- Contributors -->
             <div style="background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                 <label style="font-size: 0.75rem; font-weight: bold; color: #c9d1d9;">Contributors & Credits</label>
@@ -867,8 +866,9 @@
         parseLocalAudioMetadata(file, trackCard);
       });
 
-      document.getElementById('build-release-btn').disabled = false;
-      logMessage(`📁 Created reorderable track cards for ${selectedUnifiedFiles.length} file(s).`);
+      const buildBtn = document.getElementById('build-release-btn');
+      if (buildBtn) buildBtn.disabled = false;
+      logMessage("📁 Created track cards for " + selectedUnifiedFiles.length + " file(s).");
     }
 
     function getCleanAlbumFilename(releaseTitle, suffix = "session_snapshot") {
