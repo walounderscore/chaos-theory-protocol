@@ -1183,62 +1183,148 @@
         return;
       }
 
-      const fileInput = document.getElementById('batch-audio-files');
-      if (fileInput.files.length === 0 && selectedUnifiedFiles.length === 0) {
+      const cards = document.querySelectorAll('.track-card');
+      if (cards.length === 0) {
+        alert('Please add at least one track to process.');
+        return;
+      }
+
+      if (selectedUnifiedFiles.length === 0) {
         alert('Please select audio stem file(s) first.');
         return;
       }
 
       const buildBtn = document.getElementById('build-release-btn');
       buildBtn.disabled = true;
-      buildBtn.innerText = '⏳ Encrypting & Packaging Widget...';
+      buildBtn.innerText = '⏳ Processing Track Batch...';
 
       const manifest = compileCurrentManifest();
-      logMessage(`🔐 Initializing sovereign audio encryption for "${manifest.title}"...`);
+      logMessage(`🔐 Initializing multi-track sovereign release processing for "${manifest.title}"... (${cards.length} tracks)`);
 
       try {
-        const file = selectedUnifiedFiles[0] || fileInput.files[0];
-        logMessage(`Loading local audio stem: ${file.name} (${(file.size / (1024*1024)).toFixed(2)} MB)...`);
+        // Process each track in the queue sequentially
+        for (let i = 0; i < cards.length; i++) {
+          const card = cards[i];
+          const trackNum = card.querySelector('.t-num').value || (i + 1);
+          const trackTitle = card.querySelector('.t-title').value || `Track ${trackNum}`;
+          
+          const file = selectedUnifiedFiles[i] || selectedUnifiedFiles[0];
+          logMessage(`⚡ [${i + 1}/${cards.length}] Processing Track ${trackNum}: "${trackTitle}" (${file.name})...`);
 
-        const fileExt = file.name.split('.').pop();
-        const inFileName = `input.${fileExt}`;
+          const fileExt = file.name.split('.').pop();
+          const inFileName = `input_${i}.${fileExt}`;
+          const outM3u8Name = `playlist_${i}.m3u8`;
 
-        // 1. Read binary audio into WASM virtual filesystem using lightweight Uint8Array
-        let arrayBuffer = await file.arrayBuffer();
-        globalFFmpegInstance.FS('writeFile', inFileName, new Uint8Array(arrayBuffer));
-        arrayBuffer = null; // Free JS main thread memory reference
+          // 1. Read binary audio into WASM virtual filesystem using lightweight Uint8Array
+          let arrayBuffer = await file.arrayBuffer();
+          globalFFmpegInstance.FS('writeFile', inFileName, new Uint8Array(arrayBuffer));
+          arrayBuffer = null; // Free JS main thread memory reference
 
-        logMessage('Executing local HLS segmentation via WebAssembly...');
-        await globalFFmpegInstance.run(
-          '-i', inFileName,
-          '-c:a', 'aac',
-          '-b:a', '192k',
-          '-hls_time', '6',
-          '-hls_list_size', '0',
-          '-hls_segment_filename', 'segment_%03d.ts',
-          'playlist.m3u8'
-        );
+          // 2. Run local HLS segmentation via WebAssembly
+          await globalFFmpegInstance.run(
+            '-i', inFileName,
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-hls_time', '6',
+            '-hls_list_size', '0',
+            '-hls_segment_filename', `segment_${i}_%03d.ts`,
+            outM3u8Name
+          );
 
-        logMessage('Segmentation complete. Packaging into sovereign HTML widget...');
-        await uploadGeneratedChunksToDrive();
+          // 3. Package segments for this specific track into its own sovereign HTML widget or manifest item
+          logMessage(`☁️ Packaging and syncing Track ${trackNum} to Drive...`);
+          const htmlFileId = await packageSingleTrackWidget(i, outM3u8Name, trackTitle);
 
-        // Save metadata snapshot in background
+          // Save HLS stream reference into manifest track item
+          manifest.tracks[i].hlsStreamId = htmlFileId;
+          manifest.tracks[i].status = "packaged";
+
+          // Clean up virtual files for this iteration
+          try {
+            globalFFmpegInstance.FS('unlink', inFileName);
+            globalFFmpegInstance.FS('unlink', outM3u8Name);
+          } catch(e) {}
+
+          logMessage(`✅ Track ${trackNum} ("${trackTitle}") successfully processed and synced!`);
+        }
+
+        // Finalize Release Manifest & Save to Drive
+        logMessage(`💾 Saving master release manifest snapshot to Drive...`);
         await uploadManifestToDrive(manifest);
         exportSessionManifest(manifest);
 
-        // Clean up input file from WASM memory
-        try { globalFFmpegInstance.FS('unlink', inFileName); } catch(e) {}
+        // Generate Distribution Embed Suite
+        generateEmbedUI(manifest.tracks[0]?.hlsStreamId);
 
-        logMessage(`🎉 Release "${manifest.title}" successfully encrypted & published!`);
-        alert(`Release "${manifest.title}" widget published to your Drive vault!`);
+        logMessage(`🎉 All ${cards.length} track(s) packaged & release published successfully!`);
+        alert(`Release "${manifest.title}" has been successfully built and published to your Drive vault!`);
 
       } catch (err) {
-        logMessage('❌ Encryption Error: ' + err.message);
-        alert('Encryption failed: ' + err.message);
+        logMessage('❌ Batch Processing Error: ' + err.message);
+        alert('Processing failed: ' + err.message);
       } finally {
         buildBtn.disabled = false;
         buildBtn.innerText = '🚀 Encrypt, Upload & Build Sovereign Release';
       }
+    }
+
+    // --- HELPER: PACKAGE INDIVIDUAL TRACK SEGMENTS INTO BASE64 WIDGET ---
+    async function packageSingleTrackWidget(trackIndex, playlistName, trackTitle) {
+      const files = globalFFmpegInstance.FS('readdir', '/');
+      const segmentFiles = files.filter(f => f.startsWith(`segment_${trackIndex}_`) && f.endsWith('.ts')).sort();
+      
+      let cloudM3u8Content = new TextDecoder('utf-8').decode(globalFFmpegInstance.FS('readFile', playlistName));
+      
+      for (const segmentName of segmentFiles) {
+        const segData = globalFFmpegInstance.FS('readFile', segmentName);
+        let binaryString = '';
+        const chunkSize = 8192;
+        for (let j = 0; j < segData.length; j += chunkSize) {
+          binaryString += String.fromCharCode.apply(null, segData.subarray(j, j + chunkSize));
+        }
+        const base64Segment = btoa(binaryString);
+        const dataUri = `data:video/mp2t;base64,${base64Segment}`;
+        
+        cloudM3u8Content = cloudM3u8Content.split(segmentName).join(dataUri);
+        try { globalFFmpegInstance.FS('unlink', segmentName); } catch(e) {}
+      }
+
+      const playlistBase64 = btoa(unescape(encodeURIComponent(cloudM3u8Content)));
+
+      const standaloneHtmlContent = "<!DOCTYPE html>\n" +
+        "<html lang=\"en\">\n" +
+        "<head>\n" +
+        "  <meta charset=\"UTF-8\">\n" +
+        "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
+        "  <title>" + trackTitle + "</title>\n" +
+        "  <link href=\"https://vjs.zencdn.net/8.10.0/video-js.css\" rel=\"stylesheet\" />\n" +
+        "  <script src=\"https://vjs.zencdn.net/8.10.0/video.min.js\"><\/script>\n" +
+        "  <style>\n" +
+        "    body { background: #0d1117; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: system-ui, sans-serif; }\n" +
+        "    .video-js { width: 100%; height: 100%; max-height: 268px; border-radius: 8px; overflow: hidden; }\n" +
+        "  </style>\n" +
+        "</head>\n" +
+        "<body>\n" +
+        "  <video id=\"chaos-widget-player\" class=\"video-js vjs-default-skin vjs-big-play-centered\" controls preload=\"auto\" data-setup='{}'></video>\n" +
+        "  <script>\n" +
+        "    function decodeBase64Utf8(base64) {\n" +
+        "      const binString = atob(base64);\n" +
+        "      const bytes = Uint8Array.from(binString, (m) => m.codePointAt(0));\n" +
+        "      return new TextDecoder().decode(bytes);\n" +
+        "    }\n" +
+        "    const m3u8Data = decodeBase64Utf8('" + playlistBase64 + "');\n" +
+        "    const blob = new Blob([m3u8Data], { type: 'application/x-mpegURL' });\n" +
+        "    const blobUrl = URL.createObjectURL(blob);\n" +
+        "    const player = videojs('chaos-widget-player');\n" +
+        "    player.src({ src: blobUrl, type: 'application/x-mpegURL' });\n" +
+        "  <\/script>\n" +
+        "</body>\n" +
+        "</html>";
+
+      const textEncoder = new TextEncoder();
+      const sanitizedName = trackTitle.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_widget.html';
+      const htmlFileId = await uploadFileToDrive(sanitizedName, textEncoder.encode(standaloneHtmlContent), 'text/html');
+      return htmlFileId;
     }
 
     // --- SEQUENTIAL BASE64 PACKAGER (Prevents WebAssembly OOM Crashes) ---
