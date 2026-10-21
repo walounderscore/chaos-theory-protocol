@@ -59,7 +59,7 @@
   <!-- Step 2: Main Workspace -->
   <div id="toolkit" class="locked">
     
-    <!-- Step 2: Google Drive Authorization & Session Resume -->
+    <!-- Step 2: Google Drive Authorization & Session Recovery Hub -->
     <div class="card">
       <h3>2. Google Drive Authorization & Session Recovery</h3>
       <p>Connect your Drive vault to stream releases and resume previous metadata sessions.</p>
@@ -82,16 +82,10 @@
       </div>
     </div>
 
-    <!-- Unified Sovereign Release & Asset Queue -->
+    <!-- Step 3: Unified Sovereign Release & Asset Queue -->
     <div class="card" id="release-builder-card">
       <h3>3. Sovereign Release & Asset Queue</h3>
-      <p>Configure your release metadata, import previous session snapshots, or build fresh from stems.</p>
-      
-      <!-- Session Import / Export Bar -->
-      <div style="background: #21262d; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 0.8rem; color: #8b949e;">Resume previous session:</span>
-        <input type="file" id="import-session-file" accept=".json" onchange="importSessionManifest(this)" style="font-size: 0.75rem; margin: 0;">
-      </div>
+      <p>Configure your release metadata, assign granular track attributes, and build your HLS asset bundle.</p>
 
       <!-- Global Release Metadata & Cover Art -->
       <div style="background: #010409; padding: 12px; border-radius: 6px; border: 1px solid #21262d; margin-bottom: 15px;">
@@ -155,7 +149,11 @@
         </div>
       </div>
 
-      <button id="build-release-btn" onclick="processUnifiedRelease()" style="width: 100%; margin-top: 10px;" disabled>🚀 Encrypt, Upload & Build Sovereign Release</button>
+      <!-- Action Bar: Manual Session Save & Release Compile Trigger -->
+      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px; margin-top: 15px;">
+        <button type="button" class="icon-btn" onclick="saveCurrentSessionManual()" style="padding: 10px; font-size: 0.85rem; background: #21262d; border-color: #30363d; color: #58a6ff;">💾 Save Session Snapshot</button>
+        <button id="build-release-btn" onclick="processUnifiedRelease()" disabled>🚀 Encrypt, Upload & Build Sovereign Release</button>
+      </div>
     </div>
 
     <!-- Activity Log -->
@@ -409,7 +407,6 @@
       }
     }
 
-    // --- SET TRACK THUMBNAIL AS ALBUM ART ---
     function setAsAlbumArt(btnElement) {
       const img = btnElement.closest('.track-card').querySelector('.t-thumb-preview');
       if (!img || !img.src || img.src === window.location.href) {
@@ -417,7 +414,6 @@
         return;
       }
 
-      // Convert data URL to Blob/File to simulate setting album art input or store in global state
       fetch(img.src)
         .then(res => res.blob())
         .then(blob => {
@@ -430,7 +426,6 @@
         });
     }
 
-    // --- CARD COLLAPSE & EXPAND ---
     function toggleCardCollapse(cardHeader) {
       const card = cardHeader.closest('.track-card');
       card.classList.toggle('collapsed');
@@ -746,155 +741,15 @@
       logMessage(`📁 Created reorderable track cards for ${selectedUnifiedFiles.length} file(s).`);
     }
 
-    // --- GENERATE CLEAN FILENAME FROM ALBUM TITLE ---
     function getCleanAlbumFilename(releaseTitle, suffix = "session_snapshot") {
-      const sanitized = releaseTitle
+      const sanitized = (releaseTitle || 'untitled_release')
         .toLowerCase()
-        .replace(/[^a-z0-9]/g, '_')   // Replace spaces & special chars with underscores
-        .replace(/_+/g, '_');          // Collapse duplicate underscores
+        .replace(/[^a-z0-9]/g, '_')
+        .replace(/_+/g, '_');
       return `${sanitized}_${suffix}.json`;
     }
 
-    // --- UPLOAD SESSION JSON SNAPSHOT TO GOOGLE DRIVE VAULT ---
-    async function uploadManifestToDrive(manifest) {
-      if (!accessToken || !driveFolderId) {
-        logMessage('⚠️ Google Drive not fully authorized. Skipping cloud JSON backup.');
-        return;
-      }
-
-      const fileName = getCleanAlbumFilename(manifest.title);
-      logMessage(`☁️ Uploading "${fileName}" to Google Drive vault...`);
-      
-      const fileMetadata = {
-        name: fileName,
-        parents: [driveFolderId],
-        mimeType: 'application/json'
-      };
-
-      const fileContent = JSON.stringify(manifest, null, 2);
-      const form = new FormData();
-      form.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
-      form.append('file', new Blob([fileContent], { type: 'application/json' }));
-
-      try {
-        const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-          method: 'POST',
-          headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
-          body: form
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ? data.error.message : res.statusText);
-        logMessage(`✅ Session snapshot securely backed up to Drive as "${fileName}"!`);
-      } catch (err) {
-        logMessage(`❌ Failed to upload session JSON to Drive: ${err.message}`);
-      }
-    }
-
-    // --- LOCAL SESSION EXPORT (NAMED AFTER ALBUM) ---
-    function exportSessionManifest(manifest) {
-      const fileName = getCleanAlbumFilename(manifest.title);
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(manifest, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", fileName);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-      logMessage(`💾 Local session backup saved as "${fileName}"!`);
-    }
-    
-    // --- GOOGLE PICKER API INTEGRATION ---
-    let pickerApiLoaded = false;
-
-    function onApiLoad() {
-      gapi.load('picker', () => {
-        pickerApiLoaded = true;
-        logMessage('☁️ Google Picker API loaded and ready.');
-      });
-    }
-    // Load GAPI Picker on startup
-    if (typeof gapi !== 'undefined') {
-      onApiLoad();
-    }
-
-    // --- OPEN GOOGLE DRIVE PICKER FOR JSON SESSION SNAPSHOTS ---
-    function openDrivePicker() {
-      if (!accessToken) {
-        alert('Please connect Google Drive first.');
-        return;
-      }
-      if (!pickerApiLoaded) {
-        alert('Google Picker API is still loading. Please try again in a moment.');
-        return;
-      }
-
-      const view = new google.picker.View(google.picker.ViewId.DOCS);
-      view.setMimeTypes("application/json");
-
-      const picker = new google.picker.PickerBuilder()
-        .addView(view)
-        .setOAuthToken(accessToken)
-        .setCallback(pickerCallback)
-        .setTitle("Select your Chaos Theory Session JSON Snapshot")
-        .build();
-
-      picker.setVisible(true);
-    }
-
-    // --- CALLBACK WHEN USER SELECTS A FILE FROM GOOGLE DRIVE PICKER ---
-    async function pickerCallback(data) {
-      if (data.action === google.picker.Action.PICKED) {
-        const fileId = data.docs[0].id;
-        const fileName = data.docs[0].name;
-        logMessage(`☁️ Fetching session snapshot from Drive: "${fileName}"...`);
-
-        try {
-          const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-            headers: { 'Authorization': 'Bearer ' + accessToken }
-          });
-          const manifest = await res.json();
-          loadSessionIntoUI(manifest);
-          logMessage(`✅ Successfully loaded session snapshot "${manifest.title || fileName}" from Drive!`);
-        } catch (err) {
-          logMessage(`❌ Error loading Drive JSON session: ${err.message}`);
-          alert('Could not read selected Drive file.');
-        }
-      }
-    }
-
-    // --- LOCAL JSON SESSION RE-IMPORT ---
-    function importLocalSessionManifest(input) {
-      const file = input.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        try {
-          const manifest = JSON.parse(e.target.result);
-          loadSessionIntoUI(manifest);
-          logMessage(`📂 Loaded local session snapshot: "${manifest.title || file.name}"`);
-        } catch (err) {
-          alert('Invalid JSON session snapshot file.');
-        }
-      };
-      reader.readAsText(file);
-    }
-
-    // --- CORE SESSION POPULATOR (DRY HELPER) ---
-    function loadSessionIntoUI(manifest) {
-      if (!manifest) return;
-
-      document.getElementById('builder-release-title').value = manifest.title || '';
-      document.getElementById('builder-release-date').value = manifest.date || getFormattedDateDDMMYYYY();
-      document.getElementById('builder-genre').value = manifest.genre || '';
-      document.getElementById('global-album-artist').value = manifest.artist || '';
-      document.getElementById('global-cover-artist').value = manifest.coverArtist || '';
-      if (manifest.bundlePrice) document.getElementById('builder-bundle-price').value = manifest.bundlePrice;
-
-      alert(`Session "${manifest.title || 'Untitled'}" restored! Please re-select your audio stems to link binary files before building the HLS release.`);
-    }
-
-    // --- PROCESS UNIFIED RELEASE & EXPORT MANIFEST ---
-    async function processUnifiedRelease() {
+    function compileCurrentManifest() {
       const releaseTitle = document.getElementById('builder-release-title').value.trim();
       const releaseDate = document.getElementById('builder-release-date').value.trim();
       const globalGenre = document.getElementById('builder-genre').value.trim();
@@ -903,15 +758,8 @@
       const bundlePrice = parseFloat(document.getElementById('builder-bundle-price').value) || 4500;
       const cards = document.querySelectorAll('.track-card');
 
-      if (!releaseTitle || cards.length === 0) {
-        alert('Please enter a release title and select audio files.');
-        return;
-      }
-
-      logMessage(`🚀 Compiling release "${releaseTitle}" (${cards.length} tracks)...`);
-
       const manifest = {
-        title: releaseTitle,
+        title: releaseTitle || "Untitled Release",
         artist: globalArtist || "Various Artists",
         coverArtist: globalCoverArtist,
         date: releaseDate || getFormattedDateDDMMYYYY(),
@@ -957,7 +805,154 @@
         });
       });
 
-      // Automatically upload to Google Drive vault AND trigger local backup
+      return manifest;
+    }
+
+    async function uploadManifestToDrive(manifest) {
+      if (!accessToken || !driveFolderId) {
+        logMessage('⚠️ Google Drive not fully authorized. Skipping cloud JSON backup.');
+        return;
+      }
+
+      const fileName = getCleanAlbumFilename(manifest.title);
+      logMessage(`☁️ Uploading "${fileName}" to Google Drive vault...`);
+      
+      const fileMetadata = {
+        name: fileName,
+        parents: [driveFolderId],
+        mimeType: 'application/json'
+      };
+
+      const fileContent = JSON.stringify(manifest, null, 2);
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
+      form.append('file', new Blob([fileContent], { type: 'application/json' }));
+
+      try {
+        const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+          method: 'POST',
+          headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
+          body: form
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ? data.error.message : res.statusText);
+        logMessage(`✅ Session snapshot securely backed up to Drive as "${fileName}"!`);
+      } catch (err) {
+        logMessage(`❌ Failed to upload session JSON to Drive: ${err.message}`);
+      }
+    }
+
+    function exportSessionManifest(manifest) {
+      const fileName = getCleanAlbumFilename(manifest.title);
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(manifest, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", fileName);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      logMessage(`💾 Local session backup saved as "${fileName}"!`);
+    }
+
+    async function saveCurrentSessionManual() {
+      const manifest = compileCurrentManifest();
+      await uploadManifestToDrive(manifest);
+      exportSessionManifest(manifest);
+      alert(`Session snapshot "${getCleanAlbumFilename(manifest.title)}" saved locally and to Google Drive!`);
+    }
+    
+    let pickerApiLoaded = false;
+
+    function onApiLoad() {
+      gapi.load('picker', () => {
+        pickerApiLoaded = true;
+        logMessage('☁️ Google Picker API loaded and ready.');
+      });
+    }
+    if (typeof gapi !== 'undefined') {
+      onApiLoad();
+    }
+
+    function openDrivePicker() {
+      if (!accessToken) {
+        alert('Please connect Google Drive first.');
+        return;
+      }
+      if (!pickerApiLoaded) {
+        alert('Google Picker API is still loading. Please try again in a moment.');
+        return;
+      }
+
+      const view = new google.picker.View(google.picker.ViewId.DOCS);
+      view.setMimeTypes("application/json");
+
+      const picker = new google.picker.PickerBuilder()
+        .addView(view)
+        .setOAuthToken(accessToken)
+        .setCallback(pickerCallback)
+        .setTitle("Select your Chaos Theory Session JSON Snapshot")
+        .build();
+
+      picker.setVisible(true);
+    }
+
+    async function pickerCallback(data) {
+      if (data.action === google.picker.Action.PICKED) {
+        const fileId = data.docs[0].id;
+        const fileName = data.docs[0].name;
+        logMessage(`☁️ Fetching session snapshot from Drive: "${fileName}"...`);
+
+        try {
+          const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+            headers: { 'Authorization': 'Bearer ' + accessToken }
+          });
+          const manifest = await res.json();
+          loadSessionIntoUI(manifest);
+          logMessage(`✅ Successfully loaded session snapshot "${manifest.title || fileName}" from Drive!`);
+        } catch (err) {
+          logMessage(`❌ Error loading Drive JSON session: ${err.message}`);
+          alert('Could not read selected Drive file.');
+        }
+      }
+    }
+
+    function importLocalSessionManifest(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const manifest = JSON.parse(e.target.result);
+          loadSessionIntoUI(manifest);
+          logMessage(`📂 Loaded local session snapshot: "${manifest.title || file.name}"`);
+        } catch (err) {
+          alert('Invalid JSON session snapshot file.');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function loadSessionIntoUI(manifest) {
+      if (!manifest) return;
+
+      document.getElementById('builder-release-title').value = manifest.title || '';
+      document.getElementById('builder-release-date').value = manifest.date || getFormattedDateDDMMYYYY();
+      document.getElementById('builder-genre').value = manifest.genre || '';
+      document.getElementById('global-album-artist').value = manifest.artist || '';
+      document.getElementById('global-cover-artist').value = manifest.coverArtist || '';
+      if (manifest.bundlePrice) document.getElementById('builder-bundle-price').value = manifest.bundlePrice;
+
+      alert(`Session "${manifest.title || 'Untitled'}" restored! Please re-select your audio stems to link binary files before building the HLS release.`);
+    }
+
+    async function processUnifiedRelease() {
+      const manifest = compileCurrentManifest();
+      if (!manifest.title || document.querySelectorAll('.track-card').length === 0) {
+        alert('Please enter a release title and select audio files.');
+        return;
+      }
+
+      logMessage(`🚀 Compiling release "${manifest.title}" (${manifest.tracks.length} tracks)...`);
       await uploadManifestToDrive(manifest);
       exportSessionManifest(manifest);
       logMessage(`✅ Release manifest compiled & session saved to Cloud & Local!`);
