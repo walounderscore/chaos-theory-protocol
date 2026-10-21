@@ -251,6 +251,21 @@
       }
     }
 
+    function handleDriveError(err) {
+      if (err.message.includes('401') || err.message.includes('Invalid Credentials') || err.message.includes('Token')) {
+        accessToken = null;
+        localStorage.removeItem('chaos_google_token');
+        localStorage.removeItem('chaos_google_folder');
+        
+        const statusEl = document.getElementById('auth-status');
+        if (statusEl) {
+          statusEl.innerText = 'Session Expired (Reconnection Needed)';
+          statusEl.style.color = '#f85149';
+        }
+        logMessage('⚠️ Google Drive session expired. Please reconnect.');
+      }
+    }
+
     // --- UPDATE LIVE ALBUM BADGE PREVIEW & FORMATTED DATE (DD/MM/YYYY) ---
     function updateLiveAlbumBadge() {
       const title = document.getElementById('builder-release-title').value.trim() || 'chaos theory.';
