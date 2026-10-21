@@ -1036,13 +1036,16 @@
     }
     window.addEventListener('load', onApiLoad);
 
+    const GOOGLE_API_KEY = 'AIzaSyABwHk6OoGOXgYfGySdsVltIMsS0SY-8Oc';
+    const GOOGLE_PROJECT_NUMBER = '104287153665';
+
     function openDrivePicker() {
       if (!accessToken) {
         alert('Please connect Google Drive first.');
         return;
       }
       if (!pickerApiLoaded) {
-        alert('Google Picker API is loading. Please try again in a few seconds.');
+        alert('Google Picker API is still loading. Please try again in a moment.');
         return;
       }
 
@@ -1051,7 +1054,9 @@
 
       const picker = new google.picker.PickerBuilder()
         .addView(view)
+        .setAppId(GOOGLE_PROJECT_NUMBER)
         .setOAuthToken(accessToken)
+        .setDeveloperKey(GOOGLE_API_KEY)
         .setCallback(pickerCallback)
         .setTitle("Select your Chaos Theory Session JSON Snapshot")
         .build();
