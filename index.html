@@ -355,7 +355,67 @@
       }
     }
 
-    // --- INTELLIGENT FILE SELECTOR & EXPANDER ---
+    // --- ROLE DROPDOWN OPTIONS (WITH "OTHER") ---
+    const CONTRIBUTOR_ROLES = [
+      "Main Artist",
+      "Featured Artist",
+      "Producer",
+      "Remixer",
+      "Studio Musician",
+      "Ensemble",
+      "Mixing Engineer",
+      "Mastering Engineer",
+      "Composer / Lyricist",
+      "Other"
+    ];
+
+    // --- HELPER: BUILD A SINGLE CONTRIBUTOR ROW (WITH DYNAMIC "OTHER" INPUT) ---
+    function createContributorRow(defaultRole = "Main Artist", defaultName = "") {
+      const row = document.createElement('div');
+      row.className = 'contributor-row';
+      row.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr 1.5fr auto; gap: 8px; align-items: center; margin-bottom: 6px;';
+
+      // Check if defaultRole is one of our standard presets or a custom "Other" role
+      let isPreset = CONTRIBUTOR_ROLES.includes(defaultRole);
+      let selectedRoleValue = isPreset ? defaultRole : "Other";
+      let customRoleVal = isPreset ? "" : defaultRole;
+
+      let optionsHtml = CONTRIBUTOR_ROLES.map(role => 
+        `<option value="${role}" ${role === selectedRoleValue ? 'selected' : ''}>${role}</option>`
+      ).join('');
+
+      row.innerHTML = `
+        <select class="c-role" style="width: 100%;" onchange="toggleCustomRoleInput(this)">${optionsHtml}</select>
+        <input type="text" class="c-custom-role" placeholder="Specify role..." value="${customRoleVal}" style="width: 100%; ${selectedRoleValue === 'Other' ? 'display: block;' : 'display: none;'}">
+        <input type="text" class="c-name" placeholder="Artist / Contributor Name" value="${defaultName}" style="width: 100%;">
+        <button type="button" onclick="this.parentElement.remove()" style="background: #da3633; padding: 6px 10px; font-size: 0.8rem;" title="Remove Contributor">🗑️</button>
+      `;
+
+      return row;
+    }
+
+    // --- TOGGLE CUSTOM ROLE TEXTBOX WHEN "OTHER" IS SELECTED ---
+    function toggleCustomRoleInput(selectElement) {
+      const row = selectElement.parentElement;
+      const customInput = row.querySelector('.c-custom-role');
+      if (selectElement.value === 'Other') {
+        customInput.style.display = 'block';
+        customInput.focus();
+      } else {
+        customInput.style.display = 'none';
+        customInput.value = '';
+      }
+    }
+
+    // --- HELPER: ADD CONTRIBUTOR TO A SPECIFIC TRACK CARD ---
+    function addContributorToTrack(trackIndex, defaultRole = "Featured Artist", defaultName = "") {
+      const listContainer = document.getElementById(`contributors-list-${trackIndex}`);
+      if (listContainer) {
+        listContainer.appendChild(createContributorRow(defaultRole, defaultName));
+      }
+    }
+
+    // --- INTELLIGENT FILE SELECTOR & SOUNDCLOUD-STYLE TRACK CARDS ---
     function handleUnifiedFileSelect(input) {
       const container = document.getElementById('track-queue-container');
       const releaseTitleInput = document.getElementById('builder-release-title');
@@ -378,63 +438,78 @@
         bundleWrapper.style.display = 'block';
       }
 
-      // Build a dedicated track card for each audio file
+      // Build dedicated SC-style cards
       selectedUnifiedFiles.forEach((file, index) => {
+        const trackNum = index + 1;
         const cleanName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+        const savedArtist = localStorage.getItem('chaos_artist_email') || "";
+        const defaultMainArtist = savedArtist.split('@')[0] || "Main Artist";
         
         const trackCard = document.createElement('div');
         trackCard.className = 'track-card';
+        trackCard.dataset.index = index;
         
         trackCard.innerHTML = `
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #21262d; padding-bottom: 6px;">
-            <strong style="color: #58a6ff; font-size: 0.9rem;">Track #${index + 1}: ${file.name}</strong>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #21262d; padding-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="background: #21262d; color: #58a6ff; font-weight: bold; padding: 2px 8px; border-radius: 4px; font-size: 0.85rem;">Track #</span>
+              <input type="number" value="${trackNum}" class="t-num" style="width: 60px; text-align: center; font-weight: bold;">
+              <strong style="color: #c9d1d9; font-size: 0.95rem; margin-left: 6px;">${file.name}</strong>
+            </div>
             <span style="font-size: 0.75rem; color: #8b949e;">${(file.size / (1024*1024)).toFixed(1)} MB</span>
           </div>
           
-          <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-bottom: 8px;">
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
             <div>
-              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Track Title</label>
+              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Track Title *</label>
               <input type="text" value="${cleanName}" class="t-title" style="width: 100%;">
             </div>
             <div>
-              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Price (₦)</label>
+              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Price (₦) *</label>
               <input type="number" value="500" class="t-price" style="width: 100%;">
+            </div>
+            <div>
+              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">ISRC Code (Optional)</label>
+              <input type="text" class="t-isrc" placeholder="e.g. QZMHN2470047" style="width: 100%;">
             </div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <div>
-              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Contributors / Producers / Features</label>
-              <input type="text" class="t-contributors" placeholder="e.g., Prod. by X, ft. Y" style="width: 100%;">
+          <!-- Dynamic Contributors Section -->
+          <div style="margin-top: 10px; background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #21262d;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <label style="font-size: 0.8rem; font-weight: bold; color: #c9d1d9;">Contributors & Credits</label>
+              <button type="button" onclick="addContributorToTrack(${index})" style="background: #1f6feb; font-size: 0.75rem; padding: 4px 10px;">➕ Add Contributor</button>
             </div>
-            <div>
-              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">ISRC / Tracking Code (Optional)</label>
-              <input type="text" class="t-isrc" placeholder="e.g., QM-XXX-26-00001" style="width: 100%;">
+            <div id="contributors-list-${index}">
+              <!-- Dynamic rows injected here -->
             </div>
           </div>
         `;
         
         container.appendChild(trackCard);
+
+        // Add default Main Artist row
+        addContributorToTrack(index, "Main Artist", defaultMainArtist);
       });
 
       document.getElementById('build-release-btn').disabled = false;
-      logMessage(`📁 Created dedicated metadata cards for ${selectedUnifiedFiles.length} track(s).`);
+      logMessage(`📁 Created SoundCloud-style metadata cards for ${selectedUnifiedFiles.length} track(s).`);
     }
 
-    // --- PROCESS UNIFIED RELEASE ---
+    // --- UPDATED PROCESS UNIFIED RELEASE ---
     async function processUnifiedRelease() {
       const releaseTitle = document.getElementById('builder-release-title').value.trim();
       const releaseDate = document.getElementById('builder-release-date').value;
       const genre = document.getElementById('builder-genre').value.trim();
       const bundlePrice = parseFloat(document.getElementById('builder-bundle-price').value) || 4500;
-      const rows = document.querySelectorAll('.track-row');
+      const cards = document.querySelectorAll('.track-card');
 
       if (!releaseTitle || selectedUnifiedFiles.length === 0) {
         alert('Please complete release title and select audio files.');
         return;
       }
 
-      logMessage(`🚀 Compiling release "${releaseTitle}" (${selectedUnifiedFiles.length} tracks)...`);
+      logMessage(`🚀 Compiling release "${releaseTitle}" (${cards.length} tracks)...`);
       
       const manifest = {
         title: releaseTitle,
@@ -444,17 +519,40 @@
         tracks: []
       };
 
-      rows.forEach((row, idx) => {
+      cards.forEach((card) => {
+        const idx = parseInt(card.dataset.index);
+        const trackNum = parseInt(card.querySelector('.t-num').value) || (idx + 1);
+        const title = card.querySelector('.t-title').value;
+        const price = parseFloat(card.querySelector('.t-price').value) || 500;
+        const isrc = card.querySelector('.t-isrc').value.trim();
+
+        // Extract dynamic contributors list
+        const contributorRows = card.querySelectorAll('.contributor-row');
+        const contributors = [];
+        contributorRows.forEach(row => {
+          let role = row.querySelector('.c-role').value;
+          if (role === 'Other') {
+            const customRoleInput = row.querySelector('.c-custom-role').value.trim();
+            role = customRoleInput || 'Contributor';
+          }
+          const name = row.querySelector('.c-name').value.trim();
+          if (name) {
+            contributors.push({ role, name });
+          }
+        });
+
         manifest.tracks.push({
+          trackNumber: trackNum,
           file: selectedUnifiedFiles[idx],
-          title: row.querySelector('.t-title').value,
-          price: parseFloat(row.querySelector('.t-price').value) || 500,
-          contributors: row.querySelector('.t-contributors').value.trim()
+          title: title,
+          price: price,
+          isrc: isrc,
+          contributors: contributors
         });
       });
 
-      console.log("Release Manifest:", manifest);
-      logMessage('✅ Queue parameters locked. Ready for WASM processing & Drive sync.');
+      console.log("Full Release Manifest Compiled:", manifest);
+      logMessage(`✅ Metadata locked for ${manifest.tracks.length} track(s) with full role attribution! Ready for WASM processing.`);
     }
 
     // --- OPTION B: DYNAMIC FAN CHECKOUT ---
