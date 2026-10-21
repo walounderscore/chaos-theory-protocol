@@ -52,38 +52,47 @@
       <span id="auth-status" style="margin-left: 10px; color: #8b949e;">Not Connected</span>
     </div>
 
-    <!-- Local ffmpeg.wasm Processing -->
-    <div class="card">
-      <h3>3. Local Encryption & Segmentation</h3>
-      <p>Select a master audio file to encrypt and chunk via local WebAssembly CPU.</p>
-      <input type="file" id="audio-file" accept="audio/*" disabled><br>
-      <button id="process-btn" onclick="processAudio()" disabled>Encrypt & Upload to Drive</button>
-    </div>
-
-    <!-- Phase 1: Batch Track & Asset Queue & Release Builder -->
+    <!-- Unified Sovereign Release & Asset Queue -->
     <div class="card" id="release-builder-card">
-      <h3>3. Multi-Track Release Builder & Tiered Pricing</h3>
-      <p>Bundle an album or configure individual track pricing for your release.</p>
+      <h3>3. Sovereign Release & Asset Queue</h3>
+      <p>Select your audio file(s) to automatically configure your release, set tiered pricing, and add metadata.</p>
       
-      <div style="margin-bottom: 15px;">
-        <label style="display: block; font-weight: bold; margin-bottom: 5px;">Release Title:</label>
-        <input type="text" id="builder-release-title" placeholder="e.g., Chaos Theory LP" style="width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; border-radius: 4px; box-sizing: border-box;">
+      <!-- Global Release Metadata -->
+      <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+        <div>
+          <label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.85rem;">Release / Album Title:</label>
+          <input type="text" id="builder-release-title" placeholder="e.g., Chaos Theory LP or Single Name" style="width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; border-radius: 4px; box-sizing: border-box;">
+        </div>
+        <div>
+          <label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.85rem;">Release Date:</label>
+          <input type="date" id="builder-release-date" style="width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; border-radius: 4px; box-sizing: border-box;">
+        </div>
+        <div>
+          <label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.85rem;">Genre:</label>
+          <input type="text" id="builder-genre" placeholder="e.g., Electronic / Afro" style="width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; border-radius: 4px; box-sizing: border-box;">
+        </div>
       </div>
 
-      <div style="margin-bottom: 15px;">
-        <label style="display: block; font-weight: bold; margin-bottom: 5px;">Full Album Bundle Price (₦):</label>
+      <div style="margin-bottom: 15px;" id="bundle-price-wrapper">
+        <label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.85rem;">Full Bundle / Album Price (₦): <span style="font-weight: normal; color: #8b949e;">(Ignored if only 1 track)</span></label>
         <input type="number" id="builder-bundle-price" value="4500" style="width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; border-radius: 4px; box-sizing: border-box;">
       </div>
 
+      <!-- Unified File Picker -->
       <div style="margin-bottom: 15px;">
-        <label style="display: block; font-weight: bold; margin-bottom: 5px;">Track Queue & Individual Pricing:</label>
-        <div id="track-queue-container" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px;">
-          <!-- Dynamic track rows injected here -->
-        </div>
-        <button onclick="addTrackRow()" style="background: #1f6feb; font-size: 0.85rem; padding: 6px 12px;">➕ Add Track to Queue</button>
+        <label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.85rem;">Select Audio Stem(s) (Single or Multiple):</label>
+        <input type="file" id="batch-audio-files" accept="audio/*" multiple onchange="handleUnifiedFileSelect(this)" style="margin: 5px 0;">
       </div>
 
-      <button id="build-release-btn" onclick="processBatchRelease()" style="width: 100%; margin-top: 10px;">🚀 Build Sovereign Release Package</button>
+      <!-- Dynamic Track Queue / Rows Container -->
+      <div style="margin-bottom: 15px;">
+        <label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.85rem;">Track Breakdown & Contributors:</label>
+        <div id="track-queue-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 280px; overflow-y: auto;">
+          <div style="color: #8b949e; font-size: 0.85rem; font-style: italic;">No audio selected yet. Choose file(s) above to build track rows.</div>
+        </div>
+      </div>
+
+      <button id="build-release-btn" onclick="processUnifiedRelease()" style="width: 100%; margin-top: 10px;" disabled>🚀 Encrypt, Upload & Build Sovereign Release</button>
     </div>
 
     <!-- Activity Log -->
@@ -148,51 +157,102 @@
       }
     }
 
-    // --- SESSION RESTORER & OAUTH REDIRECT HANDLER ---
-    window.addEventListener('DOMContentLoaded', async () => {
-      console.log("DOMContentLoaded event fired.");
+    let selectedUnifiedFiles = [];
 
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const token = hashParams.get('access_token');
-
-      if (token) {
-        accessToken = token;
-        localStorage.setItem('chaos_google_token', token);
-        window.history.replaceState({}, document.title, window.location.pathname);
-        logMessage('Google Drive authorized successfully via redirect.');
-      } else {
-        accessToken = localStorage.getItem('chaos_google_token');
-        driveFolderId = localStorage.getItem('chaos_google_folder');
-      }
-
-      const isUnlocked = localStorage.getItem('chaos_toolkit_unlocked');
-      if (isUnlocked === 'true') {
-        const gateCard = document.getElementById('gate-card');
-        const toolkit = document.getElementById('toolkit');
-        if (gateCard) gateCard.style.display = 'none';
-        if (toolkit) toolkit.classList.remove('locked');
-        
-        initFFmpeg();
-      }
-
-      if (accessToken) {
-        setDriveConnectedUI();
-      }
-
-      const urlParams = new URLSearchParams(window.location.search);
-      const reference = urlParams.get('trxref') || urlParams.get('reference');
-      
-      if (reference) {
-        logMessage(`Returning from Paystack checkout. Ref: ${reference}`);
-        window.history.replaceState({}, document.title, window.location.pathname);
-        try {
-          unlockToolkit();
-        } catch (err) {
-          console.error("Error inside unlockToolkit:", err);
-          logMessage("❌ Unlock error: " + err.message);
-        }
+    // Set today's date by default on load
+    window.addEventListener('DOMContentLoaded', () => {
+      const dateInput = document.getElementById('builder-release-date');
+      if (dateInput) {
+        dateInput.value = new Date().toISOString().split('T')[0];
       }
     });
+
+    // --- INTELLIGENT FILE SELECTOR & EXPANDER ---
+    function handleUnifiedFileSelect(input) {
+      const container = document.getElementById('track-queue-container');
+      const releaseTitleInput = document.getElementById('builder-release-title');
+      const bundleWrapper = document.getElementById('bundle-price-wrapper');
+      
+      container.innerHTML = '';
+      selectedUnifiedFiles = Array.from(input.files);
+
+      if (selectedUnifiedFiles.length === 0) {
+        container.innerHTML = '<div style="color: #8b949e; font-size: 0.85rem; font-style: italic;">No audio selected yet. Choose file(s) above to build track rows.</div>';
+        document.getElementById('build-release-btn').disabled = true;
+        return;
+      }
+
+      // If exactly 1 file is selected, auto-fill the release title with that track's name
+      if (selectedUnifiedFiles.length === 1) {
+        const singleName = selectedUnifiedFiles[0].name.substring(0, selectedUnifiedFiles[0].name.lastIndexOf('.')) || selectedUnifiedFiles[0].name;
+        releaseTitleInput.value = singleName;
+        bundleWrapper.style.display = 'none'; // Hide bundle price for standalone singles
+      } else {
+        bundleWrapper.style.display = 'block'; // Show bundle price for multi-track projects
+      }
+
+      // Expand into individual editable track rows
+      selectedUnifiedFiles.forEach((file, index) => {
+        const cleanName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+        
+        const row = document.createElement('div');
+        row.className = 'track-row';
+        row.style.cssText = 'display: grid; grid-template-columns: 2fr 1fr 1.5fr auto; gap: 8px; align-items: center; background: #010409; padding: 10px; border-radius: 6px; border: 1px solid #30363d;';
+        
+        row.innerHTML = `
+          <input type="text" value="${cleanName}" class="t-title" placeholder="Track Title" style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px; border-radius: 4px; font-size: 0.85rem;">
+          <input type="number" value="500" class="t-price" title="Price (₦)" style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px; border-radius: 4px; font-size: 0.85rem;">
+          <input type="text" class="t-contributors" placeholder="Prod / Features" title="Contributors / Producers / Features" style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px; border-radius: 4px; font-size: 0.85rem;">
+          <span style="font-size: 0.75rem; color: #8b949e; white-space: nowrap;">${(file.size / (1024*1024)).toFixed(1)} MB</span>
+        `;
+        
+        container.appendChild(row);
+      });
+
+      document.getElementById('build-release-btn').disabled = false;
+      logMessage(`📁 Loaded ${selectedUnifiedFiles.length} track(s) into the unified queue.`);
+    }
+
+    // --- PROCESS UNIFIED RELEASE PIPELINE ---
+    async function processUnifiedRelease() {
+      const releaseTitle = document.getElementById('builder-release-title').value.trim();
+      const releaseDate = document.getElementById('builder-release-date').value;
+      const genre = document.getElementById('builder-genre').value.trim();
+      const bundlePrice = parseFloat(document.getElementById('builder-bundle-price').value) || 4500;
+      const rows = document.querySelectorAll('.track-row');
+
+      if (!releaseTitle) {
+        alert('Please enter a release title.');
+        return;
+      }
+      if (selectedUnifiedFiles.length === 0) {
+        alert('Please select audio files first.');
+        return;
+      }
+
+      logMessage(`🚀 Compiling release "${releaseTitle}" (${selectedUnifiedFiles.length} tracks, Genre: ${genre || 'Unspecified'}, Date: ${releaseDate})...`);
+
+      // Gather complete metadata package for each track
+      const releaseManifest = {
+        title: releaseTitle,
+        date: releaseDate,
+        genre: genre,
+        bundlePrice: selectedUnifiedFiles.length > 1 ? bundlePrice : null,
+        tracks: []
+      };
+
+      rows.forEach((row, idx) => {
+        releaseManifest.tracks.push({
+          file: selectedUnifiedFiles[idx],
+          title: row.querySelector('.t-title').value,
+          price: parseFloat(row.querySelector('.t-price').value) || 500,
+          contributors: row.querySelector('.t-contributors').value.trim()
+        });
+      });
+
+      console.log("Release Manifest Compiled:", releaseManifest);
+      logMessage('✅ Metadata and tiered pricing locked. Ready to execute local WASM encryption & Drive upload loop.');
+    }
 
     function unlockToolkit() {
       logMessage('Unlocking user workspace...');
