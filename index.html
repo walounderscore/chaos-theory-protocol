@@ -43,6 +43,7 @@
     .icon-btn { background: #21262d; border: 1px solid #30363d; color: #8b949e; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
     .icon-btn:hover { background: #30363d; color: #c9d1d9; }
     .thumb-preview { width: 42px; height: 42px; border-radius: 4px; object-fit: cover; border: 1px solid #30363d; background: #161b22; }
+    .album-art-preview-large { width: 84px; height: 84px; border-radius: 6px; object-fit: cover; border: 1px solid #30363d; background: #0d1117; display: none; margin-top: 6px; }
   </style>
 </head>
 <body>
@@ -97,12 +98,13 @@
             <input type="text" id="builder-release-title" placeholder="e.g., Chaos Theory LP" style="width: 100%;">
           </div>
           <div>
-            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Release Date (DD/MM/YYYY):</label>
-            <input type="text" id="builder-release-date" placeholder="DD/MM/YYYY" style="width: 100%;">
+            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Release Date (Calendar Picker):</label>
+            <input type="date" id="builder-release-date" style="width: 100%;">
           </div>
           <div>
             <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Global Genre:</label>
             <input type="text" id="builder-genre" placeholder="e.g. Electronic" style="width: 100%;">
+            <button type="button" class="icon-btn" onclick="applyGlobalGenreToAll()" style="margin-top: 5px; font-size: 0.7rem;">📋 Apply Genre to All Tracks</button>
           </div>
         </div>
 
@@ -117,7 +119,9 @@
           </div>
           <div>
             <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Album Cover Asset:</label>
-            <input type="file" id="album-cover-file" accept="image/*,video/*" style="font-size: 0.75rem; width: 100%;">
+            <input type="file" id="album-cover-file" accept="image/*,video/*" onchange="previewLocalAlbumCover(this)" style="font-size: 0.75rem; width: 100%;">
+            <!-- 2x Size Album Art Preview Thumbnail -->
+            <img id="album-cover-preview-img" class="album-art-preview-large" alt="Album Cover Preview">
           </div>
         </div>
 
@@ -221,18 +225,11 @@
       }
     }
 
-    function getFormattedDateDDMMYYYY() {
-      const d = new Date();
-      const day = String(d.getDate()).padStart(2, '0');
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const year = d.getFullYear();
-      return `${day}/${month}/${year}`;
-    }
-
     window.addEventListener('DOMContentLoaded', async () => {
       const dateInput = document.getElementById('builder-release-date');
       if (dateInput) {
-        dateInput.value = getFormattedDateDDMMYYYY();
+        // Default calendar value to today's date (YYYY-MM-DD for HTML date input)
+        dateInput.value = new Date().toISOString().split('T')[0];
       }
 
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
@@ -407,6 +404,23 @@
       }
     }
 
+    // --- PREVIEW LOCAL ALBUM COVER (2X SIZE) ---
+    function previewLocalAlbumCover(input) {
+      const file = input.files[0];
+      const previewImg = document.getElementById('album-cover-preview-img');
+      if (file && file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          previewImg.src = e.target.result;
+          previewImg.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      } else {
+        previewImg.style.display = 'none';
+      }
+    }
+
+    // --- SET TRACK THUMBNAIL AS ALBUM ART (UPDATED FOR 2X PREVIEW) ---
     function setAsAlbumArt(btnElement) {
       const img = btnElement.closest('.track-card').querySelector('.t-thumb-preview');
       if (!img || !img.src || img.src === window.location.href) {
@@ -421,9 +435,29 @@
           const dataTransfer = new DataTransfer();
           dataTransfer.items.add(file);
           document.getElementById('album-cover-file').files = dataTransfer.files;
+
+          // Update the 2x large preview image directly
+          const previewImg = document.getElementById('album-cover-preview-img');
+          previewImg.src = img.src;
+          previewImg.style.display = 'block';
+
           logMessage('🖼️ Track artwork successfully assigned as global album cover!');
           alert('Track artwork set as Release Album Cover successfully!');
         });
+    }
+
+    // --- APPLY GENRE TO ALL TRACKS ---
+    function applyGlobalGenreToAll() {
+      const globalGenre = document.getElementById('builder-genre').value.trim();
+      if (!globalGenre) {
+        alert('Please enter a global genre first.');
+        return;
+      }
+      document.querySelectorAll('.track-card').forEach(card => {
+        const genreInput = card.querySelector('.t-genre');
+        if (genreInput) genreInput.value = globalGenre;
+      });
+      logMessage(`📋 Applied genre "${globalGenre}" across all tracks.`);
     }
 
     function toggleCardCollapse(cardHeader) {
@@ -762,7 +796,7 @@
         title: releaseTitle || "Untitled Release",
         artist: globalArtist || "Various Artists",
         coverArtist: globalCoverArtist,
-        date: releaseDate || getFormattedDateDDMMYYYY(),
+        date: releaseDate,
         genre: globalGenre,
         bundlePrice: cards.length > 1 ? bundlePrice : null,
         tracks: []
@@ -936,7 +970,7 @@
       if (!manifest) return;
 
       document.getElementById('builder-release-title').value = manifest.title || '';
-      document.getElementById('builder-release-date').value = manifest.date || getFormattedDateDDMMYYYY();
+      document.getElementById('builder-release-date').value = manifest.date || '';
       document.getElementById('builder-genre').value = manifest.genre || '';
       document.getElementById('global-album-artist').value = manifest.artist || '';
       document.getElementById('global-cover-artist').value = manifest.coverArtist || '';
