@@ -462,11 +462,11 @@
           cloudM3u8Content = cloudM3u8Content.split(segmentName).join(dataUri);
         }
 
-        // Upload the self-contained cloud manifest to Drive vault
-        logMessage('Uploading self-contained cloud manifest to Drive vault...');
+        // Upload the completely self-contained playlist to Drive
         const textEncoder = new TextEncoder();
         const playlistFileId = await uploadFileToDrive('playlist.m3u8', textEncoder.encode(cloudM3u8Content), 'application/x-mpegURL');
-
+        generateEmbedUI(playlistFileId);
+        
         logMessage(`🎉 Processing complete! Cloud Playlist ID: ${playlistFileId}`);
 
         // Generate clean embed code
