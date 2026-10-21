@@ -81,7 +81,7 @@
       <!-- Unified File Picker -->
       <div style="margin-bottom: 15px;">
         <label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.85rem;">Select Audio Stem(s) (Single or Multiple):</label>
-        <input type="file" id="batch-audio-files" accept="audio/*" multiple onchange="handleUnifiedFileSelect(this)" style="margin: 5px 0;">
+        <input type="file" id="batch-audio-files" accept="audio/*" multiple onchange="handleUnifiedFileSelect(this)" style="margin: 5px 0;" disabled>
       </div>
 
       <!-- Dynamic Track Queue / Rows Container -->
@@ -139,6 +139,7 @@
     let driveFolderId = null;
     let globalFFmpegInstance = null;
     let player = null;
+    let selectedUnifiedFiles = [];
 
     function logMessage(msg) {
       const logDiv = document.getElementById('log');
@@ -148,7 +149,6 @@
       }
     }
 
-    // --- HELPER: DRIVE CONNECTED UI ---
     function setDriveConnectedUI() {
       const statusEl = document.getElementById('auth-status');
       if (statusEl) {
@@ -157,108 +157,46 @@
       }
     }
 
-    let selectedUnifiedFiles = [];
-
-    // Set today's date by default on load
-    window.addEventListener('DOMContentLoaded', () => {
+    // --- SESSION RESTORER & OAUTH REDIRECT HANDLER ---
+    window.addEventListener('DOMContentLoaded', async () => {
       const dateInput = document.getElementById('builder-release-date');
       if (dateInput) {
         dateInput.value = new Date().toISOString().split('T')[0];
       }
-    });
 
-    // --- INTELLIGENT FILE SELECTOR & EXPANDER ---
-    function handleUnifiedFileSelect(input) {
-      const container = document.getElementById('track-queue-container');
-      const releaseTitleInput = document.getElementById('builder-release-title');
-      const bundleWrapper = document.getElementById('bundle-price-wrapper');
-      
-      container.innerHTML = '';
-      selectedUnifiedFiles = Array.from(input.files);
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const token = hashParams.get('access_token');
 
-      if (selectedUnifiedFiles.length === 0) {
-        container.innerHTML = '<div style="color: #8b949e; font-size: 0.85rem; font-style: italic;">No audio selected yet. Choose file(s) above to build track rows.</div>';
-        document.getElementById('build-release-btn').disabled = true;
-        return;
-      }
-
-      // If exactly 1 file is selected, auto-fill the release title with that track's name
-      if (selectedUnifiedFiles.length === 1) {
-        const singleName = selectedUnifiedFiles[0].name.substring(0, selectedUnifiedFiles[0].name.lastIndexOf('.')) || selectedUnifiedFiles[0].name;
-        releaseTitleInput.value = singleName;
-        bundleWrapper.style.display = 'none'; // Hide bundle price for standalone singles
+      if (token) {
+        accessToken = token;
+        localStorage.setItem('chaos_google_token', token);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        logMessage('Google Drive authorized successfully via redirect.');
       } else {
-        bundleWrapper.style.display = 'block'; // Show bundle price for multi-track projects
+        accessToken = localStorage.getItem('chaos_google_token');
+        driveFolderId = localStorage.getItem('chaos_google_folder');
       }
 
-      // Expand into individual editable track rows
-      selectedUnifiedFiles.forEach((file, index) => {
-        const cleanName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+      // Auto-unlock workspace if previously verified
+      const isUnlocked = localStorage.getItem('chaos_toolkit_unlocked');
+      if (isUnlocked === 'true') {
+        const gateCard = document.getElementById('gate-card');
+        const toolkit = document.getElementById('toolkit');
+        if (gateCard) gateCard.style.display = 'none';
+        if (toolkit) toolkit.classList.remove('locked');
         
-        const row = document.createElement('div');
-        row.className = 'track-row';
-        row.style.cssText = 'display: grid; grid-template-columns: 2fr 1fr 1.5fr auto; gap: 8px; align-items: center; background: #010409; padding: 10px; border-radius: 6px; border: 1px solid #30363d;';
-        
-        row.innerHTML = `
-          <input type="text" value="${cleanName}" class="t-title" placeholder="Track Title" style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px; border-radius: 4px; font-size: 0.85rem;">
-          <input type="number" value="500" class="t-price" title="Price (₦)" style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px; border-radius: 4px; font-size: 0.85rem;">
-          <input type="text" class="t-contributors" placeholder="Prod / Features" title="Contributors / Producers / Features" style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px; border-radius: 4px; font-size: 0.85rem;">
-          <span style="font-size: 0.75rem; color: #8b949e; white-space: nowrap;">${(file.size / (1024*1024)).toFixed(1)} MB</span>
-        `;
-        
-        container.appendChild(row);
-      });
-
-      document.getElementById('build-release-btn').disabled = false;
-      logMessage(`📁 Loaded ${selectedUnifiedFiles.length} track(s) into the unified queue.`);
-    }
-
-    // --- PROCESS UNIFIED RELEASE PIPELINE ---
-    async function processUnifiedRelease() {
-      const releaseTitle = document.getElementById('builder-release-title').value.trim();
-      const releaseDate = document.getElementById('builder-release-date').value;
-      const genre = document.getElementById('builder-genre').value.trim();
-      const bundlePrice = parseFloat(document.getElementById('builder-bundle-price').value) || 4500;
-      const rows = document.querySelectorAll('.track-row');
-
-      if (!releaseTitle) {
-        alert('Please enter a release title.');
-        return;
-      }
-      if (selectedUnifiedFiles.length === 0) {
-        alert('Please select audio files first.');
-        return;
+        initFFmpeg();
       }
 
-      logMessage(`🚀 Compiling release "${releaseTitle}" (${selectedUnifiedFiles.length} tracks, Genre: ${genre || 'Unspecified'}, Date: ${releaseDate})...`);
-
-      // Gather complete metadata package for each track
-      const releaseManifest = {
-        title: releaseTitle,
-        date: releaseDate,
-        genre: genre,
-        bundlePrice: selectedUnifiedFiles.length > 1 ? bundlePrice : null,
-        tracks: []
-      };
-
-      rows.forEach((row, idx) => {
-        releaseManifest.tracks.push({
-          file: selectedUnifiedFiles[idx],
-          title: row.querySelector('.t-title').value,
-          price: parseFloat(row.querySelector('.t-price').value) || 500,
-          contributors: row.querySelector('.t-contributors').value.trim()
-        });
-      });
-
-      console.log("Release Manifest Compiled:", releaseManifest);
-      logMessage('✅ Metadata and tiered pricing locked. Ready to execute local WASM encryption & Drive upload loop.');
-    }
+      if (accessToken) {
+        setDriveConnectedUI();
+      }
+    });
 
     function unlockToolkit() {
       logMessage('Unlocking user workspace...');
       localStorage.setItem('chaos_toolkit_unlocked', 'true');
 
-      // Force a clean reload so coi-serviceworker successfully activates SharedArrayBuffer for ffmpeg.wasm
       if (!window.location.search.includes('unlocked=true')) {
         window.location.href = window.location.pathname + '?unlocked=true';
         return;
@@ -280,10 +218,16 @@
 
     // --- WHITELIST CHECK & ACCESS GATE ---
     async function checkAccessAndProceed() {
-      const emailInput = prompt("Enter your artist email:");
-      if (!emailInput) return;
+      const savedEmail = localStorage.getItem('chaos_artist_email');
+      let userEmail = savedEmail;
 
-      const userEmail = emailInput.trim().toLowerCase();
+      if (!userEmail) {
+        const emailInput = prompt("Enter your artist email:");
+        if (!emailInput) return;
+        userEmail = emailInput.trim().toLowerCase();
+        localStorage.setItem('chaos_artist_email', userEmail);
+      }
+
       logMessage(`Checking whitelist access for: ${userEmail}...`);
 
       try {
@@ -298,93 +242,76 @@
           logMessage('Access granted: Email found on Google Sheet whitelist.');
           unlockToolkit();
         } else {
-          logMessage('Email not found on whitelist. Redirecting to Paystack payment page...');
+          logMessage('Email not found on whitelist. Initiating Paystack payment...');
           payWithPaystack(userEmail);
         }
       } catch (error) {
-        logMessage('Whitelist check failed/skipped: ' + error.message + '. Proceeding to payment.');
+        logMessage('Whitelist check failed: ' + error.message + '. Proceeding to payment.');
         payWithPaystack(userEmail);
       }
     }
 
     // --- PAYSTACK INLINE CHECKOUT FOR ARTISTS ---
     function payWithPaystack(email) {
-      localStorage.setItem('pending_artist_email', email);
-      
       const popup = new PaystackPop();
       popup.newTransaction({
         key: 'pk_test_078a52ae522dacc57ba8546539a611bca777d472',
         email: email,
-        amount: 10000, // ₦100.00 in kobo
+        amount: 10000, // ₦100.00
         currency: 'NGN',
-        metadata: {
-          type: 'artist_onboarding'
-        },
+        metadata: { type: 'artist_onboarding' },
         onSuccess: (transaction) => {
           logMessage(`Payment successful! Ref: ${transaction.reference}`);
           unlockToolkit();
         },
-        onCancel: () => {
-          logMessage('Payment window closed.');
-        }
+        onCancel: () => { logMessage('Payment window closed.'); }
       });
     }
-    
-    // --- CENTRALIZED UI STATE CHECKER ---
+
+    // --- FIXED CENTRALIZED UI STATE CHECKER ---
     function updateButtonState() {
-      const processBtn = document.getElementById('process-btn');
-      const fileInput = document.getElementById('audio-file');
+      const batchFileInput = document.getElementById('batch-audio-files');
 
       if (globalFFmpegInstance && globalFFmpegInstance.isLoaded()) {
-        fileInput.disabled = false;
+        if (batchFileInput) batchFileInput.disabled = false;
       }
 
       if (globalFFmpegInstance && globalFFmpegInstance.isLoaded() && driveFolderId) {
-        processBtn.disabled = false;
-        logMessage('🚀 Toolkit fully active! Ready to process audio.');
+        logMessage('🚀 Toolkit fully active! Choose audio files to build release.');
       }
     }
 
     // --- COOP-SAFE SAME-TAB OAUTH REDIRECT ---
     function authGoogleDrive() {
       logMessage('Redirecting to Google for authorization...');
-
       const clientId = '104287153665-c7sbnq3lm32u8kgt8gohqne0kr1i8vn4.apps.googleusercontent.com';
       const redirectUri = window.location.origin + window.location.pathname;
       const scope = 'https://www.googleapis.com/auth/drive.file';
-
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scope)}&prompt=select_account`;
-
       window.location.href = authUrl;
     }
 
-    // --- DRIVE FOLDER CREATOR (STANDARD API ENDPOINT) ---
+    // --- DRIVE FOLDER CREATOR ---
     async function createDriveFolder() {
       logMessage('Creating Chaos_Theory_Releases folder on Google Drive...');
       try {
-        const metadata = {
-          name: 'Chaos_Theory_Releases',
-          mimeType: 'application/vnd.google-apps.folder'
-        };
-
         const res = await fetch('https://www.googleapis.com/drive/v3/files', {
           method: 'POST',
           headers: new Headers({
             'Authorization': 'Bearer ' + accessToken,
             'Content-Type': 'application/json'
           }),
-          body: JSON.stringify(metadata)
+          body: JSON.stringify({
+            name: 'Chaos_Theory_Releases',
+            mimeType: 'application/vnd.google-apps.folder'
+          })
         });
 
         const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(data.error ? data.error.message : res.statusText);
-        }
+        if (!res.ok) throw new Error(data.error ? data.error.message : res.statusText);
 
         driveFolderId = data.id;
         localStorage.setItem('chaos_google_folder', driveFolderId);
-        
         logMessage(`Folder ready! ID: ${driveFolderId}`);
         updateButtonState();
       } catch (err) {
@@ -392,10 +319,9 @@
       }
     }
 
-    // --- FFMPEG.WASM INITIALIZATION (v0.11) ---
+    // --- FFMPEG.WASM INITIALIZATION ---
     async function initFFmpeg() {
       logMessage('Initializing local ffmpeg.wasm engine...');
-      
       if (typeof SharedArrayBuffer === 'undefined') {
         logMessage('⚠️ WARNING: SharedArrayBuffer is not enabled. coi-serviceworker may still be registering.');
         return;
@@ -412,10 +338,7 @@
         logMessage('✅ ffmpeg.wasm loaded and ready in browser CPU.');
         
         const authBtn = document.getElementById('auth-btn');
-        if (authBtn) {
-          authBtn.disabled = false;
-          logMessage('🔓 Google Drive authorization unlocked.');
-        }
+        if (authBtn) authBtn.disabled = false;
 
         if (accessToken && !driveFolderId) {
           await createDriveFolder();
@@ -428,354 +351,126 @@
       }
     }
 
-    // --- NATIVE FILE PROCESSING & SEGMENTATION ---
-    async function processAudio() {
-      if (!globalFFmpegInstance || !globalFFmpegInstance.isLoaded()) {
-        alert('FFmpeg engine is still initializing. Please wait a moment and try again.');
-        return;
-      }
-
-      const fileInput = document.getElementById('audio-file');
-      if (fileInput.files.length === 0) {
-        alert('Please select an audio file first.');
-        return;
-      }
-      const file = fileInput.files[0];
-      logMessage(`Loading local file: ${file.name} (${(file.size / (1024*1024)).toFixed(2)} MB)...`);
-
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        const fileData = new Uint8Array(arrayBuffer);
-
-        logMessage('Writing file to virtual WebAssembly filesystem...');
-        globalFFmpegInstance.FS('writeFile', 'input.mp3', fileData);
-
-        logMessage('Executing local AES encryption & HLS segmentation...');
-        await globalFFmpegInstance.run(
-          '-i', 'input.mp3',
-          '-c:a', 'aac',
-          '-b:a', '128k',
-          '-hls_time', '10',
-          '-hls_list_size', '0',
-          '-hls_segment_filename', 'segment_%03d.ts',
-          'playlist.m3u8'
-        );
-
-        logMessage('Segmentation complete. Packaging standalone HTML widget...');
-        await uploadGeneratedChunksToDrive();
-
-      } catch (err) {
-        logMessage('❌ Error during processing: ' + err.message);
-        console.error(err);
-      }
-    }
-
-    // --- HIGH-SPEED UPLOAD MULTIPART FILE HELPER ---
-    async function uploadFileToDrive(fileName, fileData, mimeType) {
-      const boundary = '-------314159265358979323846';
-      const delimiter = "\r\n--" + boundary + "\r\n";
-      const close_delim = "\r\n--" + boundary + "--";
-
-      const metadata = {
-        name: fileName,
-        parents: [driveFolderId]
-      };
-
-      const metadataPart = 
-        delimiter +
-        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-        JSON.stringify(metadata) +
-        delimiter +
-        'Content-Type: ' + mimeType + '\r\n\r\n';
-
-      const multipartRequestBody = new Blob([
-        metadataPart,
-        fileData,
-        close_delim
-      ], { type: 'multipart/related; boundary=' + boundary });
-
-      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-        method: 'POST',
-        headers: new Headers({
-          'Authorization': 'Bearer ' + accessToken,
-          'Content-Type': 'multipart/related; boundary=' + boundary
-        }),
-        body: multipartRequestBody
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error ? data.error.message : res.statusText);
-      }
-
-      const fileId = data.id;
-
-      // Non-blocking background call to grant public read access
-      fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
-        method: 'POST',
-        headers: new Headers({
-          'Authorization': 'Bearer ' + accessToken,
-          'Content-Type': 'application/json'
-        }),
-        body: JSON.stringify({
-          role: 'reader',
-          type: 'anyone'
-        })
-      }).catch(() => {});
-
-      return fileId;
-    }
-
-    // --- PACKAGING & UPLOADING STANDALONE HTML WIDGET ---
-    async function uploadGeneratedChunksToDrive() {
-      try {
-        const files = globalFFmpegInstance.FS('readdir', '/');
-        const segmentFiles = files.filter(f => f.endsWith('.ts')).sort();
-        logMessage(`Found ${segmentFiles.length} audio chunks. Packaging into sovereign HTML widget...`);
-
-        const segmentMap = {};
-        for (const fileName of segmentFiles) {
-          const fileData = globalFFmpegInstance.FS('readFile', fileName);
-          segmentMap[fileName] = fileData;
-        }
-
-        // Read raw local playlist
-        const playlistTextDecoder = new TextDecoder('utf-8');
-        let rawM3u8Content = playlistTextDecoder.decode(globalFFmpegInstance.FS('readFile', 'playlist.m3u8'));
-        
-        // Inject Base64 Data URIs directly into the manifest content
-        let cloudM3u8Content = rawM3u8Content;
-        for (const [segmentName, segData] of Object.entries(segmentMap)) {
-          let binaryString = '';
-          const chunkSize = 8192;
-          for (let i = 0; i < segData.length; i += chunkSize) {
-            binaryString += String.fromCharCode.apply(null, segData.subarray(i, i + chunkSize));
-          }
-          const base64Segment = btoa(binaryString);
-          const dataUri = `data:video/mp2t;base64,${base64Segment}`;
-          cloudM3u8Content = cloudM3u8Content.split(segmentName).join(dataUri);
-        }
-
-        // Base64 encode the ENTIRE playlist text to completely prevent newline/syntax breakages
-        const playlistBase64 = btoa(unescape(encodeURIComponent(cloudM3u8Content)));
-
-        // Build the Standalone HTML Widget Container safely wrapping the encoded payload
-        const standaloneHtmlContent = "<!DOCTYPE html>\n" +
-          "<html lang=\"en\">\n" +
-          "<head>\n" +
-          "  <meta charset=\"UTF-8\">\n" +
-          "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
-          "  <link href=\"https://vjs.zencdn.net/8.10.0/video-js.css\" rel=\"stylesheet\" />\n" +
-          "  <script src=\"https://vjs.zencdn.net/8.10.0/video.min.js\"><\/script>\n" +
-          "  <style>\n" +
-          "    body { background: #0d1117; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: system-ui, sans-serif; }\n" +
-          "    .video-js { width: 100%; height: 100%; max-height: 268px; border-radius: 8px; overflow: hidden; }\n" +
-          "  </style>\n" +
-          "</head>\n" +
-          "<body>\n" +
-          "  <video id=\"chaos-widget-player\" class=\"video-js vjs-default-skin vjs-big-play-centered\" controls preload=\"auto\" data-setup='{}'></video>\n" +
-          "  <script>\n" +
-          "    function decodeBase64Utf8(base64) {\n" +
-          "      const binString = atob(base64);\n" +
-          "      const bytes = Uint8Array.from(binString, (m) => m.codePointAt(0));\n" +
-          "      return new TextDecoder().decode(bytes);\n" +
-          "    }\n" +
-          "    const m3u8Data = decodeBase64Utf8('" + playlistBase64 + "');\n" +
-          "    const blob = new Blob([m3u8Data], { type: 'application/x-mpegURL' });\n" +
-          "    const blobUrl = URL.createObjectURL(blob);\n" +
-          "    const player = videojs('chaos-widget-player');\n" +
-          "    player.src({ src: blobUrl, type: 'application/x-mpegURL' });\n" +
-          "  <\/script>\n" +
-          "</body>\n" +
-          "</html>";
-
-        logMessage('Uploading standalone sovereign HTML widget to Drive vault...');
-        const textEncoder = new TextEncoder();
-        const htmlFileId = await uploadFileToDrive('release_widget.html', textEncoder.encode(standaloneHtmlContent), 'text/html');
-
-        logMessage(`🎉 Widget successfully built! File ID: ${htmlFileId}`);
-
-        // Play locally using WebAssembly Memory Blobs (Instant Preview)
-        playLocalWasmStream();
-
-        // Populate the dedicated Embed Box with the iframe widget URL
-        generateEmbedUI(htmlFileId);
-
-      } catch (err) {
-        logMessage('❌ Error in widget build pipeline: ' + err.message);
-        console.error("Widget Build Error:", err);
-      }
-    }
-    
-    // --- PLAY LOCAL WASM STREAM (Zero CORS, Instant Preview) ---
-    function playLocalWasmStream() {
-      if (!player) {
-        player = videojs('chaos-player');
-      }
-
-      const m3u8Data = globalFFmpegInstance.FS('readFile', 'playlist.m3u8');
-      const files = globalFFmpegInstance.FS('readdir', '/');
-      const segmentFiles = files.filter(f => f.endsWith('.ts')).sort();
-      
-      let modifiedM3u8 = new TextDecoder('utf-8').decode(m3u8Data);
-      
-      for (const seg of segmentFiles) {
-        const segData = globalFFmpegInstance.FS('readFile', seg);
-        let binaryString = '';
-        const chunkSize = 8192;
-        for (let i = 0; i < segData.length; i += chunkSize) {
-          binaryString += String.fromCharCode.apply(null, segData.subarray(i, i + chunkSize));
-        }
-        const base64Segment = btoa(binaryString);
-        const dataUri = `data:video/mp2t;base64,${base64Segment}`;
-        
-        modifiedM3u8 = modifiedM3u8.split(seg).join(dataUri);
-      }
-
-      const playlistBlob = new Blob([modifiedM3u8], { type: 'application/x-mpegURL' });
-      const playlistBlobUrl = URL.createObjectURL(playlistBlob);
-
-      logMessage('Loading self-contained zero-network stream into Sovereign player...');
-      player.src({
-        src: playlistBlobUrl,
-        type: 'application/x-mpegURL'
-      });
-
-      player.ready(() => {
-        logMessage('▶️ Sovereign player ready for playback.');
-        player.play().catch(() => {
-          logMessage('ℹ️ Click play on the player controls.');
-        });
-      });
-    }
-
-    // --- MAKE DRIVE FOLDER PUBLIC ---
-    async function makeFolderPublic(folderId) {
-      logMessage('Setting public read access on Drive release folder...');
-      try {
-        await fetch(`https://www.googleapis.com/drive/v3/files/${folderId}/permissions`, {
-          method: 'POST',
-          headers: new Headers({
-            'Authorization': 'Bearer ' + accessToken,
-            'Content-Type': 'application/json'
-          }),
-          body: JSON.stringify({
-            role: 'reader',
-            type: 'anyone'
-          })
-        });
-        logMessage('✅ Release folder permissions configured for public streaming.');
-      } catch (err) {
-        logMessage('⚠️ Error configuring folder permissions: ' + err.message);
-      }
-    }
-
-    // --- GENERATE COPYABLE IFRAME EMBED UI ---
-    function generateEmbedUI(htmlFileId) {
-      if (!htmlFileId) return;
-
-      const widgetUrl = `${APPS_SCRIPT_URL}?fileId=${htmlFileId}`;
-      const embedCode = `<iframe src="${widgetUrl}" width="100%" height="280px" style="border:none; border-radius:8px; background:#161b22;" allow="autoplay" loading="lazy"></iframe>`;
-
-      const embedBox = document.getElementById('embed-output-box');
-      if (embedBox) {
-        embedBox.value = embedCode;
-        logMessage('🎉 Sovereign iframe embed code successfully generated!');
-      } else {
-        logMessage('⚠️ Error: Embed output box element not found.');
-      }
-    }
-    
-    // --- COPY BUTTON HANDLER ---
-    function copyEmbedCode() {
-      const embedBox = document.getElementById('embed-output-box');
-      if (!embedBox || !embedBox.value) {
-        alert('No embed code available yet. Process an audio file first!');
-        return;
-      }
-      embedBox.select();
-      navigator.clipboard.writeText(embedBox.value);
-      
-      const btn = document.querySelector('#embed-card .copy-btn');
-      if (btn) {
-        btn.innerText = '✅ Copied to Clipboard!';
-        setTimeout(() => { btn.innerText = '📋 Copy Embed Code'; }, 2000);
-      }
-    }
-
-    // --- BATCH TRACK QUEUE MANAGEMENT ---
-    let trackQueue = [];
-
-    function addTrackRow() {
+    // --- INTELLIGENT FILE SELECTOR & EXPANDER ---
+    function handleUnifiedFileSelect(input) {
       const container = document.getElementById('track-queue-container');
-      const index = container.children.length + 1;
+      const releaseTitleInput = document.getElementById('builder-release-title');
+      const bundleWrapper = document.getElementById('bundle-price-wrapper');
+      
+      container.innerHTML = '';
+      selectedUnifiedFiles = Array.from(input.files);
 
-      const row = document.createElement('div');
-      row.className = 'track-row';
-      row.style.cssText = 'display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; align-items: center; background: #010409; padding: 10px; border-radius: 6px; border: 1px solid #30363d;';
-      
-      row.innerHTML = `
-        <input type="text" placeholder="Track ${index} Title" class="t-title" style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px; border-radius: 4px;">
-        <input type="number" placeholder="Price (₦)" class="t-price" value="500" style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px; border-radius: 4px;">
-        <input type="file" accept="audio/*" class="t-file" style="font-size: 0.75rem; color: #8b949e;">
-        <button onclick="this.parentElement.remove()" style="background: #da3633; padding: 6px 10px; font-size: 0.8rem;">✕</button>
-      `;
-      
-      container.appendChild(row);
+      if (selectedUnifiedFiles.length === 0) {
+        container.innerHTML = '<div style="color: #8b949e; font-size: 0.85rem; font-style: italic;">No audio selected yet. Choose file(s) above to build track rows.</div>';
+        document.getElementById('build-release-btn').disabled = true;
+        return;
+      }
+
+      if (selectedUnifiedFiles.length === 1) {
+        const singleName = selectedUnifiedFiles[0].name.substring(0, selectedUnifiedFiles[0].name.lastIndexOf('.')) || selectedUnifiedFiles[0].name;
+        releaseTitleInput.value = singleName;
+        bundleWrapper.style.display = 'none';
+      } else {
+        bundleWrapper.style.display = 'block';
+      }
+
+      selectedUnifiedFiles.forEach((file) => {
+        const cleanName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+        const row = document.createElement('div');
+        row.className = 'track-row';
+        row.style.cssText = 'display: grid; grid-template-columns: 2fr 1fr 1.5fr auto; gap: 8px; align-items: center; background: #010409; padding: 10px; border-radius: 6px; border: 1px solid #30363d;';
+        
+        row.innerHTML = `
+          <input type="text" value="${cleanName}" class="t-title" placeholder="Track Title" style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px; border-radius: 4px; font-size: 0.85rem;">
+          <input type="number" value="500" class="t-price" title="Price (₦)" style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px; border-radius: 4px; font-size: 0.85rem;">
+          <input type="text" class="t-contributors" placeholder="Prod / Features" style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px; border-radius: 4px; font-size: 0.85rem;">
+          <span style="font-size: 0.75rem; color: #8b949e; white-space: nowrap;">${(file.size / (1024*1024)).toFixed(1)} MB</span>
+        `;
+        container.appendChild(row);
+      });
+
+      document.getElementById('build-release-btn').disabled = false;
+      logMessage(`📁 Loaded ${selectedUnifiedFiles.length} track(s) into queue.`);
     }
 
-    // Initialize with one default track row on load
-    window.addEventListener('DOMContentLoaded', () => {
-      setTimeout(addTrackRow, 200);
-    });
-
-    // --- PROCESS MULTI-TRACK RELEASE & OPTION B WIDGET ---
-    async function processBatchRelease() {
-      const title = document.getElementById('builder-release-title').value.trim();
+    // --- PROCESS UNIFIED RELEASE ---
+    async function processUnifiedRelease() {
+      const releaseTitle = document.getElementById('builder-release-title').value.trim();
+      const releaseDate = document.getElementById('builder-release-date').value;
+      const genre = document.getElementById('builder-genre').value.trim();
       const bundlePrice = parseFloat(document.getElementById('builder-bundle-price').value) || 4500;
       const rows = document.querySelectorAll('.track-row');
 
-      if (!title) {
-        alert('Please enter a release title.');
+      if (!releaseTitle || selectedUnifiedFiles.length === 0) {
+        alert('Please complete release title and select audio files.');
         return;
       }
-      if (rows.length === 0) {
-        alert('Please add at least one track to the queue.');
-      }
 
-      logMessage(`Preparing batch queue for "${title}" with ${rows.length} tracks...`);
+      logMessage(`🚀 Compiling release "${releaseTitle}" (${selectedUnifiedFiles.length} tracks)...`);
+      
+      const manifest = {
+        title: releaseTitle,
+        date: releaseDate,
+        genre: genre,
+        bundlePrice: selectedUnifiedFiles.length > 1 ? bundlePrice : null,
+        tracks: []
+      };
 
-      // Here the engine sequences through the queue, runs ffmpeg.wasm segmentation per track, 
-      // uploads assets to your Drive vault folder, and bundles them into the final sovereign HTML widget.
-      logMessage('📦 Batch packaging pipeline initialized...');
+      rows.forEach((row, idx) => {
+        manifest.tracks.push({
+          file: selectedUnifiedFiles[idx],
+          title: row.querySelector('.t-title').value,
+          price: parseFloat(row.querySelector('.t-price').value) || 500,
+          contributors: row.querySelector('.t-contributors').value.trim()
+        });
+      });
+
+      console.log("Release Manifest:", manifest);
+      logMessage('✅ Queue parameters locked. Ready for WASM processing & Drive sync.');
     }
 
-    // --- OPTION B: DYNAMIC FAN CHECKOUT & DRIVE UNLOCK ---
+    // --- OPTION B: DYNAMIC FAN CHECKOUT ---
     function triggerFanCheckout(releaseTitle, priceInNaira, driveAssetId) {
       const listenerEmail = prompt("Enter your email address to receive secure Google Drive access:");
       if (!listenerEmail) return;
-
-      const amountInKobo = priceInNaira * 100; // Converts custom Naira price to kobo
 
       const popup = new PaystackPop();
       popup.newTransaction({
         key: 'pk_test_078a52ae522dacc57ba8546539a611bca777d472',
         email: listenerEmail.trim().toLowerCase(),
-        amount: amountInKobo,
+        amount: priceInNaira * 100,
         currency: 'NGN',
         metadata: {
           type: 'track_purchase',
-          drive_asset_id: driveAssetId, // The specific Google Drive File/Folder ID linked to this track or album
+          drive_asset_id: driveAssetId,
           release_title: releaseTitle
         },
         onSuccess: (transaction) => {
-          alert(`Payment successful! Check your email (${listenerEmail}). Google Drive permissions have been granted to your account.`);
-          logMessage(`Fan purchase verified for ${releaseTitle} (₦${priceInNaira}). Ref: ${transaction.reference}`);
+          alert(`Payment successful! Google Drive access granted for ${listenerEmail}.`);
         },
-        onCancel: () => {
-          logMessage('Fan checkout cancelled.');
-        }
+        onCancel: () => { logMessage('Checkout cancelled.'); }
       });
+    }
+
+    // --- EMBED BUILDER & COPY HANDLER ---
+    function generateEmbedUI(htmlFileId) {
+      if (!htmlFileId) return;
+      const widgetUrl = `${APPS_SCRIPT_URL}?fileId=${htmlFileId}`;
+      const embedCode = `<iframe src="${widgetUrl}" width="100%" height="280px" style="border:none; border-radius:8px; background:#161b22;" allow="autoplay" loading="lazy"></iframe>`;
+      const embedBox = document.getElementById('embed-output-box');
+      if (embedBox) embedBox.value = embedCode;
+    }
+
+    function copyEmbedCode() {
+      const embedBox = document.getElementById('embed-output-box');
+      if (!embedBox || !embedBox.value) return;
+      embedBox.select();
+      navigator.clipboard.writeText(embedBox.value);
+      const btn = document.querySelector('#embed-card .copy-btn');
+      if (btn) {
+        btn.innerText = '✅ Copied to Clipboard!';
+        setTimeout(() => { btn.innerText = '📋 Copy Embed Code'; }, 2000);
+      }
     }
   </script>
 </body>
