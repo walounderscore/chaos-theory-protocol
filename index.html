@@ -172,6 +172,12 @@
       logMessage('Unlocking user workspace...');
       localStorage.setItem('chaos_toolkit_unlocked', 'true');
 
+      // Force a clean reload so coi-serviceworker successfully activates SharedArrayBuffer for ffmpeg.wasm
+      if (!window.location.search.includes('unlocked=true')) {
+        window.location.href = window.location.pathname + '?unlocked=true';
+        return;
+      }
+
       const gateCard = document.getElementById('gate-card');
       const toolkit = document.getElementById('toolkit');
       
