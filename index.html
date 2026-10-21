@@ -30,6 +30,15 @@
     .embed-box { margin-top: 10px; width: 100%; height: 90px; background: #0d1117; color: #7ee787; border: 1px solid #30363d; border-radius: 4px; font-family: monospace; font-size: 0.8rem; padding: 8px; box-sizing: border-box; }
     .copy-btn { margin-top: 6px; background: #1f6feb; font-size: 0.8rem; padding: 6px 12px; }
     .copy-btn:hover { background: #388bfd; }
+    .track-card { border: 1px solid #30363d; border-radius: 6px; padding: 1rem; margin-bottom: 10px; background: #010409; transition: all 0.2s ease; }
+    .track-card.collapsed .track-body { display: none; }
+    .track-card-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+    input, select, textarea { background: #0d1117 !important; border: 1px solid #30363d !important; color: #c9d1d9 !important; padding: 8px !important; border-radius: 4px !important; box-sizing: border-box; }
+    input:focus, select:focus { border-color: #58a6ff !important; outline: none; }
+    .action-badge { background: #21262d; border: 1px solid #30363d; color: #8b949e; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; }
+    .action-badge:hover { background: #30363d; color: #c9d1d9; }
+    .subtle-delete { background: transparent; border: none; color: #8b949e; cursor: pointer; font-size: 0.9rem; padding: 2px 6px; }
+    .subtle-delete:hover { color: #f85149; }
   </style>
 </head>
 <body>
@@ -52,6 +61,27 @@
       <p>Connect your personal Google Drive to store encrypted HLS assets.</p>
       <button id="auth-btn" onclick="authGoogleDrive()" disabled>Connect Google Drive</button>
       <span id="auth-status" style="margin-left: 10px; color: #8b949e;">Not Connected</span>
+    </div>
+
+    <!-- Album Level Metadata & Global Defaults -->
+    <div style="background: #010409; padding: 12px; border-radius: 6px; border: 1px solid #21262d; margin-bottom: 15px;">
+      <h4 style="margin: 0 0 10px 0; font-size: 0.9rem; color: #58a6ff;">🎨 Release-Level Defaults & Cover Art</h4>
+        
+      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-bottom: 10px;">
+        <div>
+          <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Global Album Artist / Primary Creator</label>
+          <input type="text" id="global-album-artist" placeholder="e.g., walo, the underscore." style="width: 100%;">
+        </div>
+        <div>
+          <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Cover Art (Image / GIF / Video)</label>
+          <input type="file" id="album-cover-file" accept="image/*,video/*" style="font-size: 0.75rem; width: 100%;">
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+        <button type="button" onclick="applyGlobalArtistToAll()" style="background: #1f6feb; font-size: 0.75rem; padding: 6px 10px;">📋 Apply Album Artist to All Tracks</button>
+        <span style="font-size: 0.75rem; color: #8b949e;">(Saves typing across all stems automatically)</span>
+      </div>
     </div>
 
     <!-- Unified Sovereign Release & Asset Queue -->
@@ -355,27 +385,44 @@
       }
     }
 
-    // --- ROLE DROPDOWN OPTIONS (WITH "OTHER") ---
     const CONTRIBUTOR_ROLES = [
-      "Main Artist",
-      "Featured Artist",
-      "Producer",
-      "Remixer",
-      "Studio Musician",
-      "Ensemble",
-      "Mixing Engineer",
-      "Mastering Engineer",
-      "Composer / Lyricist",
-      "Other"
+      "Main Artist", "Featured Artist", "Producer", "Remixer", 
+      "Studio Musician", "Ensemble", "Mixing Engineer", "Mastering Engineer", 
+      "Composer / Lyricist", "Cover Artist", "Other"
     ];
 
-    // --- HELPER: BUILD A SINGLE CONTRIBUTOR ROW (WITH DYNAMIC "OTHER" INPUT) ---
+    // --- TOGGLE CARD COLLAPSE FOR EASIER DRAGGING ---
+    function toggleCardCollapse(headerElement) {
+      const card = headerElement.closest('.track-card');
+      card.classList.toggle('collapsed');
+      const arrow = headerElement.querySelector('.collapse-arrow');
+      arrow.innerText = card.classList.contains('collapsed') ? '▶' : '▼';
+    }
+
+    // --- GLOBAL ARTIST PROPAGATION ---
+    function applyGlobalArtistToAll() {
+      const globalArtist = document.getElementById('global-album-artist').value.trim();
+      if (!globalArtist) {
+        alert('Please enter a global album artist first.');
+        return;
+      }
+      
+      document.querySelectorAll('.track-card').forEach(card => {
+        const firstRoleSelect = card.querySelector('.c-role');
+        const firstNameInput = card.querySelector('.c-name');
+        if (firstRoleSelect && firstNameInput && firstRoleSelect.value === 'Main Artist') {
+          firstNameInput.value = globalArtist;
+        }
+      });
+      logMessage(`📋 Applied global artist "${globalArtist}" to all track main artist slots.`);
+    }
+
+    // --- DYNAMIC CONTRIBUTOR BUILDER WITH CUSTOM "OTHER" ---
     function createContributorRow(defaultRole = "Main Artist", defaultName = "") {
       const row = document.createElement('div');
       row.className = 'contributor-row';
       row.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr 1.5fr auto; gap: 8px; align-items: center; margin-bottom: 6px;';
 
-      // Check if defaultRole is one of our standard presets or a custom "Other" role
       let isPreset = CONTRIBUTOR_ROLES.includes(defaultRole);
       let selectedRoleValue = isPreset ? defaultRole : "Other";
       let customRoleVal = isPreset ? "" : defaultRole;
@@ -385,16 +432,14 @@
       ).join('');
 
       row.innerHTML = `
-        <select class="c-role" style="width: 100%;" onchange="toggleCustomRoleInput(this)">${optionsHtml}</select>
-        <input type="text" class="c-custom-role" placeholder="Specify role..." value="${customRoleVal}" style="width: 100%; ${selectedRoleValue === 'Other' ? 'display: block;' : 'display: none;'}">
-        <input type="text" class="c-name" placeholder="Artist / Contributor Name" value="${defaultName}" style="width: 100%;">
-        <button type="button" onclick="this.parentElement.remove()" style="background: #da3633; padding: 6px 10px; font-size: 0.8rem;" title="Remove Contributor">🗑️</button>
+        <select class="c-role" style="width: 100%; font-size: 0.8rem;" onchange="toggleCustomRoleInput(this)">${optionsHtml}</select>
+        <input type="text" class="c-custom-role" placeholder="Role..." value="${customRoleVal}" style="width: 100%; font-size: 0.8rem; ${selectedRoleValue === 'Other' ? 'display: block;' : 'display: none;'}">
+        <input type="text" class="c-name" placeholder="Name" value="${defaultName}" style="width: 100%; font-size: 0.8rem;">
+        <button type="button" class="subtle-delete" onclick="this.parentElement.remove()" title="Remove">✕</button>
       `;
-
       return row;
     }
 
-    // --- TOGGLE CUSTOM ROLE TEXTBOX WHEN "OTHER" IS SELECTED ---
     function toggleCustomRoleInput(selectElement) {
       const row = selectElement.parentElement;
       const customInput = row.querySelector('.c-custom-role');
@@ -407,7 +452,6 @@
       }
     }
 
-    // --- HELPER: ADD CONTRIBUTOR TO A SPECIFIC TRACK CARD ---
     function addContributorToTrack(trackIndex, defaultRole = "Featured Artist", defaultName = "") {
       const listContainer = document.getElementById(`contributors-list-${trackIndex}`);
       if (listContainer) {
@@ -415,7 +459,16 @@
       }
     }
 
-    // --- INTELLIGENT FILE SELECTOR & SOUNDCLOUD-STYLE TRACK CARDS ---
+    // --- RE-INDEX TRACK NUMBERS AFTER DRAG OR SORT ---
+    function reindexTracks() {
+      const cards = document.querySelectorAll('.track-card');
+      cards.forEach((card, idx) => {
+        const numInput = card.querySelector('.t-num');
+        if (numInput) numInput.value = idx + 1;
+      });
+    }
+
+    // --- BUILD TRACK CARDS FROM FILE SELECTION ---
     function handleUnifiedFileSelect(input) {
       const container = document.getElementById('track-queue-container');
       const releaseTitleInput = document.getElementById('builder-release-title');
@@ -425,7 +478,7 @@
       selectedUnifiedFiles = Array.from(input.files);
 
       if (selectedUnifiedFiles.length === 0) {
-        container.innerHTML = '<div style="color: #8b949e; font-size: 0.85rem; font-style: italic;">No audio selected yet. Choose file(s) above.</div>';
+        container.innerHTML = '<div style="color: #8b949e; font-size: 0.85rem; font-style: italic;">No audio selected yet.</div>';
         document.getElementById('build-release-btn').disabled = true;
         return;
       }
@@ -438,64 +491,79 @@
         bundleWrapper.style.display = 'block';
       }
 
-      // Build dedicated SC-style cards
+      const defaultGlobalArtist = document.getElementById('global-album-artist').value.trim() || 
+                                  localStorage.getItem('chaos_artist_email')?.split('@')[0] || "Main Artist";
+
       selectedUnifiedFiles.forEach((file, index) => {
         const trackNum = index + 1;
         const cleanName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-        const savedArtist = localStorage.getItem('chaos_artist_email') || "";
-        const defaultMainArtist = savedArtist.split('@')[0] || "Main Artist";
         
         const trackCard = document.createElement('div');
         trackCard.className = 'track-card';
         trackCard.dataset.index = index;
         
         trackCard.innerHTML = `
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #21262d; padding-bottom: 8px;">
+          <div class="track-card-header" onclick="toggleCardCollapse(this)">
             <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="background: #21262d; color: #58a6ff; font-weight: bold; padding: 2px 8px; border-radius: 4px; font-size: 0.85rem;">Track #</span>
-              <input type="number" value="${trackNum}" class="t-num" style="width: 60px; text-align: center; font-weight: bold;">
-              <strong style="color: #c9d1d9; font-size: 0.95rem; margin-left: 6px;">${file.name}</strong>
+              <span class="collapse-arrow" style="font-size: 0.75rem; color: #58a6ff;">▼</span>
+              <span style="background: #21262d; color: #58a6ff; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">#</span>
+              <input type="number" value="${trackNum}" class="t-num" style="width: 50px; text-align: center; font-weight: bold; font-size: 0.85rem;" onchange="reindexTracks()">
+              <strong style="color: #c9d1d9; font-size: 0.9rem;">${file.name}</strong>
             </div>
-            <span style="font-size: 0.75rem; color: #8b949e;">${(file.size / (1024*1024)).toFixed(1)} MB</span>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <span style="font-size: 0.75rem; color: #8b949e;">${(file.size / (1024*1024)).toFixed(1)} MB</span>
+              <button type="button" class="subtle-delete" onclick="event.stopPropagation(); this.closest('.track-card').remove(); reindexTracks();" title="Remove Track">🗑️</button>
+            </div>
           </div>
           
-          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-            <div>
-              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Track Title *</label>
-              <input type="text" value="${cleanName}" class="t-title" style="width: 100%;">
+          <div class="track-body" style="margin-top: 12px; border-top: 1px solid #21262d; padding-top: 10px;">
+            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+              <div>
+                <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Track Title</label>
+                <input type="text" value="${cleanName}" class="t-title" style="width: 100%; font-size: 0.85rem;">
+              </div>
+              <div>
+                <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Price (₦)</label>
+                <input type="number" value="500" class="t-price" style="width: 100%; font-size: 0.85rem;">
+              </div>
+              <div>
+                <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">ISRC Code</label>
+                <input type="text" class="t-isrc" placeholder="Optional" style="width: 100%; font-size: 0.85rem;">
+              </div>
             </div>
-            <div>
-              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Price (₦) *</label>
-              <input type="number" value="500" class="t-price" style="width: 100%;">
-            </div>
-            <div>
-              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">ISRC Code (Optional)</label>
-              <input type="text" class="t-isrc" placeholder="e.g. QZMHN2470047" style="width: 100%;">
-            </div>
-          </div>
 
-          <!-- Dynamic Contributors Section -->
-          <div style="margin-top: 10px; background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #21262d;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <label style="font-size: 0.8rem; font-weight: bold; color: #c9d1d9;">Contributors & Credits</label>
-              <button type="button" onclick="addContributorToTrack(${index})" style="background: #1f6feb; font-size: 0.75rem; padding: 4px 10px;">➕ Add Contributor</button>
+            <!-- Visual Component & Aspect Ratio Settings per Track -->
+            <div style="margin-bottom: 10px; background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
+              <label style="font-size: 0.75rem; font-weight: bold; color: #58a6ff; display: block; margin-bottom: 5px;">🎬 Track Visual / Aspect Ratio (Video.js background)</label>
+              <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">
+                <input type="file" class="t-visual-file" accept="image/*,video/*" style="font-size: 0.7rem;" title="Upload track-specific visual asset or loop">
+                <select class="t-aspect-ratio" style="font-size: 0.8rem;">
+                  <option value="16:9">Landscape (16:9)</option>
+                  <option value="1:1" selected>Square (1:1)</option>
+                  <option value="9:16">Portrait (9:16)</option>
+                  <option value="4:5">Vertical (4:5)</option>
+                </select>
+              </div>
             </div>
-            <div id="contributors-list-${index}">
-              <!-- Dynamic rows injected here -->
+
+            <!-- Dynamic Contributors -->
+            <div style="background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="font-size: 0.75rem; font-weight: bold; color: #c9d1d9;">Contributors & Credits</label>
+                <button type="button" onclick="addContributorToTrack(${index})" style="background: #1f6feb; font-size: 0.7rem; padding: 3px 8px;">➕ Add Contributor</button>
+              </div>
+              <div id="contributors-list-${index}"></div>
             </div>
           </div>
         `;
         
         container.appendChild(trackCard);
-
-        // Add default Main Artist row
-        addContributorToTrack(index, "Main Artist", defaultMainArtist);
+        addContributorToTrack(index, "Main Artist", defaultGlobalArtist);
       });
 
       document.getElementById('build-release-btn').disabled = false;
-      logMessage(`📁 Created SoundCloud-style metadata cards for ${selectedUnifiedFiles.length} track(s).`);
+      logMessage(`📁 Created collapsible metadata cards with visual aspect controls for ${selectedUnifiedFiles.length} track(s).`);
     }
-
     // --- UPDATED PROCESS UNIFIED RELEASE ---
     async function processUnifiedRelease() {
       const releaseTitle = document.getElementById('builder-release-title').value.trim();
