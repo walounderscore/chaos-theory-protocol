@@ -354,7 +354,7 @@
           'playlist.m3u8'
         );
 
-        logMessage('Segmentation complete. Preparing Google Drive upload...');
+        logMessage('Segmentation complete. Packaging standalone HTML widget...');
         await uploadGeneratedChunksToDrive();
 
       } catch (err) {
@@ -419,65 +419,76 @@
       return fileId;
     }
 
-    // --- GOOGLE DRIVE DIRECT UPLOADER & APPS SCRIPT GATEWAY MAPPER ---
+    // --- PACKAGING & UPLOADING STANDALONE HTML WIDGET ---
     async function uploadGeneratedChunksToDrive() {
       try {
         const files = globalFFmpegInstance.FS('readdir', '/');
         const segmentFiles = files.filter(f => f.endsWith('.ts')).sort();
-        logMessage(`Found ${segmentFiles.length} audio chunks. Uploading segments to Drive backup vault...`);
+        logMessage(`Found ${segmentFiles.length} audio chunks. Packaging into sovereign HTML widget...`);
 
         const segmentMap = {};
-
-        // 1. Upload all .ts chunks to Google Drive vault
         for (const fileName of segmentFiles) {
-          logMessage(`Uploading ${fileName}...`);
-          try {
-            const fileData = globalFFmpegInstance.FS('readFile', fileName);
-            const fileId = await uploadFileToDrive(fileName, fileData, 'video/mp2t');
-            segmentMap[fileName] = fileId;
-            logMessage(`✅ Backed up ${fileName}`);
-          } catch (err) {
-            logMessage(`❌ Failed uploading ${fileName}: ${err.message}`);
-          }
+          const fileData = globalFFmpegInstance.FS('readFile', fileName);
+          segmentMap[fileName] = fileData;
         }
 
-        // 2. Read raw local playlist
-        logMessage('Preparing cloud playlist for external distribution...');
+        // Read raw local playlist
         const playlistTextDecoder = new TextDecoder('utf-8');
         let rawM3u8Content = playlistTextDecoder.decode(globalFFmpegInstance.FS('readFile', 'playlist.m3u8'));
         
-      // 3. Create Self-Contained Base64 Data URI Manifest
+        // Inject Base64 Data URIs directly into the manifest content
         let cloudM3u8Content = rawM3u8Content;
-        for (const [segmentName, fileName] of Object.entries(segmentMap)) {
-          const segData = globalFFmpegInstance.FS('readFile', segmentName);
-          
+        for (const [segmentName, segData] of Object.entries(segmentMap)) {
           let binaryString = '';
           const chunkSize = 8192;
           for (let i = 0; i < segData.length; i += chunkSize) {
             binaryString += String.fromCharCode.apply(null, segData.subarray(i, i + chunkSize));
           }
           const base64Segment = btoa(binaryString);
-          
           const dataUri = `data:video/mp2t;base64,${base64Segment}`;
           cloudM3u8Content = cloudM3u8Content.split(segmentName).join(dataUri);
         }
 
-        // 3. Create Self-Contained Base64 Data URI Manifest & Upload
-        logMessage('Uploading self-contained cloud manifest to Drive vault...');
+        // Build the Standalone HTML Widget Container wrapping the base64 manifest blob
+        const standaloneHtmlContent = "<!DOCTYPE html>\n" +
+          "<html lang=\"en\">\n" +
+          "<head>\n" +
+          "  <meta charset=\"UTF-8\">\n" +
+          "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
+          "  <link href=\"https://vjs.zencdn.net/8.10.0/video-js.css\" rel=\"stylesheet\" />\n" +
+          "  <script src=\"https://vjs.zencdn.net/8.10.0/video.min.js\"><\/script>\n" +
+          "  <style>\n" +
+          "    body { background: #0d1117; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: system-ui, sans-serif; }\n" +
+          "    .video-js { width: 100%; height: 100%; max-height: 268px; border-radius: 8px; overflow: hidden; }\n" +
+          "  </style>\n" +
+          "</head>\n" +
+          "<body>\n" +
+          "  <video id=\"chaos-widget-player\" class=\"video-js vjs-default-skin vjs-big-play-centered\" controls preload=\"auto\" data-setup='{}'></video>\n" +
+          "  <script>\n" +
+          "    const m3u8Data = `" + cloudM3u8Content + "`;\n" +
+          "    const blob = new Blob([m3u8Data], { type: 'application/x-mpegURL' });\n" +
+          "    const blobUrl = URL.createObjectURL(blob);\n" +
+          "    const player = videojs('chaos-widget-player');\n" +
+          "    player.src({ src: blobUrl, type: 'application/x-mpegURL' });\n" +
+          "  <|/script>\n" +
+          "</body>\n" +
+          "</html>";
+
+        logMessage('Uploading standalone sovereign HTML widget to Drive vault...');
         const textEncoder = new TextEncoder();
-        const playlistFileId = await uploadFileToDrive('playlist.m3u8', textEncoder.encode(cloudM3u8Content), 'application/x-mpegURL');
+        const htmlFileId = await uploadFileToDrive('release_widget.html', textEncoder.encode(standaloneHtmlContent), 'text/html');
 
-        logMessage(`🎉 Processing complete! Cloud Playlist ID: ${playlistFileId}`);
+        logMessage(`🎉 Widget successfully built! File ID: ${htmlFileId}`);
 
-        // 4. Play locally using WebAssembly Memory Blobs (Bypasses CORS for your immediate preview)
+        // Play locally using WebAssembly Memory Blobs (Instant Preview)
         playLocalWasmStream();
 
-        // 5. Populate the dedicated Embed Box with the Apps Script Gateway URLs
-        generateEmbedUI(playlistFileId);
+        // Populate the dedicated Embed Box with the iframe widget URL
+        generateEmbedUI(htmlFileId);
 
       } catch (err) {
-        logMessage('❌ Error in upload pipeline: ' + err.message);
-        console.error("Upload Pipeline Error:", err);
+        logMessage('❌ Error in widget build pipeline: ' + err.message);
+        console.error("Widget Build Error:", err);
       }
     }
     
@@ -493,7 +504,6 @@
       
       let modifiedM3u8 = new TextDecoder('utf-8').decode(m3u8Data);
       
-      // Convert chunks to local base64 Data URIs internally in memory
       for (const seg of segmentFiles) {
         const segData = globalFFmpegInstance.FS('readFile', seg);
         let binaryString = '';
@@ -524,39 +534,6 @@
       });
     }
 
-    // --- INITIALIZE SOVEREIGN PLAYER (PUBLIC HLS MANIFEST BLOB) ---
-    function initSovereignPlayer(m3u8ManifestContent) {
-      if (!player) {
-        player = videojs('chaos-player');
-
-        player.on('error', () => {
-          const err = player.error();
-          console.error("Video.js Error:", err);
-          logMessage(`❌ Player Error [Code ${err.code}]: ${err.message || 'HLS stream initialization failed.'}`);
-        });
-
-        player.on('loadedmetadata', () => {
-          logMessage('📊 Stream metadata loaded successfully.');
-        });
-      }
-
-      const manifestBlob = new Blob([m3u8ManifestContent], { type: 'application/x-mpegURL' });
-      const blobUrl = URL.createObjectURL(manifestBlob);
-
-      logMessage('Loading HLS stream manifest into Sovereign Video.js player...');
-      player.src({
-        src: blobUrl,
-        type: 'application/x-mpegURL'
-      });
-
-      player.ready(() => {
-        logMessage('▶️ Sovereign player ready for playback.');
-        player.play().catch(() => {
-          logMessage('ℹ️ Auto-play restricted by browser. Click play on the player controls.');
-        });
-      });
-    }
-
     // --- MAKE DRIVE FOLDER PUBLIC ---
     async function makeFolderPublic(folderId) {
       logMessage('Setting public read access on Drive release folder...');
@@ -578,22 +555,17 @@
       }
     }
 
-    // --- GENERATE COPYABLE EMBED UI (DEDICATED CARD) ---
-    function generateEmbedUI(playlistFileId) {
-  if (!playlistFileId) return;
+    // --- GENERATE COPYABLE IFRAME EMBED UI ---
+    function generateEmbedUI(htmlFileId) {
+      if (!htmlFileId) return;
 
-  const embedCode = `<div style="max-width:640px; background:#161b22; padding:1rem; border-radius:8px; border:1px solid #30363d;">
-  <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
-  <video id="chaos-embed-${playlistFileId}" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" width="100%" height="268" data-setup='{}'>
-    <source src="${APPS_SCRIPT_URL}?fileId=${playlistFileId}" type="application/x-mpegURL">
-  </video>
-  <script src="https://vjs.zencdn.net/8.10.0/video.min.js"><\/script>
-</div>`;
+      const widgetUrl = `${APPS_SCRIPT_URL}?fileId=${htmlFileId}`;
+      const embedCode = `<iframe src="${widgetUrl}" width="100%" height="280px" style="border:none; border-radius:8px; background:#161b22;" allow="autoplay" loading="lazy"></iframe>`;
 
-  const embedBox = document.getElementById('embed-output-box');
-  if (embedBox) {
-    embedBox.value = embedCode;
-        logMessage('🎉 Embed code successfully generated using direct sovereign Drive link!');
+      const embedBox = document.getElementById('embed-output-box');
+      if (embedBox) {
+        embedBox.value = embedCode;
+        logMessage('🎉 Sovereign iframe embed code successfully generated!');
       } else {
         logMessage('⚠️ Error: Embed output box element not found.');
       }
