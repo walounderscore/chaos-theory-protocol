@@ -585,7 +585,7 @@
         return;
       }
 
-      // Direct public Google Drive link bypasses Apps Script gateway and ORB blocks completely
+      // Direct public Google Drive link using the dynamic playlistFileId parameter
       const directDriveUrl = `https://drive.google.com/uc?export=download&id=${playlistFileId}`;
 
       const embedCode = `<div style="max-width:640px; background:#161b22; padding:1rem; border-radius:8px; border:1px solid #30363d;">
@@ -604,7 +604,6 @@
         logMessage('⚠️ Error: Embed output box element not found.');
       }
     }
-
     // --- COPY BUTTON HANDLER ---
     function copyEmbedCode() {
       const embedBox = document.getElementById('embed-output-box');
