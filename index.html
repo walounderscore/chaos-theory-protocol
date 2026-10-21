@@ -449,7 +449,10 @@
           cloudM3u8Content = cloudM3u8Content.split(segmentName).join(dataUri);
         }
 
-        // Build the Standalone HTML Widget Container wrapping the base64 manifest blob
+        // Base64 encode the ENTIRE playlist text to completely prevent newline/syntax breakages
+        const playlistBase64 = btoa(unescape(encodeURIComponent(cloudM3u8Content)));
+
+        // Build the Standalone HTML Widget Container safely wrapping the encoded payload
         const standaloneHtmlContent = "<!DOCTYPE html>\n" +
           "<html lang=\"en\">\n" +
           "<head>\n" +
@@ -465,12 +468,17 @@
           "<body>\n" +
           "  <video id=\"chaos-widget-player\" class=\"video-js vjs-default-skin vjs-big-play-centered\" controls preload=\"auto\" data-setup='{}'></video>\n" +
           "  <script>\n" +
-          "    const m3u8Data = `" + cloudM3u8Content + "`;\n" +
+          "    function decodeBase64Utf8(base64) {\n" +
+          "      const binString = atob(base64);\n" +
+          "      const bytes = Uint8Array.from(binString, (m) => m.codePointAt(0));\n" +
+          "      return new TextDecoder().decode(bytes);\n" +
+          "    }\n" +
+          "    const m3u8Data = decodeBase64Utf8('" + playlistBase64 + "');\n" +
           "    const blob = new Blob([m3u8Data], { type: 'application/x-mpegURL' });\n" +
           "    const blobUrl = URL.createObjectURL(blob);\n" +
           "    const player = videojs('chaos-widget-player');\n" +
           "    player.src({ src: blobUrl, type: 'application/x-mpegURL' });\n" +
-          "  <|/script>\n" +
+          "  <\/script>\n" +
           "</body>\n" +
           "</html>";
 
