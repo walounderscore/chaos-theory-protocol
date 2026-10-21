@@ -1359,7 +1359,7 @@
     }
 
     // --- DRIVE MULTIPART FILE UPLOAD HELPER ---
-    async function uploadFileToDrive(fileName, fileData, mimeType) {
+   async function uploadFileToDrive(fileName, fileData, mimeType) {
       const boundary = '-------314159265358979323846';
       const delimiter = "\r\n--" + boundary + "\r\n";
       const close_delim = "\r\n--" + boundary + "--";
@@ -1392,7 +1392,11 @@
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ? data.error.message : res.statusText);
+      if (!res.ok) {
+        // Automatically check if token expired or is invalid
+        handleDriveError(new Error(data.error ? data.error.message : res.statusText));
+        throw new Error(data.error ? data.error.message : res.statusText);
+      }
 
       // Grant public read permissions in background
       fetch(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions`, {
