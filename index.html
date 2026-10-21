@@ -1191,17 +1191,240 @@
       alert(`Session "${manifest.title || 'Untitled'}" restored! Please re-select your audio stems to link binary files.`);
     }
 
+    // Helper to generate a random 16-byte AES-128 key string
+    function generateAESKeyHex() {
+      const array = new Uint8Array(16);
+      window.crypto.getRandomValues(array);
+      return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    // Convert Hex string to Uint8Array for FFmpeg Virtual FS
+    function hexToBytes(hex) {
+      const bytes = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < hex.length; i += 2) {
+        bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+      }
+      return bytes;
+    }
+
+    // Helper to upload a binary Uint8Array or Blob directly to Google Drive
+    async function uploadBinaryToDrive(fileName, mimeType, dataBuffer, parentFolderId) {
+      const fileMetadata = {
+        name: fileName,
+        parents: [parentFolderId]
+      };
+
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
+      form.append('file', new Blob([dataBuffer], { type: mimeType }));
+
+      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webContentLink,webViewLink', {
+        method: 'POST',
+        headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
+        body: form
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ? data.error.message : res.statusText);
+      return data;
+    }
+
     async function processUnifiedRelease() {
-      const manifest = compileCurrentManifest();
-      if (!manifest.title || document.querySelectorAll('.track-card').length === 0) {
-        alert('Please enter a release title and select audio files.');
+      if (!accessToken || !driveFolderId) {
+        alert('Please connect Google Drive and initialize your vault first.');
         return;
       }
 
-      logMessage(`🚀 Compiling release "${manifest.title}" (${manifest.tracks.length} tracks)...`);
-      await uploadManifestToDrive(manifest);
-      exportSessionManifest(manifest);
-      logMessage(`✅ Release manifest compiled & session saved to Cloud & Local!`);
+      if (!globalFFmpegInstance || !globalFFmpegInstance.isLoaded()) {
+        alert('FFmpeg engine is still loading. Please wait a moment.');
+        return;
+      }
+
+      const cards = document.querySelectorAll('.track-card');
+      if (cards.length === 0) {
+        alert('Please add at least one track to encrypt.');
+        return;
+      }
+
+      if (selectedUnifiedFiles.length === 0) {
+        alert('Please re-select your local audio files to enable batch encryption.');
+        return;
+      }
+
+      const buildBtn = document.getElementById('build-release-btn');
+      buildBtn.disabled = true;
+      buildBtn.innerText = '⏳ Encrypting & Processing Batch...';
+
+      const manifest = compileCurrentManifest();
+      logMessage(`🔐 Initializing HLS AES-128 batch encryption for "${manifest.title}"...`);
+
+      // Create a subfolder inside Chaos_Theory_Releases specifically for this album release
+      let albumFolderId = driveFolderId;
+      try {
+        const folderName = getCleanAlbumFilename(manifest.title, "vault_bundle").replace('.json', '');
+        const folderMetadata = {
+          name: folderName,
+          mimeType: 'application/vnd.google-apps.folder',
+          parents: [driveFolderId]
+        };
+        const folderRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+          method: 'POST',
+          headers: new Headers({
+            'Authorization': 'Bearer ' + accessToken,
+            'Content-Type': 'application/json'
+          }),
+          body: JSON.stringify(folderMetadata)
+        });
+        const folderData = await folderRes.json();
+        if (folderRes.ok) albumFolderId = folderData.id;
+        logMessage(`📁 Created dedicated album vault folder ID: ${albumFolderId}`);
+      } catch (fErr) {
+        logMessage(`⚠️ Folder creation notice: ${fErr.message}. Storing in main vault.`);
+      }
+
+      try {
+        const ffmpeg = globalFFmpegInstance;
+
+        // Iterate through all track cards and encrypt local audio files
+        for (let i = 0; i < cards.length; i++) {
+          const card = cards[i];
+          const trackNum = card.querySelector('.t-num').value || (i + 1);
+          const trackTitle = card.querySelector('.t-title').value || `Track ${trackNum}`;
+          
+          // Match track to local selected file
+          const audioFile = selectedUnifiedFiles[i] || selectedUnifiedFiles[0];
+          logMessage(`⚡ [${i + 1}/${cards.length}] Encrypting Track ${trackNum}: "${trackTitle}" (${audioFile.name})...`);
+
+          const fileExt = audioFile.name.split('.').pop();
+          const inFileName = `input_${i}.${fileExt}`;
+          const outM3u8Name = `track_${trackNum}.m3u8`;
+          const keyFileName = `enc_${trackNum}.key`;
+          const keyInfoName = `keyinfo_${trackNum}.txt`;
+
+          // 1. Read binary audio file into FFmpeg virtual filesystem
+          const audioBuffer = await audioFile.arrayBuffer();
+          ffmpeg.FS('writeFile', inFileName, new Uint8Array(audioBuffer));
+
+          // 2. Generate random 16-byte key for AES-128 encryption
+          const keyHex = generateAESKeyHex();
+          const keyBytes = hexToBytes(keyHex);
+          ffmpeg.FS('writeFile', keyFileName, keyBytes);
+
+          // 3. Write keyinfo file (URI line, path to key)
+          const keyInfoContent = `${keyFileName}\n${keyFileName}\n`;
+          ffmpeg.FS('writeFile', keyInfoName, new TextEncoder().encode(keyInfoContent));
+
+          // 4. Run FFmpeg HLS conversion command
+          // Segment duration: 6 seconds, AES-128 encrypted
+          await ffmpeg.run(
+            '-i', inFileName,
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-hls_time', '6',
+            '-hls_playlist_type', 'vod',
+            '-hls_key_info_file', keyInfoName,
+            '-hls_segment_filename', `track_${trackNum}_seg_%03d.ts`,
+            outM3u8Name
+          );
+
+          logMessage(`☁️ Uploading encrypted HLS segments for Track ${trackNum} to Drive...`);
+
+          // 5. Upload AES Key file to Drive
+          const keyData = ffmpeg.FS('readFile', keyFileName);
+          const keyDriveFile = await uploadBinaryToDrive(keyFileName, 'application/octet-stream', keyData, albumFolderId);
+
+          // 6. Upload .ts segment files
+          const allFSFiles = ffmpeg.FS('readdir', '/');
+          const segFiles = allFSFiles.filter(f => f.startsWith(`track_${trackNum}_seg_`) && f.endsWith('.ts'));
+
+          for (const segName of segFiles) {
+            const segBytes = ffmpeg.FS('readFile', segName);
+            await uploadBinaryToDrive(segName, 'video/MP2T', segBytes, albumFolderId);
+            ffmpeg.FS('unlink', segName); // Clean memory
+          }
+
+          // 7. Upload .m3u8 playlist manifest
+          const m3u8Bytes = ffmpeg.FS('readFile', outM3u8Name);
+          const m3u8DriveFile = await uploadBinaryToDrive(outM3u8Name, 'application/x-mpegURL', m3u8Bytes, albumFolderId);
+
+          // Unlink processed files from Virtual FS memory
+          ffmpeg.FS('unlink', inFileName);
+          ffmpeg.FS('unlink', keyFileName);
+          ffmpeg.FS('unlink', keyInfoName);
+          ffmpeg.FS('unlink', outM3u8Name);
+
+          // Save HLS stream references directly into the manifest track item
+          manifest.tracks[i].hlsStreamId = m3u8DriveFile.id;
+          manifest.tracks[i].keyFileId = keyDriveFile.id;
+          manifest.tracks[i].status = "encrypted";
+
+          logMessage(`✅ Track ${trackNum} encrypted and synced! Manifest ID: ${m3u8DriveFile.id}`);
+        }
+
+        // Finalize Release Manifest & Save to Drive
+        logMessage(`💾 Saving master encrypted release manifest to Drive...`);
+        await uploadManifestToDrive(manifest);
+        exportSessionManifest(manifest);
+
+        // Generate Distribution Embed Snippet & Social Share Suite
+        generateDistributionSuite(manifest, albumFolderId);
+
+        logMessage(`🎉 All ${cards.length} track(s) encrypted & release published successfully!`);
+        alert(`Release "${manifest.title}" has been encrypted and published to your Drive vault!`);
+
+      } catch (err) {
+        logMessage(`❌ Encryption Pipeline Error: ${err.message}`);
+        alert(`Batch encryption failed: ${err.message}`);
+      } finally {
+        buildBtn.disabled = false;
+        buildBtn.innerText = '🚀 Encrypt, Upload & Build Sovereign Release';
+      }
+    }
+
+    function generateDistributionSuite(manifest, folderId) {
+      const widgetUrl = `${APPS_SCRIPT_URL}?folderId=${folderId}`;
+      const embedCode = `<iframe src="${widgetUrl}" width="100%" height="320px" style="border:none; border-radius:12px; background:#0d1117;" allow="autoplay" loading="lazy"></iframe>`;
+      
+      const embedBox = document.getElementById('embed-output-box');
+      if (embedBox) embedBox.value = embedCode;
+
+      // Clean metadata text for social platforms
+      const titleText = `${manifest.title} by ${manifest.artist}`;
+      const shareMessage = encodeURIComponent(`🎧 Stream my new sovereign release "${manifest.title}" by ${manifest.artist}:\n\n${widgetUrl}`);
+
+      // Inject Social Share Suite below the embed box
+      let shareSuite = document.getElementById('social-share-suite');
+      if (!shareSuite) {
+        shareSuite = document.createElement('div');
+        shareSuite.id = 'social-share-suite';
+        shareSuite.style.cssText = 'margin-top: 15px; background: #010409; padding: 12px; border-radius: 6px; border: 1px solid #21262d;';
+        document.getElementById('embed-card').appendChild(shareSuite);
+      }
+
+      shareSuite.innerHTML = `
+        <h4 style="margin: 0 0 10px 0; font-size: 0.85rem; color: #58a6ff;">🚀 1-Click Social Share & Virality Suite</h4>
+        
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;">
+          <a href="https://api.whatsapp.com/send?text=${shareMessage}" target="_blank" style="text-decoration: none;">
+            <button type="button" class="icon-btn" style="background: #25D366; color: black; font-weight: bold; border: none;">💬 WhatsApp</button>
+          </a>
+          <a href="https://twitter.com/intent/tweet?text=${shareMessage}" target="_blank" style="text-decoration: none;">
+            <button type="button" class="icon-btn" style="background: #1DA1F2; color: white; font-weight: bold; border: none;">🐦 X / Twitter</button>
+          </a>
+          <a href="https://t.me/share/url?url=${encodeURIComponent(widgetUrl)}&text=${encodeURIComponent(titleText)}" target="_blank" style="text-decoration: none;">
+            <button type="button" class="icon-btn" style="background: #0088cc; color: white; font-weight: bold; border: none;">🌀 Telegram</button>
+          </a>
+          <button type="button" class="icon-btn" onclick="navigator.clipboard.writeText('${widgetUrl}'); alert('Stream link copied!');" style="background: #21262d; color: #c9d1d9;">🔗 Copy Direct Stream Link</button>
+        </div>
+
+        <div style="background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d; font-size: 0.75rem; color: #8b949e;">
+          <strong style="color: #c9d1d9;">🏷️ Social Open Graph Preview Tags:</strong>
+          <pre style="margin: 5px 0 0 0; font-family: monospace; white-space: pre-wrap; word-break: break-all; color: #7ee787;"><meta property="og:title" content="${titleText}">
+<meta property="og:description" content="${manifest.genre ? manifest.genre + ' • ' : ''}${manifest.tracks.length} Track Release">
+<meta property="og:type" content="music.album">
+<meta name="twitter:card" content="summary_large_image"></pre>
+        </div>
+      `;
     }
 
     function triggerFanCheckout(releaseTitle, priceInNaira, driveAssetId) {
