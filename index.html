@@ -455,9 +455,9 @@
         const { createFFmpeg } = FFmpeg;
         globalFFmpegInstance = createFFmpeg({ 
           log: true,
-          corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+          corePath: 'https://unpkg.com/@ffmpeg/core-st@0.11.0/dist/ffmpeg-core.js'
         });
-
+        
         await globalFFmpegInstance.load();
         logMessage('✅ ffmpeg.wasm loaded and ready in browser CPU.');
         
