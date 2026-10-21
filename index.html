@@ -19,11 +19,13 @@
   <style>
     body { font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 2rem; max-width: 800px; margin: auto; }
     .card { border: 1px solid #30363d; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; background: #161b22; }
+    .track-card { border: 1px solid #30363d; border-radius: 6px; padding: 1rem; margin-bottom: 10px; background: #010409; } /* Deeper dark box per track */
     .locked { opacity: 0.4; pointer-events: none; }
     button { background: #238636; color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }
     button:hover { background: #2ea043; }
     button:disabled { background: #30363d; color: #8b949e; cursor: not-allowed; }
-    input[type="file"] { margin: 10px 0; }
+    input, select { background: #0d1117 !important; border: 1px solid #30363d !important; color: #c9d1d9 !important; padding: 8px !important; border-radius: 4px !important; box-sizing: border-box; }
+    input:focus { border-color: #58a6ff !important; outline: none; }
     #log { background: #010409; padding: 1rem; border-radius: 6px; font-family: monospace; font-size: 0.85rem; max-height: 250px; overflow-y: auto; color: #7ee787; }
     .embed-box { margin-top: 10px; width: 100%; height: 90px; background: #0d1117; color: #7ee787; border: 1px solid #30363d; border-radius: 4px; font-family: monospace; font-size: 0.8rem; padding: 8px; box-sizing: border-box; }
     .copy-btn { margin-top: 6px; background: #1f6feb; font-size: 0.8rem; padding: 6px 12px; }
@@ -361,7 +363,7 @@
       selectedUnifiedFiles = Array.from(input.files);
 
       if (selectedUnifiedFiles.length === 0) {
-        container.innerHTML = '<div style="color: #8b949e; font-size: 0.85rem; font-style: italic;">No audio selected yet. Choose file(s) above to build track rows.</div>';
+        container.innerHTML = '<div style="color: #8b949e; font-size: 0.85rem; font-style: italic;">No audio selected yet. Choose file(s) above.</div>';
         document.getElementById('build-release-btn').disabled = true;
         return;
       }
@@ -374,23 +376,47 @@
         bundleWrapper.style.display = 'block';
       }
 
-      selectedUnifiedFiles.forEach((file) => {
+      // Build a dedicated track card for each audio file
+      selectedUnifiedFiles.forEach((file, index) => {
         const cleanName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-        const row = document.createElement('div');
-        row.className = 'track-row';
-        row.style.cssText = 'display: grid; grid-template-columns: 2fr 1fr 1.5fr auto; gap: 8px; align-items: center; background: #010409; padding: 10px; border-radius: 6px; border: 1px solid #30363d;';
         
-        row.innerHTML = `
-          <input type="text" value="${cleanName}" class="t-title" placeholder="Track Title" style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px; border-radius: 4px; font-size: 0.85rem;">
-          <input type="number" value="500" class="t-price" title="Price (₦)" style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px; border-radius: 4px; font-size: 0.85rem;">
-          <input type="text" class="t-contributors" placeholder="Prod / Features" style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px; border-radius: 4px; font-size: 0.85rem;">
-          <span style="font-size: 0.75rem; color: #8b949e; white-space: nowrap;">${(file.size / (1024*1024)).toFixed(1)} MB</span>
+        const trackCard = document.createElement('div');
+        trackCard.className = 'track-card';
+        
+        trackCard.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #21262d; padding-bottom: 6px;">
+            <strong style="color: #58a6ff; font-size: 0.9rem;">Track #${index + 1}: ${file.name}</strong>
+            <span style="font-size: 0.75rem; color: #8b949e;">${(file.size / (1024*1024)).toFixed(1)} MB</span>
+          </div>
+          
+          <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-bottom: 8px;">
+            <div>
+              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Track Title</label>
+              <input type="text" value="${cleanName}" class="t-title" style="width: 100%;">
+            </div>
+            <div>
+              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Price (₦)</label>
+              <input type="number" value="500" class="t-price" style="width: 100%;">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div>
+              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Contributors / Producers / Features</label>
+              <input type="text" class="t-contributors" placeholder="e.g., Prod. by X, ft. Y" style="width: 100%;">
+            </div>
+            <div>
+              <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">ISRC / Tracking Code (Optional)</label>
+              <input type="text" class="t-isrc" placeholder="e.g., QM-XXX-26-00001" style="width: 100%;">
+            </div>
+          </div>
         `;
-        container.appendChild(row);
+        
+        container.appendChild(trackCard);
       });
 
       document.getElementById('build-release-btn').disabled = false;
-      logMessage(`📁 Loaded ${selectedUnifiedFiles.length} track(s) into queue.`);
+      logMessage(`📁 Created dedicated metadata cards for ${selectedUnifiedFiles.length} track(s).`);
     }
 
     // --- PROCESS UNIFIED RELEASE ---
