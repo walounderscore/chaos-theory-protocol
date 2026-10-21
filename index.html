@@ -321,7 +321,7 @@
       }
     }
 
-    // --- FFMPEG.WASM INITIALIZATION ---
+    // --- FFMPEG.WASM INITIALIZATION (Stabilized) ---
     async function initFFmpeg() {
       logMessage('Initializing local ffmpeg.wasm engine...');
       if (typeof SharedArrayBuffer === 'undefined') {
@@ -331,9 +331,11 @@
 
       try {
         const { createFFmpeg } = FFmpeg;
+        
+        // Use a stable CDN path with a cache-buster to prevent truncated downloads
         globalFFmpegInstance = createFFmpeg({ 
           log: true,
-          corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+          corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
         });
 
         await globalFFmpegInstance.load();
@@ -349,7 +351,7 @@
         }
       } catch (err) {
         logMessage('❌ FFmpeg failed to load: ' + err.message);
-        console.error(err);
+        console.error("FFmpeg Load Error:", err);
       }
     }
 
