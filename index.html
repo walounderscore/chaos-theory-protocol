@@ -446,7 +446,7 @@
         const playlistTextDecoder = new TextDecoder('utf-8');
         let rawM3u8Content = playlistTextDecoder.decode(globalFFmpegInstance.FS('readFile', 'playlist.m3u8'));
         
-       // 3. Create Self-Contained Base64 Data URI Manifest (Bypasses all network requests & redirects)
+      // 3. Create Self-Contained Base64 Data URI Manifest
         let cloudM3u8Content = rawM3u8Content;
         for (const [segmentName, fileName] of Object.entries(segmentMap)) {
           const segData = globalFFmpegInstance.FS('readFile', segmentName);
@@ -461,6 +461,16 @@
           const dataUri = `data:video/mp2t;base64,${base64Segment}`;
           cloudM3u8Content = cloudM3u8Content.split(segmentName).join(dataUri);
         }
+
+        // Upload the self-contained cloud manifest to Drive vault
+        logMessage('Uploading self-contained cloud manifest to Drive vault...');
+        const textEncoder = new TextEncoder();
+        const playlistFileId = await uploadFileToDrive('playlist.m3u8', textEncoder.encode(cloudM3u8Content), 'application/x-mpegURL');
+
+        logMessage(`🎉 Processing complete! Cloud Playlist ID: ${playlistFileId}`);
+
+        // Generate clean embed code
+        generateEmbedUI(playlistFileId);
 
         // Upload the cloud-linked playlist to Drive vault
         logMessage('Uploading cloud manifest to Drive vault...');
