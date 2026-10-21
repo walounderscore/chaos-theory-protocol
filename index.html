@@ -20,11 +20,12 @@
   <style>
     body { font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 2rem; max-width: 850px; margin: auto; }
     .card { border: 1px solid #30363d; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; background: #161b22; }
-    .track-card { border: 1px solid #30363d; border-radius: 6px; padding: 1rem; margin-bottom: 10px; background: #010409; transition: border-color 0.2s ease, opacity 0.2s ease; cursor: grab; }
-    .track-card:active { cursor: grabbing; }
+    .track-card { border: 1px solid #30363d; border-radius: 6px; padding: 1rem; margin-bottom: 10px; background: #010409; transition: border-color 0.2s ease, opacity 0.2s ease; }
     .track-card.dragging { opacity: 0.4; border: 1px dashed #58a6ff; }
     .track-card.collapsed .track-body { display: none; }
     .track-card-header { display: flex; justify-content: space-between; align-items: center; }
+    .drag-handle { cursor: grab; font-size: 1.1rem; color: #8b949e; padding: 2px 6px; user-select: none; }
+    .drag-handle:active { cursor: grabbing; color: #58a6ff; }
     .locked { opacity: 0.4; pointer-events: none; }
     button { background: #238636; color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }
     button:hover { background: #2ea043; }
@@ -100,7 +101,7 @@
 
         <div style="display: flex; gap: 10px; align-items: center; margin-top: 10px;">
           <button type="button" class="icon-btn" onclick="applyGlobalArtistToAll()">📋 Apply Album Artist to All Tracks</button>
-          <span style="font-size: 0.75rem; color: #8b949e;">Auto-populates main artist slots.</span>
+          <span style="font-size: 0.75rem; color: #8b949e;">Auto-populates main artist slots across all tracks.</span>
         </div>
       </div>
 
@@ -115,10 +116,10 @@
         <input type="file" id="batch-audio-files" accept="audio/*" multiple onchange="handleUnifiedFileSelect(this)" style="margin: 5px 0;" disabled>
       </div>
 
-      <!-- Dynamic Drag-and-Drop Track Queue Container -->
+      <!-- Dynamic Track Queue Container -->
       <div style="margin-bottom: 15px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-          <label style="font-weight: bold; font-size: 0.85rem;">Track Breakdown & Ordering (Drag cards to reorder):</label>
+          <label style="font-weight: bold; font-size: 0.85rem;">Track Breakdown & Ordering (Use ⋮⋮ to drag or edit # directly):</label>
           <button type="button" class="icon-btn" onclick="collapseAllCards()">↕️ Toggle All Collapse</button>
         </div>
         <div id="track-queue-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 480px; overflow-y: auto;">
@@ -376,10 +377,10 @@
     }
 
     // --- CARD COLLAPSE & EXPAND ---
-    function toggleCardCollapse(headerElement) {
-      const card = headerElement.closest('.track-card');
+    function toggleCardCollapse(cardHeader) {
+      const card = cardHeader.closest('.track-card');
       card.classList.toggle('collapsed');
-      const arrow = headerElement.querySelector('.collapse-arrow');
+      const arrow = cardHeader.querySelector('.collapse-arrow');
       if (arrow) arrow.innerText = card.classList.contains('collapsed') ? '▶' : '▼';
     }
 
@@ -394,20 +395,44 @@
       });
     }
 
-    // --- RE-INDEX TRACK NUMBERS AFTER DRAG OR DROP ---
+    // --- RE-INDEX TRACK NUMBERS TO DOM ORDER ---
     function reindexTracks() {
       const cards = document.querySelectorAll('.track-card');
       cards.forEach((card, idx) => {
         const numInput = card.querySelector('.t-num');
-        if (numInput) numInput.value = idx + 1;
+        if (numInput && document.activeElement !== numInput) {
+          numInput.value = idx + 1;
+        }
       });
-      logMessage('🔢 Track sequence updated.');
     }
 
-    // --- HTML5 CLICK & DRAG REORDERING LISTENERS ---
+    // --- SORT CARDS WHEN USER EDITS TRACK NUMBER DIRECTLY ---
+    function handleTrackNumChange(input) {
+      const card = input.closest('.track-card');
+      const container = document.getElementById('track-queue-container');
+      const targetNum = parseInt(input.value) || 1;
+      const cards = Array.from(container.querySelectorAll('.track-card'));
+      
+      cards.splice(cards.indexOf(card), 1);
+      const insertIndex = Math.max(0, Math.min(targetNum - 1, cards.length));
+      cards.splice(insertIndex, 0, card);
+
+      cards.forEach((c) => container.appendChild(c));
+      reindexTracks();
+      logMessage(`🔢 Moved track to position #${targetNum}`);
+    }
+
+    // --- HTML5 DRAG VIA DEDICATED ⋮⋮ HANDLE ---
     let draggedCard = null;
 
     function attachDragAndDropListeners(card) {
+      const handle = card.querySelector('.drag-handle');
+      if (!handle) return;
+
+      handle.addEventListener('mousedown', () => {
+        card.setAttribute('draggable', 'true');
+      });
+
       card.addEventListener('dragstart', (e) => {
         draggedCard = card;
         card.classList.add('dragging');
@@ -416,8 +441,10 @@
 
       card.addEventListener('dragend', () => {
         card.classList.remove('dragging');
+        card.removeAttribute('draggable');
         draggedCard = null;
         reindexTracks();
+        logMessage('🔢 Track sequence updated via drag.');
       });
 
       card.addEventListener('dragover', (e) => {
@@ -480,7 +507,7 @@
 
       const allCards = document.querySelectorAll('.track-card');
       allCards.forEach((card, idx) => {
-        if (idx === 0) return; // Skip Track 1
+        if (idx === 0) return;
         const listContainer = card.querySelector(`[id^="contributors-list-"]`);
         if (listContainer) {
           listContainer.innerHTML = '';
@@ -496,7 +523,7 @@
         }
       });
 
-      logMessage('✨ Cloned Track 1 contributors to all other tracks!');
+      logMessage('✨ Cloned Track 1 contributors across all other tracks!');
     }
 
     // --- COMPACT CONTRIBUTOR ROW BUILDER ---
@@ -557,7 +584,6 @@
             const artistInput = trackCard.querySelector('.c-name');
             if (artistInput) artistInput.value = tags.artist;
             
-            // Set global artist if empty
             const globalArtistInput = document.getElementById('global-album-artist');
             if (globalArtistInput && !globalArtistInput.value) globalArtistInput.value = tags.artist;
           }
@@ -569,8 +595,6 @@
             const captionInput = trackCard.querySelector('.t-caption');
             if (captionInput) captionInput.value = tags.lyrics.lyrics;
           }
-
-          // Extract Album Title if present
           if (tags.album) {
             const albumTitleInput = document.getElementById('builder-release-title');
             if (albumTitleInput && !albumTitleInput.value) albumTitleInput.value = tags.album;
@@ -616,18 +640,18 @@
         
         const trackCard = document.createElement('div');
         trackCard.className = 'track-card';
-        trackCard.draggable = true;
         trackCard.dataset.index = index;
         
         trackCard.innerHTML = `
-          <div class="track-card-header" onclick="toggleCardCollapse(this)">
+          <div class="track-card-header">
             <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="collapse-arrow" style="font-size: 0.75rem; color: #58a6ff;">▼</span>
+              <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+              <span class="collapse-arrow" onclick="toggleCardCollapse(this.parentElement)" style="font-size: 0.75rem; color: #58a6ff; cursor: pointer;">▼</span>
               <span style="background: #21262d; color: #58a6ff; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">#</span>
-              <input type="number" value="${trackNum}" class="t-num" style="width: 50px; text-align: center; font-weight: bold; font-size: 0.85rem;" onclick="event.stopPropagation()" onchange="reindexTracks()">
+              <input type="number" value="${trackNum}" class="t-num" style="width: 50px; text-align: center; font-weight: bold; font-size: 0.85rem;" onchange="handleTrackNumChange(this)">
               <strong style="color: #c9d1d9; font-size: 0.9rem;">${file.name}</strong>
             </div>
-            <div style="display: flex; gap: 8px; align-items: center;" onclick="event.stopPropagation()">
+            <div style="display: flex; gap: 8px; align-items: center;">
               ${index === 0 ? '<button type="button" class="icon-btn" onclick="copyTrack1CreditsToAll()" title="Copy Track 1 Credits to All">👯 Clone Credits to All</button>' : ''}
               <span style="font-size: 0.75rem; color: #8b949e;">${(file.size / (1024*1024)).toFixed(1)} MB</span>
               <button type="button" class="subtle-btn" onclick="this.closest('.track-card').remove(); reindexTracks();" title="Remove Track">✕</button>
@@ -689,7 +713,6 @@
         attachDragAndDropListeners(trackCard);
         addContributorToTrack(index, "Main Artist", defaultGlobalArtist);
         
-        // Asynchronously extract local ID3 tags if available
         parseLocalAudioMetadata(file, trackCard, index);
       });
 
