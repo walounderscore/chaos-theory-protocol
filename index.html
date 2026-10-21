@@ -18,7 +18,7 @@
   <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
 
   <style>
-    body { font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 2rem; max-width: 850px; margin: auto; }
+    body { font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 2rem; max-width: 880px; margin: auto; }
     .card { border: 1px solid #30363d; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; background: #161b22; }
     .track-card { border: 1px solid #30363d; border-radius: 6px; padding: 1rem; margin-bottom: 10px; background: #010409; transition: border-color 0.2s ease, opacity 0.2s ease; }
     .track-card.dragging { opacity: 0.4; border: 1px dashed #58a6ff; }
@@ -40,6 +40,7 @@
     .subtle-btn:hover { color: #f85149; background: #21262d; }
     .icon-btn { background: #21262d; border: 1px solid #30363d; color: #8b949e; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
     .icon-btn:hover { background: #30363d; color: #c9d1d9; }
+    .thumb-preview { width: 42px; height: 42px; border-radius: 4px; object-fit: cover; border: 1px solid #30363d; background: #161b22; }
   </style>
 </head>
 <body>
@@ -49,7 +50,7 @@
   <!-- Step 1: Commitment Gate -->
   <div id="gate-card" class="card">
     <h3>1. Unlock Protocol Toolkit</h3>
-    <p>A commitment fee of <b>₦100</b> is required to initialize local WebAssembly encryption & Drive tools. (Whitelisted or returning users bypass payment upon email check).</p>
+    <p>A commitment fee of <b>₦100</b> is required to initialize local WebAssembly encryption & Drive tools.</p>
     <button onclick="checkAccessAndProceed()">Verify Email & Unlock</button>
   </div>
 
@@ -79,8 +80,8 @@
             <input type="text" id="builder-release-title" placeholder="e.g., Chaos Theory LP" style="width: 100%;">
           </div>
           <div>
-            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Release Date:</label>
-            <input type="date" id="builder-release-date" style="width: 100%;">
+            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Release Date (DD/MM/YYYY):</label>
+            <input type="text" id="builder-release-date" placeholder="DD/MM/YYYY" style="width: 100%;">
           </div>
           <div>
             <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Global Genre:</label>
@@ -88,20 +89,24 @@
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px; align-items: center;">
+        <div style="display: grid; grid-template-columns: 1.5fr 1.5fr 1fr; gap: 10px; align-items: center; margin-bottom: 10px;">
           <div>
-            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Global Album Artist / Primary Creator:</label>
+            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Album Artist / Primary Creator:</label>
             <input type="text" id="global-album-artist" placeholder="e.g., walo, the underscore." style="width: 100%;">
           </div>
           <div>
-            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Cover Art Asset (Image / GIF / Video):</label>
+            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Album Cover / Visual Artist Credit:</label>
+            <input type="text" id="global-cover-artist" placeholder="e.g., Art by X" style="width: 100%;">
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Album Cover Asset:</label>
             <input type="file" id="album-cover-file" accept="image/*,video/*" style="font-size: 0.75rem; width: 100%;">
           </div>
         </div>
 
-        <div style="display: flex; gap: 10px; align-items: center; margin-top: 10px;">
+        <div style="display: flex; gap: 10px; align-items: center; margin-top: 5px;">
           <button type="button" class="icon-btn" onclick="applyGlobalArtistToAll()">📋 Apply Album Artist to All Tracks</button>
-          <span style="font-size: 0.75rem; color: #8b949e;">Auto-populates main artist slots across all tracks.</span>
+          <span style="font-size: 0.75rem; color: #8b949e;">Auto-populates main artist slots.</span>
         </div>
       </div>
 
@@ -122,7 +127,7 @@
           <label style="font-weight: bold; font-size: 0.85rem;">Track Breakdown & Ordering (Use ⋮⋮ to drag or edit # directly):</label>
           <button type="button" class="icon-btn" onclick="collapseAllCards()">↕️ Toggle All Collapse</button>
         </div>
-        <div id="track-queue-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 480px; overflow-y: auto;">
+        <div id="track-queue-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 520px; overflow-y: auto;">
           <div style="color: #8b949e; font-size: 0.85rem; font-style: italic;">No audio selected yet. Choose file(s) above to build track rows.</div>
         </div>
       </div>
@@ -197,10 +202,19 @@
       }
     }
 
+    // Format JS Date object into DD/MM/YYYY
+    function getFormattedDateDDMMYYYY() {
+      const d = new Date();
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+
     window.addEventListener('DOMContentLoaded', async () => {
       const dateInput = document.getElementById('builder-release-date');
       if (dateInput) {
-        dateInput.value = new Date().toISOString().split('T')[0];
+        dateInput.value = getFormattedDateDDMMYYYY();
       }
 
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
@@ -473,7 +487,7 @@
       }, { offset: Number.NEGATIVE_INFINITY }).element;
     }
 
-    // --- GLOBAL ARTIST & CREDIT COPY ACTIONS ---
+    // --- GLOBAL ARTIST & DYNAMIC TRACK 1 CREDIT PROPAGATION ---
     function applyGlobalArtistToAll() {
       const globalArtist = document.getElementById('global-album-artist').value.trim();
       if (!globalArtist) {
@@ -488,30 +502,35 @@
       logMessage(`📋 Applied global artist "${globalArtist}" across all tracks.`);
     }
 
-    function copyTrack1CreditsToAll() {
-      const firstCard = document.querySelector('.track-card');
-      if (!firstCard) return;
-
-      const firstTrackContributors = [];
-      firstCard.querySelectorAll('.contributor-row').forEach(row => {
-        const role = row.querySelector('.c-role').value;
-        const customRole = row.querySelector('.c-custom-role').value;
-        const name = row.querySelector('.c-name').value;
-        firstTrackContributors.push({ role, customRole, name });
-      });
-
-      if (firstTrackContributors.length === 0) {
-        alert('Track 1 has no contributors to copy.');
+    // Dynamic cloning from WHICHEVER track currently occupies position #1 in DOM
+    function copyCurrentTrack1CreditsToAll() {
+      const container = document.getElementById('track-queue-container');
+      const currentTrack1Card = container.querySelector('.track-card');
+      if (!currentTrack1Card) {
+        alert('No tracks available in the queue.');
         return;
       }
 
-      const allCards = document.querySelectorAll('.track-card');
+      const track1Credits = [];
+      currentTrack1Card.querySelectorAll('.contributor-row').forEach(row => {
+        const role = row.querySelector('.c-role').value;
+        const customRole = row.querySelector('.c-custom-role').value;
+        const name = row.querySelector('.c-name').value;
+        track1Credits.push({ role, customRole, name });
+      });
+
+      if (track1Credits.length === 0) {
+        alert('Current Track 1 has no contributors to clone.');
+        return;
+      }
+
+      const allCards = container.querySelectorAll('.track-card');
       allCards.forEach((card, idx) => {
-        if (idx === 0) return;
+        if (idx === 0) return; // Skip Track 1
         const listContainer = card.querySelector(`[id^="contributors-list-"]`);
         if (listContainer) {
           listContainer.innerHTML = '';
-          firstTrackContributors.forEach(c => {
+          track1Credits.forEach(c => {
             const row = createContributorRow(c.role, c.name);
             if (c.role === 'Other') {
               const customInput = row.querySelector('.c-custom-role');
@@ -523,7 +542,7 @@
         }
       });
 
-      logMessage('✨ Cloned Track 1 contributors across all other tracks!');
+      logMessage('✨ Cloned current Track 1 credits across all remaining tracks!');
     }
 
     // --- COMPACT CONTRIBUTOR ROW BUILDER ---
@@ -568,7 +587,7 @@
       }
     }
 
-    // --- LOCAL ID3 METADATA PARSER ---
+    // --- LOCAL ID3 METADATA PARSER WITH THUMBNAIL PREVIEW ---
     function parseLocalAudioMetadata(file, trackCard, trackIndex) {
       if (typeof jsmediatags === 'undefined') return;
 
@@ -598,6 +617,22 @@
           if (tags.album) {
             const albumTitleInput = document.getElementById('builder-release-title');
             if (albumTitleInput && !albumTitleInput.value) albumTitleInput.value = tags.album;
+          }
+
+          // Embedded Cover Art & Thumbnail Previews
+          if (tags.picture) {
+            const { data, format } = tags.picture;
+            let base64String = "";
+            for (let i = 0; i < data.length; i++) {
+              base64String += String.fromCharCode(data[i]);
+            }
+            const thumbUrl = `data:${format};base64,${window.btoa(base64String)}`;
+            
+            const thumbImg = trackCard.querySelector('.t-thumb-preview');
+            if (thumbImg) {
+              thumbImg.src = thumbUrl;
+              thumbImg.style.display = 'block';
+            }
           }
 
           logMessage(`🏷️ Parsed ID3 tags for: ${file.name}`);
@@ -649,10 +684,10 @@
               <span class="collapse-arrow" onclick="toggleCardCollapse(this.parentElement)" style="font-size: 0.75rem; color: #58a6ff; cursor: pointer;">▼</span>
               <span style="background: #21262d; color: #58a6ff; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">#</span>
               <input type="number" value="${trackNum}" class="t-num" style="width: 50px; text-align: center; font-weight: bold; font-size: 0.85rem;" onchange="handleTrackNumChange(this)">
+              <img src="" class="t-thumb-preview thumb-preview" style="display: none;" title="Local embedded cover art thumbnail">
               <strong style="color: #c9d1d9; font-size: 0.9rem;">${file.name}</strong>
             </div>
             <div style="display: flex; gap: 8px; align-items: center;">
-              ${index === 0 ? '<button type="button" class="icon-btn" onclick="copyTrack1CreditsToAll()" title="Copy Track 1 Credits to All">👯 Clone Credits to All</button>' : ''}
               <span style="font-size: 0.75rem; color: #8b949e;">${(file.size / (1024*1024)).toFixed(1)} MB</span>
               <button type="button" class="subtle-btn" onclick="this.closest('.track-card').remove(); reindexTracks();" title="Remove Track">✕</button>
             </div>
@@ -678,16 +713,22 @@
               </div>
             </div>
 
-            <!-- Per-Track Visual Asset & Aspect Ratio -->
+            <!-- Per-Track Visual Asset & Aspect Ratio / Display Rules -->
             <div style="margin-bottom: 10px; background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
-              <label style="font-size: 0.75rem; font-weight: bold; color: #58a6ff; display: block; margin-bottom: 5px;">🎬 Track Visual / Aspect Ratio (Video.js background)</label>
-              <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">
-                <input type="file" class="t-visual-file" accept="image/*,video/*" style="font-size: 0.7rem;">
+              <label style="font-size: 0.75rem; font-weight: bold; color: #58a6ff; display: block; margin-bottom: 5px;">🎬 Visual Asset & Display Mode (Video.js background)</label>
+              <div style="display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 8px; align-items: center;">
+                <input type="file" class="t-visual-file" accept="image/*,video/*" multiple style="font-size: 0.7rem;" title="Select one or multiple visuals for slideshow/loops">
                 <select class="t-aspect-ratio" style="font-size: 0.75rem;">
                   <option value="16:9">Landscape (16:9)</option>
                   <option value="1:1" selected>Square (1:1)</option>
                   <option value="9:16">Portrait (9:16)</option>
                   <option value="4:5">Vertical (4:5)</option>
+                </select>
+                <select class="t-display-mode" style="font-size: 0.75rem;">
+                  <option value="full_track">Full Track Display</option>
+                  <option value="loop_video">Loop Videos / GIFs</option>
+                  <option value="slideshow_5s">Slideshow (5s Interval)</option>
+                  <option value="slideshow_10s">Slideshow (10s Interval)</option>
                 </select>
               </div>
             </div>
@@ -702,7 +743,10 @@
             <div style="background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                 <label style="font-size: 0.75rem; font-weight: bold; color: #c9d1d9;">Contributors & Credits</label>
-                <button type="button" class="icon-btn" onclick="addContributorToTrack(${index})">➕ Add Contributor</button>
+                <div style="display: flex; gap: 6px;">
+                  <button type="button" class="icon-btn" onclick="addContributorToTrack(${index})">➕ Add Contributor</button>
+                  <button type="button" class="icon-btn" onclick="copyCurrentTrack1CreditsToAll()" title="Copy credits from whichever track is currently #1">👯 Clone Track 1 Credits to All</button>
+                </div>
               </div>
               <div id="contributors-list-${index}"></div>
             </div>
@@ -723,9 +767,10 @@
     // --- PROCESS UNIFIED RELEASE PIPELINE ---
     async function processUnifiedRelease() {
       const releaseTitle = document.getElementById('builder-release-title').value.trim();
-      const releaseDate = document.getElementById('builder-release-date').value;
+      const releaseDate = document.getElementById('builder-release-date').value.trim();
       const globalGenre = document.getElementById('builder-genre').value.trim();
       const globalArtist = document.getElementById('global-album-artist').value.trim();
+      const globalCoverArtist = document.getElementById('global-cover-artist').value.trim();
       const bundlePrice = parseFloat(document.getElementById('builder-bundle-price').value) || 4500;
       const cards = document.querySelectorAll('.track-card');
 
@@ -739,7 +784,8 @@
       const manifest = {
         title: releaseTitle,
         artist: globalArtist || "Various Artists",
-        date: releaseDate,
+        coverArtist: globalCoverArtist,
+        date: releaseDate || getFormattedDateDDMMYYYY(),
         genre: globalGenre,
         bundlePrice: cards.length > 1 ? bundlePrice : null,
         tracks: []
@@ -754,6 +800,7 @@
         const isrc = card.querySelector('.t-isrc').value.trim();
         const caption = card.querySelector('.t-caption').value.trim();
         const aspectRatio = card.querySelector('.t-aspect-ratio').value;
+        const displayMode = card.querySelector('.t-display-mode').value;
 
         const contributorRows = card.querySelectorAll('.contributor-row');
         const contributors = [];
@@ -776,6 +823,7 @@
           isrc: isrc,
           caption: caption,
           aspectRatio: aspectRatio,
+          displayMode: displayMode,
           contributors: contributors
         });
       });
