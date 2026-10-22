@@ -1499,6 +1499,9 @@
     async function generateEmbedUI(manifest) {
       currentManifest = manifest;
 
+      // Define initialArt correctly right at the top
+      const initialArt = manifest.artistImgData || manifest.coverArtData || manifest.tracks[0]?.thumbData || '';
+      
       let embedContainer = document.getElementById('sovereign-player-card-target');
       if (!embedContainer) {
         embedContainer = document.getElementById('embed-output-container') || createEmbedContainer();
