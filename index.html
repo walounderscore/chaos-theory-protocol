@@ -202,10 +202,13 @@
 
     <!-- Step 5: Distribution Embed Snippet -->
     <div class="card" id="embed-card">
-      <h3>5. Release Embed Code</h3>
-      <p>Copy this HTML snippet to embed your sovereign audio release anywhere on the web.</p>
+      <h3>5. Release Embed & Direct Stream Code</h3>
+      <p>Copy the HTML iframe snippet to embed your sovereign player on external sites, or grab the direct stream link.</p>
       <textarea id="embed-output-box" class="embed-box" readonly placeholder="Awaiting audio processing and Drive sync to generate embed code..."></textarea>
-      <button class="copy-btn" onclick="copyEmbedCode()">📋 Copy Embed Code</button>
+      <div style="display: flex; gap: 10px; margin-top: 10px;">
+        <button class="copy-btn" onclick="copyEmbedCode()">📋 Copy Embed Code</button>
+        <button class="copy-btn" style="background: #238636;" onclick="copyPlayerDirectLink()">🔗 Copy Player Link</button>
+      </div>
     </div>
 
   </div>
@@ -1275,6 +1278,75 @@
       }
     }
 
+    function copyPlayerDirectLink() {
+      const activeTrack = currentManifest?.tracks[currentTrackIndex];
+      if (!activeTrack || !activeTrack.hlsStreamId) {
+        alert('No active player stream found. Please process a release first.');
+        return;
+      }
+      const directUrl = `https://drive.google.com/uc?id=${activeTrack.hlsStreamId}`;
+      navigator.clipboard.writeText(directUrl);
+      alert('Direct player HLS link copied to clipboard!');
+    }
+
+    function openShareOptionsModal(manifest) {
+      let modal = document.getElementById('chaos-share-modal');
+      if (modal) modal.remove();
+
+      modal = document.createElement('div');
+      modal.id = 'chaos-share-modal';
+      modal.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8);
+        z-index: 999999; display: flex; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;
+      `;
+
+      const activeTrack = manifest.tracks[currentTrackIndex];
+      const playerUrl = activeTrack?.hlsStreamId ? `https://drive.google.com/uc?id=${activeTrack.hlsStreamId}` : window.location.href;
+      const siteUrl = window.location.href;
+
+      modal.innerHTML = `
+        <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; max-width: 380px; width: 100%; color: #c9d1d9; font-family: system-ui, sans-serif;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 14px;">
+            <h3 style="margin: 0; font-size: 16px; color: #f0f6fc;">🔗 Share Release</h3>
+            <button id="close-share-modal" style="background: transparent; color: #8b949e; border: none; font-size: 18px; cursor: pointer;">✕</button>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button id="share-opt-player" style="background: #21262d; border: 1px solid #30363d; color: #f0f6fc; padding: 12px; border-radius: 8px; text-align: left; cursor: pointer;">
+              <strong style="display: block; font-size: 13px;">▶️ Share Player Stream</strong>
+              <span style="font-size: 11px; color: #8b949e;">Direct link to active track widget</span>
+            </button>
+            <button id="share-opt-site" style="background: #21262d; border: 1px solid #30363d; color: #f0f6fc; padding: 12px; border-radius: 8px; text-align: left; cursor: pointer;">
+              <strong style="display: block; font-size: 13px;">🌐 Share Website Domain</strong>
+              <span style="font-size: 11px; color: #8b949e;">Link to host page (${window.location.hostname})</span>
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      document.getElementById('close-share-modal').onclick = () => modal.remove();
+
+      document.getElementById('share-opt-player').onclick = () => {
+        dispatchShare(`Stream "${activeTrack?.title || manifest.title}"`, playerUrl);
+        modal.remove();
+      };
+
+      document.getElementById('share-opt-site').onclick = () => {
+        dispatchShare(`Listen to "${manifest.title}" by ${manifest.artist}`, siteUrl);
+        modal.remove();
+      };
+    }
+
+    function dispatchShare(text, url) {
+      if (navigator.share) {
+        navigator.share({ title: currentManifest?.title || 'Chaos Theory', text, url }).catch(() => {});
+      } else {
+        navigator.clipboard.writeText(url);
+        alert('Link copied to clipboard!');
+      }
+    }
+    
     // --- HELPER: PACKAGE INDIVIDUAL TRACK SEGMENTS INTO BASE64 WIDGET ---
     async function packageSingleTrackWidget(trackIndex, playlistName, trackTitle) {
       const files = globalFFmpegInstance.FS('readdir', '/');
@@ -1668,7 +1740,8 @@
       const btnPrev = document.getElementById('btn-prev-track');
       const btnNext = document.getElementById('btn-next-track');
       const btnMobile = document.getElementById('btn-mobile-canvas');
-      const btnCheckout = document.getElementById('btn-checkout-license');
+      const btnShare = document.getElementById('btn-mobile-canvas');
+      const btnCheckout = document.getElementById('copy-btn');
 
       btnShuffle.onclick = () => {
         isShuffleActive = !isShuffleActive;
@@ -1708,6 +1781,9 @@
       btnMobile.onclick = () => {
         openMobilePortraitModal(manifest);
       };
+
+      btnShare.onclick = () => {
+        openShareOptionsModal(manifest);
 
       btnCheckout.onclick = () => {
         openPaystackCheckoutModal(manifest);
