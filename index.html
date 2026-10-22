@@ -1803,8 +1803,8 @@
         lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
       }
 
-      // Stream directly into local video.js player using the cached Blob map
-      if (window.videojs && localTrackBlobMap[idx]) {
+      // Safeguarded Stream Preview Loading
+      if (window.videojs && localTrackBlobMap && localTrackBlobMap[idx]) {
         try {
           let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
           
@@ -1817,6 +1817,8 @@
         } catch (e) {
           console.log("Local stream preview loading error:", e);
         }
+      } else {
+        logMessage(`⚠️ Stream blob not found for "${track.title}". Please process audio stems first.`);
       }
 
       populateStep5EmbedBox(currentManifest);
