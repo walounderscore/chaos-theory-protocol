@@ -1285,9 +1285,9 @@
         alert('No active player stream found. Please process a release first.');
         return;
       }
-      const directUrl = `https://drive.google.com/uc?id=${activeTrack.hlsStreamId}`;
+      const directUrl = `${APPS_SCRIPT_URL}?fileId=${activeTrack.hlsStreamId}`;
       navigator.clipboard.writeText(directUrl);
-      alert(`Direct HLS player link for "${activeTrack.title}" copied to clipboard!`);
+      alert(`Direct player script link for "${activeTrack.title}" copied to clipboard!`);
     }
 
     function openShareOptionsModal(manifest) {
@@ -1786,7 +1786,12 @@
       const activeTrack = manifest.tracks[currentTrackIndex] || manifest.tracks[0];
       
       if (embedBox) {
-        const embedHtml = `<iframe src="https://drive.google.com/uc?id=${activeTrack?.hlsStreamId || ''}" width="100%" height="680" style="border:none;border-radius:12px;background:#0d1117;" allow="encrypted-media"></iframe>`;
+        // Option A: If your Apps Script handles routing via ?fileId=...
+        const scriptViewerUrl = `${APPS_SCRIPT_URL}?fileId=${activeTrack?.hlsStreamId || ''}`;
+        
+        // Option B: Or if you prefer direct script-rendered container embedding:
+        const embedHtml = `<iframe src="${scriptViewerUrl}" width="100%" height="680" style="border:none;border-radius:12px;background:#0d1117;" allow="encrypted-media"></iframe>`;
+        
         embedBox.value = embedHtml;
       }
     }
