@@ -679,7 +679,7 @@
     }
 
     // --- 2. BACKUP LOCAL WASM STREAM PREVIEW FALLBACK ---
-    function playLocalWasmStream() {
+    async function playLocalWasmStream() {
       if (!player) {
         player = videojs('chaos-player');
       }
