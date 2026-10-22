@@ -2029,22 +2029,25 @@
         lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
       }
 
-      // 🚀 PLAY LOCALLY FROM BROWSER CONTAINER IF PROCESSED
-      if (window.videojs && localTrackBlobMap && localTrackBlobMap[idx]) {
+      // 📂 Play directly from the local file selected on your machine
+      if (window.videojs && selectedUnifiedFiles && selectedUnifiedFiles[idx]) {
         try {
           let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
           
-          localPlayer.src({ src: localTrackBlobMap[idx], type: 'application/x-mpegURL' });
+          const localFile = selectedUnifiedFiles[idx];
+          const localFileUrl = URL.createObjectURL(localFile);
+          
+          localPlayer.src({ src: localFileUrl, type: localFile.type || 'audio/mp4' });
           if (playerPoster) localPlayer.poster(playerPoster);
 
           localPlayer.ready(() => {
             localPlayer.play().catch(() => {});
           });
         } catch (e) {
-          console.log("Local stream preview loading error:", e);
+          console.log("Local file playback error:", e);
         }
       } else {
-        logMessage(`ℹ️ Metadata loaded for "${track.title}". Process audio stems to enable instant local playback.`);
+        logMessage(`ℹ️ Local file not found for "${track.title}". Please select your audio stems in Step 3.`);
       }
 
       populateStep5EmbedBox(currentManifest);
