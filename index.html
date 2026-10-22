@@ -1358,6 +1358,7 @@
       const playlistBase64 = btoa(unescape(encodeURIComponent(cloudM3u8Content)));
       const manifest = compileCurrentManifest();
       const trackData = manifest.tracks[trackIndex] || manifest.tracks[0];
+      const trackPoster = trackData?.thumbData || manifest.coverArtData || '';
 
       const standaloneHtmlContent = 
         "<!DOCTYPE html>\n" +
@@ -1372,26 +1373,29 @@
         "    body { font-family: system-ui, -apple-system, sans-serif; background: #0d1117; color: #c9d1d9; margin: 0; padding: 12px; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; }\n" +
         "    .dashboard { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 16px; width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }\n" +
         "    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 10px; }\n" +
-        "    .player-box { width: 100%; height: 220px; background: #000; border-radius: 6px; overflow: hidden; }\n" +
+        "    .player-box { width: 100%; height: 240px; background: #000; border-radius: 6px; overflow: hidden; position: relative; }\n" +
         "    .video-js { width: 100%; height: 100%; }\n" +
         "    .lyrics-box { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 11px; color: #8b949e; max-height: 100px; overflow-y: auto; white-space: pre-wrap; }\n" +
+        "    /* Mobile immersive overlay mode */\n" +
+        "    .dashboard.mobile-fullscreen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; max-width: none; border-radius: 0; z-index: 99999; padding: 24px; box-sizing: border-box; justify-content: space-between; }\n" +
+        "    .dashboard.mobile-fullscreen .player-box { height: 320px; }\n" +
         "  </style>\n" +
         "</head>\n" +
         "<body>\n" +
-        "  <div class=\"dashboard\">\n" +
+        "  <div id=\"main-dashboard\" class=\"dashboard\">\n" +
         "    <div class=\"header\">\n" +
         "      <div>\n" +
         "        <h3 style=\"margin: 0; font-size: 16px; color: #f0f6fc;\">" + trackTitle + "</h3>\n" +
         "        <p style=\"margin: 2px 0 0; font-size: 12px; color: #8b949e;\">" + manifest.artist + "</p>\n" +
         "      </div>\n" +
-        "      <button onclick=\"openMobileMode()\" style=\"background: #238636; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;\">📱 Mobile Mode</button>\n" +
+        "      <button onclick=\"toggleMobileMode()\" style=\"background: #238636; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;\">📱 Mobile Mode</button>\n" +
         "    </div>\n" +
         "    <div class=\"player-box\">\n" +
-        "      <video id=\"chaos-widget-player\" class=\"video-js vjs-default-skin vjs-big-play-centered\" controls autoplay preload=\"auto\" data-setup='{}'></video>\n" +
+        "      <video id=\"chaos-widget-player\" class=\"video-js vjs-default-skin vjs-big-play-centered\" controls preload=\"auto\" poster=\"" + trackPoster + "\" data-setup='{}'></video>\n" +
         "    </div>\n" +
         "    <div>\n" +
         "      <h4 style=\"margin: 0 0 4px 0; font-size: 12px; color: #f0f6fc;\">📝 Liner Notes & Lyrics</h4>\n" +
-        "      <div class=\"lyrics-box\">" + (trackData?.caption || 'All rights reserved.') + "</div>\n" +
+        "      <div class=\"lyrics-box\">" + (trackData?.caption || 'All rights reserved. © ' + manifest.artist) + "</div>\n" +
         "    </div>\n" +
         "  </div>\n" +
         "  <script>\n" +
@@ -1405,15 +1409,15 @@
         "    const blobUrl = URL.createObjectURL(blob);\n" +
         "    const player = videojs('chaos-widget-player');\n" +
         "    player.src({ src: blobUrl, type: 'application/x-mpegURL' });\n" +
-        "    player.play().catch(() => {});\n" +
+        "\n" +
+        "    function toggleMobileMode() {\n" +
+        "      const dash = document.getElementById('main-dashboard');\n" +
+        "      dash.classList.toggle('mobile-fullscreen');\n" +
+        "    }\n" +
         "\n" +
         "    player.on('ended', function() {\n" +
         "      window.parent.postMessage({ type: 'CHAOS_TRACK_ENDED', trackIndex: " + trackIndex + " }, '*');\n" +
         "    });\n" +
-        "\n" +
-        "    function openMobileMode() {\n" +
-        "      if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen().catch(() => {}); }\n" +
-        "    }\n" +
         "  <\/script>\n" +
         "</body>\n" +
         "</html>";
