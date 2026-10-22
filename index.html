@@ -1228,13 +1228,16 @@
           globalFFmpegInstance.FS('writeFile', inFileName, new Uint8Array(arrayBuffer));
           arrayBuffer = null; 
 
-          // 3. Run local HLS segmentation with -vn (dropping attached art)
+          // 3. Run local HLS segmentation with explicit audio mapping & standard 44.1kHz stereo resampling
           logMessage(`✂️ Running HLS segmentation...`);
           await globalFFmpegInstance.run(
             '-i', inFileName,
-            '-vn',
+            '-map', '0:a:0',      // Explicitly select ONLY the first audio stream
+            '-vn',                // Drop attached cover art/images
             '-c:a', 'aac',
             '-b:a', '192k',
+            '-ar', '44100',       // Force standard 44.1kHz sample rate
+            '-ac', '2',           // Force stereo
             '-hls_time', '6',
             '-hls_list_size', '0',
             '-hls_segment_filename', `segment_${i}_%03d.ts`,
