@@ -466,6 +466,14 @@
       reader.readAsText(file);
     }
 
+    // --- 2. BACKUP LOCAL WASM STREAM PREVIEW FALLBACK ---
+    function playLocalWasmStream() {
+      if (!player) {
+        player = videojs('chaos-player');
+      }
+      logMessage('▶️ Local WASM stream preview initialized.');
+    }
+
     async function initFFmpeg() {
       logMessage('Initializing local single-threaded ffmpeg.wasm engine...');
       try {
