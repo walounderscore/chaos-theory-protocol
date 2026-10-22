@@ -1438,7 +1438,6 @@
       }
       embedContainer.innerHTML = '';
 
-      // Clean borderless container wrapper to fit seamlessly inside Card 4
       const wrapper = document.createElement('div');
       wrapper.id = 'chaos-sovereign-dashboard';
       wrapper.style.cssText = `
@@ -1451,13 +1450,12 @@
       function updateGridColumns() {
         const leftCollapsed = document.getElementById('left-panel-content')?.style.display === 'none';
         const rightCollapsed = document.getElementById('right-panel-content')?.style.display === 'none';
-
         const leftWidth = leftCollapsed ? '42px' : '260px';
         const rightWidth = rightCollapsed ? '42px' : '300px';
         wrapper.style.gridTemplateColumns = `${leftWidth} 1fr ${rightWidth}`;
       }
 
-      // --- 1. HEADER & ACTION SUITE ---
+      // --- 1. HEADER ---
       const header = document.createElement('div');
       header.style.cssText = `grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 14px; flex-wrap: wrap; gap: 12px;`;
       header.innerHTML = `
@@ -1466,15 +1464,9 @@
           <p style="margin: 4px 0 0; font-size: 14px; color: #8b949e;">${manifest.artist || 'walo, the underscore.'} • ${manifest.date ? manifest.date.split('-')[0] : '2026'} (${manifest.genre || 'Sovereign Audio Vault'})</p>
         </div>
         <div style="display: flex; align-items: center; gap: 10px;">
-          <button id="btn-share-release" style="background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
-            🔗 Share
-          </button>
-          <button id="btn-mobile-canvas" style="background: #238636; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
-            📱 Mobile Mode
-          </button>
-          <button id="btn-checkout-license" style="background: #1f6feb; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
-            ⬇️ Download / License
-          </button>
+          <button id="btn-share-release" style="background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">🔗 Share</button>
+          <button id="btn-mobile-canvas" style="background: #238636; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">📱 Mobile Mode</button>
+          <button id="btn-checkout-license" style="background: #1f6feb; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">⬇️ Download / License</button>
         </div>
       `;
       wrapper.appendChild(header);
@@ -1492,7 +1484,6 @@
       const leftContent = document.createElement('div');
       leftContent.id = 'left-panel-content';
       leftContent.style.cssText = `display: flex; flex-direction: column; gap: 10px;`;
-
       const coverImgHtml = initialArt 
         ? `<img id="metadata-cover-art" src="${initialArt}" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 1px solid #30363d;" alt="Cover Art" />`
         : `<div id="metadata-cover-art" style="width: 100%; aspect-ratio: 1; background: #21262d; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #8b949e;">No Cover Art</div>`;
@@ -1519,7 +1510,7 @@
       };
       wrapper.appendChild(leftPanel);
 
-      // --- 3. CENTER PANEL: Stream Player ---
+      // --- 3. CENTER PANEL: Stream Player (DIRECT VIDEO.JS ELEMENT, NO IFRAME) ---
       const centerPanel = document.createElement('div');
       centerPanel.style.cssText = `display: flex; flex-direction: column; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; gap: 14px; position: relative;`;
       
@@ -1527,20 +1518,19 @@
       const nowPlayingTitle = document.createElement('div');
       nowPlayingTitle.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 8px;`;
       nowPlayingTitle.innerHTML = `
-        <h3 id="active-track-title" style="margin: 0; font-size: 15px; color: #f0f6fc;">Track 1: ${activeTrack?.title || 'Select Track'}</h3>
+        <h3 id="active-track-title" style="margin: 0; font-size: 15px; color: #f0f6fc;">${activeTrack?.title || 'Select Track'} — ${manifest.artist || 'walo, the underscore.'}</h3>
         <span id="active-track-num" style="font-size: 12px; color: #58a6ff; font-weight: 600;">${manifest.tracks.length > 0 ? '1 / ' + manifest.tracks.length : '0 / 0'}</span>
       `;
       centerPanel.appendChild(nowPlayingTitle);
 
-      const playerFrame = document.createElement('iframe');
-      playerFrame.id = 'sovereign-player-frame';
-      playerFrame.style.cssText = `width: 100%; height: 230px; border: none; border-radius: 6px; background: #000;`;
-      
-      // Fix: Direct Google Apps Script Endpoint URL (Prevents SAMEORIGIN iframe blocking)
-      if (activeTrack && activeTrack.hlsStreamId) {
-        playerFrame.src = `${APPS_SCRIPT_URL}?fileId=${activeTrack.hlsStreamId}`; //
-      }
-      centerPanel.appendChild(playerFrame);
+      const videoEl = document.createElement('video');
+      videoEl.id = 'sovereign-local-player';
+      videoEl.className = 'video-js vjs-default-skin vjs-big-play-centered';
+      videoEl.controls = true;
+      videoEl.preload = 'auto';
+      videoEl.style.cssText = 'width: 100%; height: 230px; border-radius: 6px; background: #000;';
+      if (initialArt) videoEl.poster = initialArt;
+      centerPanel.appendChild(videoEl);
 
       const controlBar = document.createElement('div');
       controlBar.style.cssText = `display: flex; justify-content: space-around; align-items: center; background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #21262d;`;
@@ -1578,7 +1568,6 @@
             padding: 8px 10px; border-radius: 6px; text-align: left; cursor: pointer; font-size: 12px;
             display: flex; align-items: center; gap: 8px; transition: background 0.2s;
           `;
-          
           const trackThumb = track.thumbData 
             ? `<img src="${track.thumbData}" style="width: 24px; height: 24px; border-radius: 3px; object-fit: cover;" />`
             : `<div style="width: 24px; height: 24px; background: #30363d; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600;">${idx + 1}</div>`;
@@ -1599,7 +1588,7 @@
       };
       wrapper.appendChild(rightPanel);
 
-      // --- 5. BASE PANEL: Lyrics & Notes ---
+      // --- 5. BASE PANEL: Lyrics ---
       const basePanel = document.createElement('div');
       basePanel.style.cssText = `grid-column: 1 / -1; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px;`;
       basePanel.innerHTML = `
@@ -1614,6 +1603,11 @@
 
       populateStep5EmbedBox(manifest);
       setupPlaybackHandlers(manifest);
+
+      // Auto-load & auto-play track 1 if tracks exist
+      if (manifest.tracks && manifest.tracks.length > 0) {
+        setTimeout(() => { selectTrack(0); }, 300);
+      }
     }
     
     function populateStep5EmbedBox(manifest) {
@@ -1717,40 +1711,18 @@
       const metaImg = document.getElementById('metadata-cover-art');
       const lyricsBox = document.getElementById('release-lyrics-box');
 
-      // Display track title and artist name in the center panel header
       if (activeTitle) activeTitle.innerText = `${track.title} — ${currentManifest.artist || 'walo, the underscore.'}`;
       if (activeNum) activeNum.innerText = `${idx + 1} / ${currentManifest.tracks.length}`;
-
       if (metaImg && track.thumbData) metaImg.src = track.thumbData;
       if (lyricsBox) {
         lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
       }
 
-      // Recreate or update direct local video.js playback for Card 4 (just like the old version)
-      let playerFrame = document.getElementById('sovereign-player-frame');
-      if (playerFrame && playerFrame.tagName === 'IFRAME') {
-        // Replace the iframe with a direct video.js element container to prevent browser blocks
-        const parentContainer = playerFrame.parentElement;
-        playerFrame.remove();
-        
-        const videoEl = document.createElement('video');
-        videoEl.id = 'sovereign-local-player';
-        videoEl.className = 'video-js vjs-default-skin vjs-big-play-centered';
-        videoEl.controls = true;
-        videoEl.preload = 'auto';
-        videoEl.style.cssText = 'width: 100%; height: 230px; border-radius: 6px; background: #000;';
-        if (track.thumbData) videoEl.poster = track.thumbData;
-        parentContainer.appendChild(videoEl);
-        
-        playerFrame = videoEl;
-      }
-
-      // Initialize or feed local video.js stream directly
+      // Stream directly into local video.js player
       if (window.videojs && globalFFmpegInstance) {
         try {
           let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
           
-          // Re-generate local M3u8 blob for this track index from FFmpeg memory
           const playlistName = `playlist_${idx}.m3u8`;
           const files = globalFFmpegInstance.FS('readdir', '/');
           const segmentFiles = files.filter(f => f.startsWith(`segment_${idx}_`) && f.endsWith('.ts')).sort();
@@ -1772,6 +1744,12 @@
           
           localPlayer.src({ src: blobUrl, type: 'application/x-mpegURL' });
           if (track.thumbData) localPlayer.poster(track.thumbData);
+
+          localPlayer.ready(() => {
+            localPlayer.play().catch(() => {
+              logMessage('ℹ️ Auto-play paused by browser. Click play on Card 4.');
+            });
+          });
         } catch (e) {
           console.log("Local stream preview loading...", e);
         }
