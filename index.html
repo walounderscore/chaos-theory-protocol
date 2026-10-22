@@ -1718,13 +1718,14 @@
       const metaImg = document.getElementById('metadata-cover-art');
       const lyricsBox = document.getElementById('release-lyrics-box');
 
-      if (activeTitle) activeTitle.innerText = `Track ${idx + 1}: ${track.title}`;
+      // Display track name and artist name in the center panel header
+      if (activeTitle) activeTitle.innerText = `${track.title} — ${currentManifest.artist || 'walo, the underscore.'}`;
       if (activeNum) activeNum.innerText = `${idx + 1} / ${currentManifest.tracks.length}`;
       
-      // Safe iframe assignment: falls back or loads Apps Script stream if packaged
+      // Target the Apps Script web app endpoint just like the final embed code
       if (playerFrame) {
         if (track.hlsStreamId) {
-          playerFrame.src = `${APPS_SCRIPT_URL}?fileId=${track.hlsStreamId}`;
+          playerFrame.src = `${APPS_SCRIPT_URL}?fileId=${track.hlsStreamId}`;[cite: 1]
         } else {
           playerFrame.src = 'about:blank';
         }
