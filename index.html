@@ -1274,22 +1274,6 @@
 
           logMessage(`☁️ Packaging and syncing Track ${trackNum} to Drive...`);
           const htmlFileId = await packageSingleTrackWidget(i, outM3u8Name, trackTitle);
-          // Cache local Blob URL for Card 4 instant playback using clean binary Blob URLs
-          const playlistName = `playlist_${i}.m3u8`;
-          const files = globalFFmpegInstance.FS('readdir', '/');
-          const segmentFiles = files.filter(f => f.startsWith(`segment_${i}_`) && f.endsWith('.ts')).sort();
-          
-          let m3u8Content = new TextDecoder('utf-8').decode(globalFFmpegInstance.FS('readFile', playlistName));
-          
-          for (const seg of segmentFiles) {
-            const segData = globalFFmpegInstance.FS('readFile', seg);
-            const segBlob = new Blob([segData.buffer], { type: 'video/mp2t' });
-            const segBlobUrl = URL.createObjectURL(segBlob);
-            m3u8Content = m3u8Content.split(seg).join(segBlobUrl);
-          }
-
-          const playlistBlob = new Blob([m3u8Content], { type: 'application/x-mpegURL' });
-          localTrackBlobMap[i] = URL.createObjectURL(playlistBlob);
 
           manifest.tracks[i].hlsStreamId = htmlFileId;
           manifest.tracks[i].status = "packaged";
@@ -1297,18 +1281,18 @@
           logMessage(`✅ Track ${trackNum} ("${trackTitle}") successfully processed and synced!`);
         }
 
+        // 1. First, generate and upload the full master dashboard HTML to Drive
+        logMessage(`📦 Uploading master 3-column release dashboard to Drive...`);
+        const masterDashboardFileId = await uploadReleaseDashboardHtml(manifest);
+        manifest.masterDashboardFileId = masterDashboardFileId;
+
+        // 2. Sync the master manifest snapshot to Drive
         logMessage(`💾 Saving master release manifest snapshot to Drive...`);
         await uploadManifestToDrive(manifest);
-        const masterDashboardFileId = await uploadReleaseDashboardHtml(manifest);
-        
-        // Update Step 5 embed box to point directly to the full 3-column dashboard
-        const embedBox = document.getElementById('embed-output-box');
-        if (embedBox) {
-          const masterViewerUrl = `${APPS_SCRIPT_URL}?fileId=${masterDashboardFileId}`;
-          embedBox.value = `<iframe src="${masterViewerUrl}" width="100%" height="720" style="border:none;border-radius:12px;background:#0d1117;" allow="encrypted-media"></iframe>`;
-        }
-        exportSessionManifest(manifest);
 
+        // 3. Populate Step 5 embed box and render UI *after* IDs are ready
+        populateStep5EmbedBox(manifest);
+        exportSessionManifest(manifest);
         generateEmbedUI(manifest);
 
         logMessage(`🎉 All ${cards.length} track(s) packaged & release published successfully!`);
@@ -1322,7 +1306,6 @@
         buildBtn.innerText = '🚀 Encrypt, Upload & Build Sovereign Release';
       }
     }
-
     // --- HELPER: UPDATE-IN-PLACE (OVERWRITE) DRIVE UPLOADER ---
     async function uploadFileToDrive(fileName, fileData, mimeType) {
       if (!accessToken || !driveFolderId) return null;
