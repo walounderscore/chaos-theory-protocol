@@ -1724,9 +1724,6 @@
       if (lyricsBox) {
         lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
       }
-
-      // If you have the local processed stream or want to preview it locally via video.js:
-      // This keeps Card 4 100% functional locally without fighting your service worker headers.
       
       populateStep5EmbedBox(currentManifest);
       syncMobileCanvasView(track, idx);
