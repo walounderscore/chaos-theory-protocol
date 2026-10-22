@@ -1202,28 +1202,26 @@
       logMessage(`🔐 Initializing multi-track sovereign release processing for "${manifest.title}"... (${cards.length} tracks)`);
 
       try {
-        // Process each track in the queue sequentially
         for (let i = 0; i < cards.length; i++) {
           const card = cards[i];
           const trackNum = card.querySelector('.t-num').value || (i + 1);
           const trackTitle = card.querySelector('.t-title').value || `Track ${trackNum}`;
           
           const file = selectedUnifiedFiles[i] || selectedUnifiedFiles[0];
-          logMessage(`⚡ [${i + 1}/${cards.length}] Processing Track ${trackNum}: "${trackTitle}" (${file.name})...`);
+          logMessage(`⚡ [${i + 1}/${cards.length}] Processing Track ${trackNum}: "${trackTitle}" (${(file.size / (1024*1024)).toFixed(1)} MB)...`);
 
-          const fileExt = file.name.split('.').pop();
-          const inFileName = `input_${i}.${fileExt}`;
+          const inFileName = `input_${i}.flac`;
           const outM3u8Name = `playlist_${i}.m3u8`;
 
-          // 1. Read binary audio into WASM virtual filesystem using lightweight Uint8Array
+          // 1. Read binary audio into WASM virtual filesystem
           let arrayBuffer = await file.arrayBuffer();
           globalFFmpegInstance.FS('writeFile', inFileName, new Uint8Array(arrayBuffer));
-          arrayBuffer = null; // Free JS main thread memory reference
+          arrayBuffer = null; 
 
-          // 2. Run local HLS segmentation via WebAssembly (ignoring embedded cover art video streams with -vn)
+          // 2. Run local HLS segmentation with -vn
           await globalFFmpegInstance.run(
             '-i', inFileName,
-            '-vn',                // <--- THIS IGNORES EMBEDDED COVER ART/IMAGES
+            '-vn',
             '-c:a', 'aac',
             '-b:a', '192k',
             '-hls_time', '6',
@@ -1232,15 +1230,14 @@
             outM3u8Name
           );
 
-          // 3. Package segments for this specific track into its own sovereign HTML widget or manifest item
+          // 3. Package segments into Base64 widget
           logMessage(`☁️ Packaging and syncing Track ${trackNum} to Drive...`);
           const htmlFileId = await packageSingleTrackWidget(i, outM3u8Name, trackTitle);
 
-          // Save HLS stream reference into manifest track item
           manifest.tracks[i].hlsStreamId = htmlFileId;
           manifest.tracks[i].status = "packaged";
 
-          // Clean up virtual files for this iteration
+          // 4. Thoroughly clean up virtual files and clear memory references
           try {
             globalFFmpegInstance.FS('unlink', inFileName);
             globalFFmpegInstance.FS('unlink', outM3u8Name);
@@ -1249,12 +1246,10 @@
           logMessage(`✅ Track ${trackNum} ("${trackTitle}") successfully processed and synced!`);
         }
 
-        // Finalize Release Manifest & Save to Drive
         logMessage(`💾 Saving master release manifest snapshot to Drive...`);
         await uploadManifestToDrive(manifest);
         exportSessionManifest(manifest);
 
-        // Generate Distribution Embed Suite
         generateEmbedUI(manifest.tracks[0]?.hlsStreamId);
 
         logMessage(`🎉 All ${cards.length} track(s) packaged & release published successfully!`);
