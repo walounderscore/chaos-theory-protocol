@@ -1214,7 +1214,7 @@
           logMessage(`🔄 Spinning up fresh FFmpeg instance for Track ${trackNum}...`);
           const { createFFmpeg } = FFmpeg;
           globalFFmpegInstance = createFFmpeg({ 
-            log: false,
+            log: true,            // Re-enabled to capture FFmpeg internal warnings if needed
             mainName: 'main',
             corePath: 'https://unpkg.com/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js'
           });
