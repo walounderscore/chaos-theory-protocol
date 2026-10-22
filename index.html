@@ -212,6 +212,7 @@
   </div>
 
   <script>
+    let localTrackBlobMap = {}; // Maps track index -> local M3U8 Blob URL
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwpBGkMTxlJh6hC3tlj2W_j1tmga-KwDmHcYDQ2a8BipWHosVkfn_ZPQdjBCwOCJjLUwQ/exec';
     const SHEET_ID = '1UjT3R0QXXoLxkekS7-9MnpsdPP72oAPWYg4OUOlJaTA';
     const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
@@ -228,6 +229,7 @@
     let isShuffleActive = false;
     let repeatMode = 'off';
     let currentManifest = null;
+    let localTrackBlobMap = {};
 
     const CONTRIBUTOR_ROLES = [
       "Main Artist", "Featured Artist", "Producer", "Remixer", 
@@ -1273,6 +1275,25 @@
 
           logMessage(`☁️ Packaging and syncing Track ${trackNum} to Drive...`);
           const htmlFileId = await packageSingleTrackWidget(i, outM3u8Name, trackTitle);
+          // Cache local Blob URL for Card 4 instant playback
+          const playlistName = `playlist_${i}.m3u8`;
+          const files = globalFFmpegInstance.FS('readdir', '/');
+          const segmentFiles = files.filter(f => f.startsWith(`segment_${i}_`) && f.endsWith('.ts')).sort();
+          
+          let m3u8Content = new TextDecoder('utf-8').decode(globalFFmpegInstance.FS('readFile', playlistName));
+          for (const seg of segmentFiles) {
+            const segData = globalFFmpegInstance.FS('readFile', seg);
+            let binaryString = '';
+            const chunkSize = 8192;
+            for (let j = 0; j < segData.length; j += chunkSize) {
+              binaryString += String.fromCharCode.apply(null, segData.subarray(j, j + chunkSize));
+            }
+            const dataUri = `data:video/mp2t;base64,${btoa(binaryString)}`;
+            m3u8Content = m3u8Content.split(seg).join(dataUri);
+          }
+
+          const blob = new Blob([m3u8Content], { type: 'application/x-mpegURL' });
+          localTrackBlobMap[i] = URL.createObjectURL(blob);
 
           manifest.tracks[i].hlsStreamId = htmlFileId;
           manifest.tracks[i].status = "packaged";
@@ -1398,7 +1419,8 @@
       const playlistBase64 = btoa(unescape(encodeURIComponent(cloudM3u8Content)));
       const manifest = compileCurrentManifest();
       const trackData = manifest.tracks[trackIndex] || manifest.tracks[0];
-      const trackPoster = trackData?.thumbData || manifest.artistImgData || manifest.coverArtData || '';
+      // Always prioritize Track Cover / Album Cover over Artist Portrait for the widget player poster
+      const trackPoster = trackData?.thumbData || manifest.coverArtData || manifest.artistImgData || '';
 
       const standaloneHtmlContent = 
         "<!DOCTYPE html>\n" +
@@ -1518,7 +1540,8 @@
       wrapper.appendChild(header);
 
       // --- 2. LEFT PANEL: Credits ---
-      const initialArt = manifest.artistImgData || manifest.tracks[0]?.thumbData || manifest.coverArtData || '';
+      // Credits panel explicitly uses the Artist Portrait first, falling back to album cover
+      const initialCreditsArt = manifest.artistImgData || manifest.coverArtData || manifest.tracks[0]?.thumbData || '';
       const leftPanel = document.createElement('div');
       leftPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; overflow: hidden;`;
       
@@ -1565,8 +1588,8 @@
       nowPlayingTitle.style.cssText = `display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #30363d; padding-bottom: 12px;`;
       nowPlayingTitle.innerHTML = `
         <div>
-          <h1 id="active-track-title" style="margin: 0; font-size: 20px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px; line-height: 1.2;">${activeTrack?.title || 'Select Track'}</h1>
-          <p id="active-track-artist" style="margin: 4px 0 0 0; font-size: 14px; color: #8b949e; font-weight: 400;">${manifest.artist || 'walo, the underscore.'}</p>
+          <h1 id="active-track-title" style="margin: 0; font-size: 12px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px; line-height: 1.2;">${activeTrack?.title || 'Select Track'}</h1>
+          <p id="active-track-artist" style="margin: 4px 0 0 0; font-size: 10px; color: #8b949e; font-weight: 400;">${manifest.artist || 'walo, the underscore.'}</p>
         </div>
         <span id="active-track-num" style="font-size: 13px; color: #58a6ff; font-weight: 700; background: #0d1117; padding: 4px 8px; border-radius: 4px; border: 1px solid #21262d;">${manifest.tracks.length > 0 ? '1 / ' + manifest.tracks.length : '0 / 0'}</span>
       `;
@@ -1761,53 +1784,30 @@
       const metaImg = document.getElementById('metadata-cover-art');
       const lyricsBox = document.getElementById('release-lyrics-box');
 
+      // Header text updates
       if (activeTitle) activeTitle.innerText = track.title;
       if (activeArtist) activeArtist.innerText = currentManifest.artist || 'walo, the underscore.';
       if (activeNum) activeNum.innerText = `${idx + 1} / ${currentManifest.tracks.length}`;
+
+      // Artwork and Poster hierarchy
+      const creditsArt = currentManifest.artistImgData || track.thumbData || currentManifest.coverArtData || '';
+      const playerPoster = track.thumbData || currentManifest.coverArtData || currentManifest.artistImgData || '';
+
       if (metaImg) {
-        metaImg.src = currentManifest.artistImgData || track.thumbData || currentManifest.coverArtData || '';
+        metaImg.src = creditsArt;
       }
+
       if (lyricsBox) {
         lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
       }
 
-      // Stream directly into local video.js player for Card 4 preview
-      if (window.videojs && globalFFmpegInstance) {
+      // Stream directly into local video.js player using the cached Blob map
+      if (window.videojs && localTrackBlobMap[idx]) {
         try {
           let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
           
-          // Check possible playlist filenames in the FFmpeg virtual filesystem
-          let playlistName = `playlist_${idx}.m3u8`;
-          const files = globalFFmpegInstance.FS('readdir', '/');
-          
-          if (!files.includes(playlistName)) {
-            if (files.includes('playlist.m3u8')) {
-              playlistName = 'playlist.m3u8';
-            } else {
-              console.warn(`Playlist for track ${idx} not found in FFmpeg memory.`);
-              return;
-            }
-          }
-
-          const segmentFiles = files.filter(f => f.startsWith(`segment_${idx}_`) && f.endsWith('.ts')).sort();
-          
-          let m3u8Content = new TextDecoder('utf-8').decode(globalFFmpegInstance.FS('readFile', playlistName));
-          for (const seg of segmentFiles) {
-            const segData = globalFFmpegInstance.FS('readFile', seg);
-            let binaryString = '';
-            const chunkSize = 8192;
-            for (let j = 0; j < segData.length; j += chunkSize) {
-              binaryString += String.fromCharCode.apply(null, segData.subarray(j, j + chunkSize));
-            }
-            const dataUri = `data:video/mp2t;base64,${btoa(binaryString)}`;
-            m3u8Content = m3u8Content.split(seg).join(dataUri);
-          }
-
-          const blob = new Blob([m3u8Content], { type: 'application/x-mpegURL' });
-          const blobUrl = URL.createObjectURL(blob);
-          
-          localPlayer.src({ src: blobUrl, type: 'application/x-mpegURL' });
-          if (track.thumbData) localPlayer.poster(track.thumbData);
+          localPlayer.src({ src: localTrackBlobMap[idx], type: 'application/x-mpegURL' });
+          if (playerPoster) localPlayer.poster(playerPoster);
 
           localPlayer.ready(() => {
             localPlayer.play().catch(() => {});
