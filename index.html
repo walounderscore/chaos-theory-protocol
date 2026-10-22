@@ -450,6 +450,22 @@
       }
     }
 
+    function importLocalSessionManifest(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const manifest = JSON.parse(e.target.result);
+          loadSessionIntoUI(manifest);
+          logMessage(`📂 Loaded local session snapshot: "${manifest.title || file.name}"`);
+        } catch (err) {
+          alert('Invalid JSON session snapshot file.');
+        }
+      };
+      reader.readAsText(file);
+    }
+
     async function initFFmpeg() {
       logMessage('Initializing local single-threaded ffmpeg.wasm engine...');
       try {
