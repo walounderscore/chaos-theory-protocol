@@ -1356,6 +1356,70 @@
       }
 
       const playlistBase64 = btoa(unescape(encodeURIComponent(cloudM3u8Content)));
+      const manifest = compileCurrentManifest();
+      const trackData = manifest.tracks[trackIndex] || manifest.tracks[0];
+
+      const standaloneHtmlContent = 
+        "<!DOCTYPE html>\n" +
+        "<html lang=\"en\">\n" +
+        "<head>\n" +
+        "  <meta charset=\"UTF-8\">\n" +
+        "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
+        "  <title>" + trackTitle + " - " + manifest.title + "</title>\n" +
+        "  <link href=\"https://vjs.zencdn.net/8.10.0/video-js.css\" rel=\"stylesheet\" />\n" +
+        "  <script src=\"https://vjs.zencdn.net/8.10.0/video.min.js\"><\/script>\n" +
+        "  <style>\n" +
+        "    body { font-family: system-ui, -apple-system, sans-serif; background: #0d1117; color: #c9d1d9; margin: 0; padding: 12px; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; }\n" +
+        "    .dashboard { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 16px; width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }\n" +
+        "    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 10px; }\n" +
+        "    .player-box { width: 100%; height: 220px; background: #000; border-radius: 6px; overflow: hidden; }\n" +
+        "    .video-js { width: 100%; height: 100%; }\n" +
+        "    .lyrics-box { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 11px; color: #8b949e; max-height: 100px; overflow-y: auto; white-space: pre-wrap; }\n" +
+        "  </style>\n" +
+        "</head>\n" +
+        "<body>\n" +
+        "  <div class=\"dashboard\">\n" +
+        "    <div class=\"header\">\n" +
+        "      <div>\n" +
+        "        <h3 style=\"margin: 0; font-size: 16px; color: #f0f6fc;\">" + trackTitle + "</h3>\n" +
+        "        <p style=\"margin: 2px 0 0; font-size: 12px; color: #8b949e;\">" + manifest.artist + "</p>\n" +
+        "      </div>\n" +
+        "      <button onclick=\"openMobileMode()\" style=\"background: #238636; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;\">📱 Mobile Mode</button>\n" +
+        "    </div>\n" +
+        "    <div class=\"player-box\">\n" +
+        "      <video id=\"chaos-widget-player\" class=\"video-js vjs-default-skin vjs-big-play-centered\" controls autoplay preload=\"auto\" data-setup='{}'></video>\n" +
+        "    </div>\n" +
+        "    <div>\n" +
+        "      <h4 style=\"margin: 0 0 4px 0; font-size: 12px; color: #f0f6fc;\">📝 Liner Notes & Lyrics</h4>\n" +
+        "      <div class=\"lyrics-box\">" + (trackData?.caption || 'All rights reserved.') + "</div>\n" +
+        "    </div>\n" +
+        "  </div>\n" +
+        "  <script>\n" +
+        "    function decodeBase64Utf8(base64) {\n" +
+        "    const binString = atob(base64);\n" +
+        "    const bytes = Uint8Array.from(binString, (m) => m.codePointAt(0));\n" +
+        "    return new TextDecoder().decode(bytes);\n" +
+        "    }\n" +
+        "    const m3u8Data = decodeBase64Utf8('" + playlistBase64 + "');\n" +
+        "    const blob = new Blob([m3u8Data], { type: 'application/x-mpegURL' });\n" +
+        "    const blobUrl = URL.createObjectURL(blob);\n" +
+        "    const player = videojs('chaos-widget-player');\n" +
+        "    player.src({ src: blobUrl, type: 'application/x-mpegURL' });\n" +
+        "    player.play().catch(() => {});\n" +
+        "    function openMobileMode() {\n" +
+        "      if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen().catch(() => {}); }\n" +
+        "    }\n" +
+        "  <\/script>\n" +
+        "</body>\n" +
+        "</html>";
+
+      const textEncoder = new TextEncoder();
+      const sanitizedName = trackTitle.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_widget.html';
+      const htmlFileId = await uploadFileToDrive(sanitizedName, textEncoder.encode(standaloneHtmlContent), 'text/html');
+      return htmlFileId;
+    }
+
+      const playlistBase64 = btoa(unescape(encodeURIComponent(cloudM3u8Content)));
 
       const standaloneHtmlContent = "<!DOCTYPE html>\n" +
         "<html lang=\"en\">\n" +
@@ -1408,14 +1472,14 @@
       }
       embedContainer.innerHTML = '';
 
+      // Clean borderless container wrapper to fit seamlessly inside Card 4
       const wrapper = document.createElement('div');
       wrapper.id = 'chaos-sovereign-dashboard';
       wrapper.style.cssText = `
-        background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 12px;
-        padding: 20px; font-family: system-ui, -apple-system, sans-serif; display: grid; gap: 16px;
+        color: #c9d1d9; font-family: system-ui, -apple-system, sans-serif; display: grid; gap: 16px;
         grid-template-columns: 260px 1fr 300px; grid-template-rows: auto 1fr auto;
-        max-width: 1280px; margin: 10px auto; box-shadow: 0 12px 32px rgba(0,0,0,0.6); position: relative;
-        transition: grid-template-columns 0.3s ease;
+        width: 100%; margin: 10px 0 0 0; position: relative;
+        transition: grid-template-columns 0.3s ease; box-sizing: border-box;
       `;
 
       function updateGridColumns() {
@@ -1449,8 +1513,8 @@
       `;
       wrapper.appendChild(header);
 
-      // --- 2. LEFT PANEL: Credits, Metadata & Collapsible Toggle ---
-      const initialArt = manifest.tracks[0]?.thumbData || manifest.coverArtData || manifest.coverArt || '';
+      // --- 2. LEFT PANEL: Credits ---
+      const initialArt = manifest.tracks[0]?.thumbData || manifest.coverArtData || '';
       const leftPanel = document.createElement('div');
       leftPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; overflow: hidden;`;
       
@@ -1489,14 +1553,15 @@
       };
       wrapper.appendChild(leftPanel);
 
-      // --- 3. CENTER PANEL: Stream Player & Controls ---
+      // --- 3. CENTER PANEL: Stream Player ---
       const centerPanel = document.createElement('div');
       centerPanel.style.cssText = `display: flex; flex-direction: column; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; gap: 14px; position: relative;`;
       
+      const activeTrack = manifest.tracks[0];
       const nowPlayingTitle = document.createElement('div');
       nowPlayingTitle.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 8px;`;
       nowPlayingTitle.innerHTML = `
-        <h3 id="active-track-title" style="margin: 0; font-size: 15px; color: #f0f6fc;">Track 1: ${manifest.tracks[0]?.title || 'Select Track'}</h3>
+        <h3 id="active-track-title" style="margin: 0; font-size: 15px; color: #f0f6fc;">Track 1: ${activeTrack?.title || 'Select Track'}</h3>
         <span id="active-track-num" style="font-size: 12px; color: #58a6ff; font-weight: 600;">${manifest.tracks.length > 0 ? '1 / ' + manifest.tracks.length : '0 / 0'}</span>
       `;
       centerPanel.appendChild(nowPlayingTitle);
@@ -1504,8 +1569,10 @@
       const playerFrame = document.createElement('iframe');
       playerFrame.id = 'sovereign-player-frame';
       playerFrame.style.cssText = `width: 100%; height: 230px; border: none; border-radius: 6px; background: #000;`;
-      if (manifest.tracks[0]?.hlsStreamId) {
-        playerFrame.src = `${APPS_SCRIPT_URL}?fileId=${manifest.tracks[0].hlsStreamId}`;
+      
+      // Fix: Direct Google Apps Script Endpoint URL (Prevents SAMEORIGIN iframe blocking)
+      if (activeTrack && activeTrack.hlsStreamId) {
+        playerFrame.src = `${APPS_SCRIPT_URL}?fileId=${activeTrack.hlsStreamId}`; //
       }
       centerPanel.appendChild(playerFrame);
 
@@ -1520,7 +1587,7 @@
       centerPanel.appendChild(controlBar);
       wrapper.appendChild(centerPanel);
 
-      // --- 4. RIGHT PANEL: Tracklist & Collapsible Toggle ---
+      // --- 4. RIGHT PANEL: Queue ---
       const rightPanel = document.createElement('div');
       rightPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; overflow: hidden;`;
       
@@ -1566,7 +1633,7 @@
       };
       wrapper.appendChild(rightPanel);
 
-      // --- 5. BASE PANEL: Lyrics Text Box ---
+      // --- 5. BASE PANEL: Lyrics & Notes ---
       const basePanel = document.createElement('div');
       basePanel.style.cssText = `grid-column: 1 / -1; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px;`;
       basePanel.innerHTML = `
@@ -1582,7 +1649,7 @@
       populateStep5EmbedBox(manifest);
       setupPlaybackHandlers(manifest);
     }
-
+    
     function populateStep5EmbedBox(manifest) {
       const embedBox = document.getElementById('embed-output-box');
       const activeTrack = manifest.tracks[currentTrackIndex] || manifest.tracks[0];
@@ -1687,11 +1754,24 @@
 
       if (activeTitle) activeTitle.innerText = `Track ${idx + 1}: ${track.title}`;
       if (activeNum) activeNum.innerText = `${idx + 1} / ${currentManifest.tracks.length}`;
-      if (playerFrame && track.hlsStreamId) playerFrame.src = `${APPS_SCRIPT_URL}?fileId=${track.hlsStreamId}`;
+      
+      // Safe iframe assignment: falls back or loads Apps Script stream if packaged
+      if (playerFrame) {
+        if (track.hlsStreamId) {
+          playerFrame.src = `${APPS_SCRIPT_URL}?fileId=${track.hlsStreamId}`;
+        } else {
+          playerFrame.src = 'about:blank';
+        }
+      }
+
       if (metaImg && track.thumbData) metaImg.src = track.thumbData;
       if (lyricsBox) {
         lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
       }
+
+      populateStep5EmbedBox(currentManifest);
+      syncMobileCanvasView(track, idx);
+    }
 
       populateStep5EmbedBox(currentManifest);
       syncMobileCanvasView(track, idx);
