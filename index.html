@@ -71,7 +71,7 @@
         <span id="auth-status" style="color: #8b949e;">Not Connected</span>
       </div>
 
-      <!-- Re-import Window (Drive Vault Fetch + Local File) -->
+      <!-- Re-import Window -->
       <div style="background: #010409; padding: 12px; border-radius: 6px; border: 1px solid #21262d; margin-top: 10px;">
         <label style="font-size: 0.8rem; font-weight: bold; color: #58a6ff; display: block; margin-bottom: 8px;">📂 Resume Previous Metadata Session Snapshot (`.json`):</label>
         
@@ -94,12 +94,11 @@
       </div>
     </div>
 
-    <!-- Step 3: Unified Sovereign Release & Asset Queue -->
+    <!-- Step 3: Sovereign Release Queue -->
     <div class="card" id="release-builder-card">
       <h3>3. Sovereign Release & Asset Queue</h3>
       <p>Configure your release metadata, assign granular track attributes, and build your HLS asset bundle.</p>
 
-      <!-- Global Release Metadata & Cover Art -->
       <div style="background: #010409; padding: 12px; border-radius: 6px; border: 1px solid #21262d; margin-bottom: 15px;">
         <h4 style="margin: 0 0 10px 0; font-size: 0.9rem; color: #58a6ff;">🎨 Release-Level Defaults & Cover Art</h4>
         
@@ -123,7 +122,7 @@
           </div>
           <div>
             <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Global Genre:</label>
-            <input type="text" id="builder-genre" placeholder="e.g. Nigerian Rock" style="width: 100%;">
+            <input type="text" id="builder-genre" placeholder="e.g. Alternative" style="width: 100%;">
             <button type="button" class="icon-btn" onclick="applyGlobalGenreToAll()" style="margin-top: 5px; font-size: 0.7rem;">📋 Apply Genre to All Tracks</button>
           </div>
         </div>
@@ -134,7 +133,7 @@
             <input type="text" id="global-album-artist" placeholder="e.g., walo, the underscore." oninput="updateLiveAlbumBadge()" style="width: 100%;">
           </div>
           <div>
-            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Album Cover / Visual Artist Credit:</label>
+            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Album Cover Credit:</label>
             <input type="text" id="global-cover-artist" placeholder="e.g., Art by the Underscore" style="width: 100%;">
           </div>
           <div>
@@ -154,16 +153,14 @@
         <input type="number" id="builder-bundle-price" value="4500" style="width: 100%;">
       </div>
 
-      <!-- Unified File Picker -->
       <div style="margin-bottom: 15px;">
         <label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.85rem;">Select Audio Stem(s) (FLAC/WAV/MP3):</label>
         <input type="file" id="batch-audio-files" accept="audio/*" multiple onchange="handleUnifiedFileSelect(this)" style="margin: 5px 0;" disabled>
       </div>
 
-      <!-- Dynamic Track Queue Container -->
       <div style="margin-bottom: 15px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-          <label style="font-weight: bold; font-size: 0.85rem;">Track Breakdown & Ordering (Use ⋮⋮ to drag or edit # directly):</label>
+          <label style="font-weight: bold; font-size: 0.85rem;">Track Breakdown & Ordering:</label>
           <button type="button" class="icon-btn" onclick="collapseAllCards()">↕️ Toggle All Collapse</button>
         </div>
         <div id="track-queue-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 520px; overflow-y: auto;">
@@ -171,33 +168,23 @@
         </div>
       </div>
 
-      <!-- Action Bar -->
       <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px; margin-top: 15px;">
         <button type="button" id="save-session-btn" class="icon-btn" onclick="saveCurrentSessionManual()" style="padding: 10px; font-size: 0.85rem; background: #21262d; border-color: #30363d; color: #58a6ff;">💾 Save Session Snapshot</button>
         <button id="build-release-btn" onclick="processAudio()" disabled>🚀 Encrypt, Upload & Build Sovereign Release</button>
       </div>
     </div>
 
-    <!-- Activity Log -->
+    <!-- System Logs -->
     <div class="card">
       <h3>System Logs</h3>
       <div id="log">Awaiting workflow initialization...</div>
     </div>
 
-    <!-- Step 4: Sovereign Player -->
-    <div class="card">
-      <h3>4. Sovereign HLS Stream Player</h3>
-      <p>Stream your encrypted release directly from your authorized Google Drive storage.</p>
-      <video
-        id="chaos-player"
-        class="video-js vjs-default-skin vjs-big-play-centered"
-        controls
-        preload="auto"
-        width="640"
-        height="268"
-        data-setup='{}'>
-        <p class="vjs-no-js">To view this video please enable JavaScript.</p>
-      </video>
+    <!-- Step 4: Sovereign Release Dashboard Target -->
+    <div class="card" id="step-4-card">
+      <h3>4. Sovereign HLS Release Dashboard</h3>
+      <p>Stream your encrypted release directly from your authorized Google Drive vault.</p>
+      <div id="sovereign-player-card-target"></div>
     </div>
 
     <!-- Step 5: Distribution Embed Snippet -->
@@ -225,6 +212,11 @@
     let selectedUnifiedFiles = [];
     let currentAlbumArtBase64 = null;
     let fetchedDriveFilesCache = [];
+
+    let currentTrackIndex = 0;
+    let isShuffleActive = false;
+    let repeatMode = 'off';
+    let currentManifest = null;
 
     const CONTRIBUTOR_ROLES = [
       "Main Artist", "Featured Artist", "Producer", "Remixer", 
@@ -286,6 +278,9 @@
       }
       updateLiveAlbumBadge();
 
+      // Render Resting Unpopulated Master UI on load
+      generateEmbedUI(createUnpopulatedRestingManifest());
+
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
       const token = hashParams.get('access_token');
 
@@ -311,6 +306,17 @@
       if (accessToken) setDriveConnectedUI();
     });
 
+    function createUnpopulatedRestingManifest() {
+      return {
+        title: "Chaos Theory Protocol",
+        artist: "walo, the underscore.",
+        date: "2026-01-01",
+        genre: "Sovereign Audio Vault",
+        composer: "walo, the underscore.",
+        tracks: []
+      };
+    }
+
     function unlockToolkit() {
       logMessage('Unlocking user workspace...');
       localStorage.setItem('chaos_toolkit_unlocked', 'true');
@@ -322,13 +328,11 @@
 
       const gateCard = document.getElementById('gate-card');
       const toolkit = document.getElementById('toolkit');
-      
       if (gateCard) gateCard.style.display = 'none';
       if (toolkit) {
         toolkit.classList.remove('locked');
         logMessage('✅ Toolkit successfully unlocked!');
       }
-      
       setTimeout(() => { initFFmpeg(); }, 500);
     }
 
@@ -348,7 +352,6 @@
       try {
         const response = await fetch(SHEET_CSV_URL);
         const csvData = await response.text();
-
         const whitelistedEmails = csvData
           .split('\n')
           .map(row => row.replace(/"/g, '').split(',')[0].trim().toLowerCase());
@@ -449,7 +452,6 @@
 
     async function initFFmpeg() {
       logMessage('Initializing local single-threaded ffmpeg.wasm engine...');
-      
       try {
         const { createFFmpeg } = FFmpeg;
         globalFFmpegInstance = createFFmpeg({ 
@@ -749,14 +751,12 @@
       }
 
       const existingCards = container.querySelectorAll('.track-card');
-      
       if (existingCards.length > 0) {
         selectedUnifiedFiles = Array.from(existingCards).map((card, idx) => {
           const fileNameEl = card.querySelector('.track-file-name');
           const targetName = fileNameEl ? fileNameEl.innerText.trim() : '';
           return newlySelectedFiles.find(f => f.name === targetName) || newlySelectedFiles[idx] || newlySelectedFiles[0];
         });
-
         logMessage("🔗 Re-linked " + selectedUnifiedFiles.length + " audio file(s) to track cards by filename!");
         return;
       }
@@ -907,9 +907,7 @@
           let role = row.querySelector('.c-role').value;
           let customRole = row.querySelector('.c-custom-role').value.trim();
           let name = row.querySelector('.c-name').value.trim();
-          if (name) {
-            contributors.push({ role, customRole, name });
-          }
+          if (name) contributors.push({ role, customRole, name });
         });
 
         manifest.tracks.push({
@@ -930,256 +928,6 @@
       return manifest;
     }
 
-    async function uploadManifestToDrive(manifest) {
-      if (!accessToken || !driveFolderId) return;
-      const fileName = getCleanAlbumFilename(manifest.title);
-      const fileMetadata = { name: fileName, parents: [driveFolderId], mimeType: 'application/json' };
-      const fileContent = JSON.stringify(manifest, null, 2);
-      const form = new FormData();
-      form.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
-      form.append('file', new Blob([fileContent], { type: 'application/json' }));
-
-      try {
-        await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-          method: 'POST',
-          headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
-          body: form
-        });
-        logMessage(`☁️ Cloud snapshot synced to Drive: "${fileName}"`);
-      } catch (err) {
-        handleDriveError(err);
-        logMessage(`❌ Cloud sync warning: ${err.message}`);
-      }
-    }
-
-    function exportSessionManifest(manifest) {
-      const fileName = getCleanAlbumFilename(manifest.title);
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(manifest, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", fileName);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-    }
-
-    async function saveCurrentSessionManual() {
-      const btn = document.getElementById('save-session-btn');
-      btn.innerText = '⏳ Saving...';
-      btn.disabled = true;
-
-      const manifest = compileCurrentManifest();
-      exportSessionManifest(manifest);
-      await uploadManifestToDrive(manifest);
-
-      logMessage(`💾 Session snapshot saved successfully!`);
-      setTimeout(() => {
-        btn.innerText = '💾 Save Session Snapshot';
-        btn.disabled = false;
-      }, 1500);
-    }
-
-    async function fetchDriveSessionsList() {
-      if (!accessToken || !driveFolderId) {
-        alert('Please connect Google Drive first.');
-        return;
-      }
-
-      logMessage('☁️ Fetching session snapshots from your Google Drive vault...');
-      try {
-        const query = encodeURIComponent(`'${driveFolderId}' in parents and mimeType='application/json' and trashed=false`);
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}`, {
-          headers: { 'Authorization': 'Bearer ' + accessToken }
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ? data.error.message : res.statusText);
-
-        fetchedDriveFilesCache = data.files || [];
-        if (fetchedDriveFilesCache.length === 0) {
-          alert('No session snapshots found in your Google Drive folder yet.');
-          return;
-        }
-
-        const selectEl = document.getElementById('drive-sessions-select');
-        selectEl.innerHTML = '';
-        fetchedDriveFilesCache.forEach((f, idx) => {
-          const opt = document.createElement('option');
-          opt.value = idx;
-          opt.innerText = f.name;
-          selectEl.appendChild(opt);
-        });
-
-        document.getElementById('drive-sessions-container').style.display = 'block';
-        logMessage(`✅ Found ${fetchedDriveFilesCache.length} session snapshot(s) in Drive vault.`);
-      } catch (err) {
-        handleDriveError(err);
-        logMessage(`❌ Failed to list Drive files: ${err.message}`);
-        alert('Could not retrieve files from Google Drive.');
-      }
-    }
-
-    async function loadSelectedDriveSession() {
-      const selectEl = document.getElementById('drive-sessions-select');
-      const chosenIdx = parseInt(selectEl.value);
-      const file = fetchedDriveFilesCache[chosenIdx];
-      if (!file) return;
-
-      logMessage(`☁️ Downloading "${file.name}" from Drive vault...`);
-      try {
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
-          headers: { 'Authorization': 'Bearer ' + accessToken }
-        });
-        const manifest = await res.json();
-        loadSessionIntoUI(manifest);
-        document.getElementById('drive-sessions-container').style.display = 'none';
-        logMessage(`✅ Successfully restored session snapshot "${manifest.title || file.name}"!`);
-      } catch (err) {
-        handleDriveError(err);
-        logMessage(`❌ Error downloading Drive session: ${err.message}`);
-        alert('Could not load selected session file.');
-      }
-    }
-
-    function importLocalSessionManifest(input) {
-      const file = input.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        try {
-          const manifest = JSON.parse(e.target.result);
-          loadSessionIntoUI(manifest);
-          logMessage(`📂 Loaded local session snapshot: "${manifest.title || file.name}"`);
-        } catch (err) {
-          alert('Invalid JSON session snapshot file.');
-        }
-      };
-      reader.readAsText(file);
-    }
-
-    function loadSessionIntoUI(manifest) {
-      if (!manifest) return;
-
-      document.getElementById('builder-release-title').value = manifest.title || '';
-      document.getElementById('builder-release-date').value = manifest.date || '';
-      document.getElementById('builder-genre').value = manifest.genre || '';
-      document.getElementById('global-album-artist').value = manifest.artist || '';
-      document.getElementById('global-cover-artist').value = manifest.coverArtist || '';
-      if (manifest.bundlePrice) document.getElementById('builder-bundle-price').value = manifest.bundlePrice;
-
-      if (manifest.coverArtData) {
-        currentAlbumArtBase64 = manifest.coverArtData;
-        document.getElementById('album-cover-preview-img').src = manifest.coverArtData;
-      }
-      updateLiveAlbumBadge();
-
-      if (manifest.tracks && manifest.tracks.length > 0) {
-        const container = document.getElementById('track-queue-container');
-        container.innerHTML = '';
-
-        manifest.tracks.forEach((tr, index) => {
-          const trackCard = document.createElement('div');
-          trackCard.className = 'track-card';
-          trackCard.dataset.index = index;
-
-          trackCard.innerHTML = `
-            <div class="track-card-header">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
-                <span class="collapse-arrow" onclick="toggleCardCollapse(this.parentElement)" style="font-size: 0.75rem; color: #58a6ff; cursor: pointer;">▼</span>
-                <span style="background: #21262d; color: #58a6ff; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">#</span>
-                <input type="number" value="${tr.trackNumber || (index + 1)}" class="t-num" style="width: 50px; text-align: center; font-weight: bold; font-size: 0.85rem;" onchange="handleTrackNumChange(this)">
-                <img src="${tr.thumbData || ''}" class="t-thumb-preview thumb-preview" style="${tr.thumbData ? 'display: block;' : 'display: none;'}" title="Embedded track cover">
-                <button type="button" class="icon-btn set-album-art-btn" style="${tr.thumbData ? 'display: inline-block;' : 'display: none;'} font-size: 0.65rem;" onclick="setAsAlbumArt(this)">🖼️ Set as Album Art</button>
-                <strong class="track-file-name" style="color: #c9d1d9; font-size: 0.9rem;">${tr.fileName || 'Audio Stem'}</strong>
-              </div>
-              <div style="display: flex; gap: 8px; align-items: center;">
-                <button type="button" class="subtle-btn" onclick="this.closest('.track-card').remove(); reindexTracks();" title="Remove Track">✕</button>
-              </div>
-            </div>
-            
-            <div class="track-body" style="margin-top: 10px; border-top: 1px solid #21262d; padding-top: 10px;">
-              <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px;">
-                <div>
-                  <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Track Title *</label>
-                  <input type="text" value="${tr.title || ''}" class="t-title" style="width: 100%; font-size: 0.8rem;">
-                </div>
-                <div>
-                  <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Price (₦) *</label>
-                  <input type="number" value="${tr.price || 500}" class="t-price" style="width: 100%; font-size: 0.8rem;">
-                </div>
-                <div>
-                  <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Genre</label>
-                  <input type="text" class="t-genre" value="${tr.genre || ''}" placeholder="Genre" style="width: 100%; font-size: 0.8rem;">
-                </div>
-                <div>
-                  <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">ISRC Code</label>
-                  <input type="text" class="t-isrc" value="${tr.isrc || ''}" placeholder="Optional" style="width: 100%; font-size: 0.8rem;">
-                </div>
-              </div>
-
-              <div style="margin-bottom: 10px; background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
-                <label style="font-size: 0.75rem; font-weight: bold; color: #58a6ff; display: block; margin-bottom: 5px;">🎬 Visual Asset & Display Mode</label>
-                <div style="display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 8px; align-items: center;">
-                  <input type="file" class="t-visual-file" accept="image/*,video/*" multiple style="font-size: 0.7rem;">
-                  <select class="t-aspect-ratio" style="font-size: 0.75rem;">
-                    <option value="16:9" ${tr.aspectRatio === '16:9' ? 'selected' : ''}>Landscape (16:9)</option>
-                    <option value="1:1" ${tr.aspectRatio === '1:1' || !tr.aspectRatio ? 'selected' : ''}>Square (1:1)</option>
-                    <option value="9:16" ${tr.aspectRatio === '9:16' ? 'selected' : ''}>Portrait (9:16)</option>
-                    <option value="4:5" ${tr.aspectRatio === '4:5' ? 'selected' : ''}>Vertical (4:5)</option>
-                  </select>
-                  <select class="t-display-mode" style="font-size: 0.75rem;">
-                    <option value="full_track" ${tr.displayMode === 'full_track' ? 'selected' : ''}>Full Track Display</option>
-                    <option value="loop_video" ${tr.displayMode === 'loop_video' ? 'selected' : ''}>Loop Videos / GIFs</option>
-                    <option value="slideshow_5s" ${tr.displayMode === 'slideshow_5s' ? 'selected' : ''}>Slideshow (5s)</option>
-                    <option value="slideshow_10s" ${tr.displayMode === 'slideshow_10s' ? 'selected' : ''}>Slideshow (10s)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style="margin-bottom: 10px;">
-                <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Lyrics, Liner Notes & Stories:</label>
-                <textarea class="t-caption" rows="2" placeholder="Poetry, lyrics, or notes..." style="width: 100%; font-size: 0.8rem; font-family: inherit;">${tr.caption || ''}</textarea>
-              </div>
-
-              <div style="background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #21262d;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                  <label style="font-size: 0.75rem; font-weight: bold; color: #c9d1d9;">Contributors & Credits</label>
-                  <div style="display: flex; gap: 6px;">
-                    <button type="button" class="icon-btn" onclick="addContributorToTrack(${index})">➕ Add Contributor</button>
-                    <button type="button" class="icon-btn" onclick="copyCurrentTrack1CreditsToAll()" title="Clone credits from current Track #1">👯 Clone Track 1 Credits to All</button>
-                  </div>
-                </div>
-                <div id="contributors-list-${index}"></div>
-              </div>
-            </div>
-          `;
-
-          container.appendChild(trackCard);
-          attachDragAndDropListeners(trackCard);
-
-          const listContainer = document.getElementById(`contributors-list-${index}`);
-          if (tr.contributors && tr.contributors.length > 0) {
-            tr.contributors.forEach(c => {
-              const row = createContributorRow(c.role, c.name);
-              if (c.role === 'Other' || c.customRole) {
-                const customInput = row.querySelector('.c-custom-role');
-                customInput.style.display = 'block';
-                customInput.value = c.customRole || c.role;
-              }
-              listContainer.appendChild(row);
-            });
-          } else {
-            addContributorToTrack(index, "Main Artist", manifest.artist || "Main Artist");
-          }
-        });
-
-        document.getElementById('build-release-btn').disabled = false;
-      }
-
-      alert(`Session "${manifest.title || 'Untitled'}" restored! Please re-select your audio stems to link binary files.`);
-    }
-
-    // --- PROVEN SINGLE-FILE HTML WIDGET BUILDER & MEMORY-SAFE ENCRYPTION ENGINE ---
     async function processAudio() {
       const cards = document.querySelectorAll('.track-card');
       if (cards.length === 0) {
@@ -1208,7 +956,6 @@
           const file = selectedUnifiedFiles[i] || selectedUnifiedFiles[0];
           logMessage(`⚡ [${i + 1}/${cards.length}] Processing Track ${trackNum}: "${trackTitle}" (${(file.size / (1024*1024)).toFixed(1)} MB)...`);
 
-          // 1. Completely destroy previous FFmpeg instance to wipe WASM RAM heap clean
           if (globalFFmpegInstance) {
             try { await globalFFmpegInstance.exit(); } catch(e) {}
             globalFFmpegInstance = null;
@@ -1217,39 +964,37 @@
           logMessage(`🔄 Spinning up fresh FFmpeg instance for Track ${trackNum}...`);
           const { createFFmpeg } = FFmpeg;
           globalFFmpegInstance = createFFmpeg({ 
-            log: true,            // Re-enabled to capture FFmpeg internal warnings if needed
+            log: true,
             mainName: 'main',
             corePath: 'https://unpkg.com/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js'
           });
           await globalFFmpegInstance.load();
 
-          // Dynamically capture the real file extension (e.g., .flac, .mp3, .wav)
           const fileExt = file.name.split('.').pop().toLowerCase();
           const inFileName = `input_${i}.${fileExt}`;
           const outM3u8Name = `playlist_${i}.m3u8`;
 
-          // 2. Read binary audio into the clean WASM virtual filesystem
           let arrayBuffer = await file.arrayBuffer();
           globalFFmpegInstance.FS('writeFile', inFileName, new Uint8Array(arrayBuffer));
           arrayBuffer = null; 
 
-          // 3. Run local HLS segmentation with explicit audio mapping & standard 44.1kHz stereo resampling
-          logMessage(`✂️ Running HLS segmentation...`);
+          logMessage(`✂️ Running HLS segmentation with deep header probe...`);
           await globalFFmpegInstance.run(
+            '-probesize', '50M',
+            '-analyzeduration', '50M',
             '-i', inFileName,
-            '-map', '0:a:0',      // Explicitly select ONLY the first audio stream
-            '-vn',                // Drop attached cover art/images
+            '-map', '0:a:0',
+            '-vn',
             '-c:a', 'aac',
             '-b:a', '192k',
-            '-ar', '44100',       // Force standard 44.1kHz sample rate
-            '-ac', '2',           // Force stereo
+            '-ar', '44100',
+            '-ac', '2',
             '-hls_time', '6',
             '-hls_list_size', '0',
             '-hls_segment_filename', `segment_${i}_%03d.ts`,
             outM3u8Name
           );
 
-          // 4. Package segments into Base64 widget and upload to Drive
           logMessage(`☁️ Packaging and syncing Track ${trackNum} to Drive...`);
           const htmlFileId = await packageSingleTrackWidget(i, outM3u8Name, trackTitle);
 
@@ -1259,16 +1004,14 @@
           logMessage(`✅ Track ${trackNum} ("${trackTitle}") successfully processed and synced!`);
         }
 
-        // Finalize Release Manifest & Save to Drive
         logMessage(`💾 Saving master release manifest snapshot to Drive...`);
         await uploadManifestToDrive(manifest);
         exportSessionManifest(manifest);
 
-        // Mount multi-panel player directly in Step 4 & populate Step 5 embed box
         generateEmbedUI(manifest);
 
         logMessage(`🎉 All ${cards.length} track(s) packaged & release published successfully!`);
-        alert(`Release "${manifest.title}" has been successfully built and published to your Drive vault!`);;
+        alert(`Release "${manifest.title}" has been successfully built and published to your Drive vault!`);
 
       } catch (err) {
         logMessage('❌ Batch Processing Error: ' + err.message);
@@ -1279,76 +1022,84 @@
       }
     }
 
-    function copyPlayerDirectLink() {
-      const activeTrack = currentManifest?.tracks[currentTrackIndex] || currentManifest?.tracks[0];
-      if (!activeTrack || !activeTrack.hlsStreamId) {
-        alert('No active player stream found. Please process a release first.');
-        return;
+    // --- HELPER: UPDATE-IN-PLACE (OVERWRITE) DRIVE UPLOADER ---
+    async function uploadFileToDrive(fileName, fileData, mimeType) {
+      if (!accessToken || !driveFolderId) return null;
+
+      try {
+        // Search if file with exact name already exists in vault
+        const searchQuery = encodeURIComponent(`name = '${fileName}' and '${driveFolderId}' in parents and trashed = false`);
+        const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${searchQuery}`, {
+          headers: new Headers({ 'Authorization': 'Bearer ' + accessToken })
+        });
+        const searchData = await searchRes.json();
+        
+        let existingFileId = null;
+        if (searchData.files && searchData.files.length > 0) {
+          existingFileId = searchData.files[0].id;
+        }
+
+        if (existingFileId) {
+          // UPDATE IN PLACE (PATCH)
+          logMessage(`🔄 Overwriting existing Drive file in place: "${fileName}" (ID: ${existingFileId})`);
+          const updateRes = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=media`, {
+            method: 'PATCH',
+            headers: new Headers({
+              'Authorization': 'Bearer ' + accessToken,
+              'Content-Type': mimeType
+            }),
+            body: fileData
+          });
+          if (!updateRes.ok) throw new Error(updateRes.statusText);
+          return existingFileId;
+        } else {
+          // CREATE NEW FILE (POST MULTIPART)
+          const boundary = '-------314159265358979323846';
+          const delimiter = "\r\n--" + boundary + "\r\n";
+          const close_delim = "\r\n--" + boundary + "--";
+
+          const metadata = { name: fileName, parents: [driveFolderId] };
+          const metadataPart = delimiter + 'Content-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(metadata) + delimiter + 'Content-Type: ' + mimeType + '\r\n\r\n';
+
+          const multipartRequestBody = new Blob([metadataPart, fileData, close_delim], { type: 'multipart/related; boundary=' + boundary });
+
+          const createRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+            method: 'POST',
+            headers: new Headers({
+              'Authorization': 'Bearer ' + accessToken,
+              'Content-Type': 'multipart/related; boundary=' + boundary
+            }),
+            body: multipartRequestBody
+          });
+
+          const createData = await createRes.json();
+          if (!createRes.ok) throw new Error(createData.error ? createData.error.message : createRes.statusText);
+
+          fetch(`https://www.googleapis.com/drive/v3/files/${createData.id}/permissions`, {
+            method: 'POST',
+            headers: new Headers({
+              'Authorization': 'Bearer ' + accessToken,
+              'Content-Type': 'application/json'
+            }),
+            body: JSON.stringify({ role: 'reader', type: 'anyone' })
+          }).catch(() => {});
+
+          return createData.id;
+        }
+      } catch (err) {
+        handleDriveError(err);
+        throw err;
       }
-      const directUrl = `${APPS_SCRIPT_URL}?fileId=${activeTrack.hlsStreamId}`;
-      navigator.clipboard.writeText(directUrl);
-      alert(`Direct player script link for "${activeTrack.title}" copied to clipboard!`);
     }
 
-    function openShareOptionsModal(manifest) {
-      let modal = document.getElementById('chaos-share-modal');
-      if (modal) modal.remove();
-
-      modal = document.createElement('div');
-      modal.id = 'chaos-share-modal';
-      modal.style.cssText = `
-        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8);
-        z-index: 999999; display: flex; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;
-      `;
-
-      const activeTrack = manifest.tracks[currentTrackIndex];
-      const playerUrl = activeTrack?.hlsStreamId ? `https://drive.google.com/uc?id=${activeTrack.hlsStreamId}` : window.location.href;
-      const siteUrl = window.location.href;
-
-      modal.innerHTML = `
-        <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; max-width: 380px; width: 100%; color: #c9d1d9; font-family: system-ui, sans-serif;">
-          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 14px;">
-            <h3 style="margin: 0; font-size: 16px; color: #f0f6fc;">🔗 Share Release</h3>
-            <button id="close-share-modal" style="background: transparent; color: #8b949e; border: none; font-size: 18px; cursor: pointer;">✕</button>
-          </div>
-          <div style="display: flex; flex-direction: column; gap: 10px;">
-            <button id="share-opt-player" style="background: #21262d; border: 1px solid #30363d; color: #f0f6fc; padding: 12px; border-radius: 8px; text-align: left; cursor: pointer;">
-              <strong style="display: block; font-size: 13px;">▶️ Share Player Stream</strong>
-              <span style="font-size: 11px; color: #8b949e;">Direct link to active track widget</span>
-            </button>
-            <button id="share-opt-site" style="background: #21262d; border: 1px solid #30363d; color: #f0f6fc; padding: 12px; border-radius: 8px; text-align: left; cursor: pointer;">
-              <strong style="display: block; font-size: 13px;">🌐 Share Website Domain</strong>
-              <span style="font-size: 11px; color: #8b949e;">Link to host page (${window.location.hostname})</span>
-            </button>
-          </div>
-        </div>
-      `;
-
-      document.body.appendChild(modal);
-
-      document.getElementById('close-share-modal').onclick = () => modal.remove();
-
-      document.getElementById('share-opt-player').onclick = () => {
-        dispatchShare(`Stream "${activeTrack?.title || manifest.title}"`, playerUrl);
-        modal.remove();
-      };
-
-      document.getElementById('share-opt-site').onclick = () => {
-        dispatchShare(`Listen to "${manifest.title}" by ${manifest.artist}`, siteUrl);
-        modal.remove();
-      };
+    async function uploadManifestToDrive(manifest) {
+      if (!accessToken || !driveFolderId) return;
+      const fileName = getCleanAlbumFilename(manifest.title);
+      const fileContent = JSON.stringify(manifest, null, 2);
+      await uploadFileToDrive(fileName, new TextEncoder().encode(fileContent), 'application/json');
+      logMessage(`☁️ Cloud snapshot synced to Drive: "${fileName}"`);
     }
 
-    function dispatchShare(text, url) {
-      if (navigator.share) {
-        navigator.share({ title: currentManifest?.title || 'Chaos Theory', text, url }).catch(() => {});
-      } else {
-        navigator.clipboard.writeText(url);
-        alert('Link copied to clipboard!');
-      }
-    }
-    
-    // --- HELPER: PACKAGE INDIVIDUAL TRACK SEGMENTS INTO BASE64 WIDGET ---
     async function packageSingleTrackWidget(trackIndex, playlistName, trackTitle) {
       const files = globalFFmpegInstance.FS('readdir', '/');
       const segmentFiles = files.filter(f => f.startsWith(`segment_${trackIndex}_`) && f.endsWith('.ts')).sort();
@@ -1411,203 +1162,16 @@
       return htmlFileId;
     }
 
-    // --- SEQUENTIAL BASE64 PACKAGER (Prevents WebAssembly OOM Crashes) ---
-    async function uploadGeneratedChunksToDrive() {
-      try {
-        const files = globalFFmpegInstance.FS('readdir', '/');
-        const segmentFiles = files.filter(f => f.endsWith('.ts')).sort();
-        logMessage(`Found ${segmentFiles.length} audio chunk(s). Encoding Base64 data URIs...`);
-
-        const playlistTextDecoder = new TextDecoder('utf-8');
-        let cloudM3u8Content = playlistTextDecoder.decode(globalFFmpegInstance.FS('readFile', 'playlist.m3u8'));
-        
-        // Process segments one-by-one to keep WebAssembly heap flat
-        for (const segmentName of segmentFiles) {
-          const segData = globalFFmpegInstance.FS('readFile', segmentName);
-          
-          let binaryString = '';
-          const chunkSize = 8192;
-          for (let i = 0; i < segData.length; i += chunkSize) {
-            binaryString += String.fromCharCode.apply(null, segData.subarray(i, i + chunkSize));
-          }
-          const base64Segment = btoa(binaryString);
-          const dataUri = `data:video/mp2t;base64,${base64Segment}`;
-          
-          cloudM3u8Content = cloudM3u8Content.split(segmentName).join(dataUri);
-          
-          // Immediately purge segment from WASM memory
-          try { globalFFmpegInstance.FS('unlink', segmentName); } catch(e) {}
-        }
-
-        const playlistBase64 = btoa(unescape(encodeURIComponent(cloudM3u8Content)));
-
-        // Build the Standalone HTML Widget Container
-        const standaloneHtmlContent = "<!DOCTYPE html>\n" +
-          "<html lang=\"en\">\n" +
-          "<head>\n" +
-          "  <meta charset=\"UTF-8\">\n" +
-          "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
-          "  <link href=\"https://vjs.zencdn.net/8.10.0/video-js.css\" rel=\"stylesheet\" />\n" +
-          "  <script src=\"https://vjs.zencdn.net/8.10.0/video.min.js\"><\/script>\n" +
-          "  <style>\n" +
-          "    body { background: #0d1117; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: system-ui, sans-serif; }\n" +
-          "    .video-js { width: 100%; height: 100%; max-height: 268px; border-radius: 8px; overflow: hidden; }\n" +
-          "  </style>\n" +
-          "</head>\n" +
-          "<body>\n" +
-          "  <video id=\"chaos-widget-player\" class=\"video-js vjs-default-skin vjs-big-play-centered\" controls preload=\"auto\" data-setup='{}'></video>\n" +
-          "  <script>\n" +
-          "    function decodeBase64Utf8(base64) {\n" +
-          "      const binString = atob(base64);\n" +
-          "      const bytes = Uint8Array.from(binString, (m) => m.codePointAt(0));\n" +
-          "      return new TextDecoder().decode(bytes);\n" +
-          "    }\n" +
-          "    const m3u8Data = decodeBase64Utf8('" + playlistBase64 + "');\n" +
-          "    const blob = new Blob([m3u8Data], { type: 'application/x-mpegURL' });\n" +
-          "    const blobUrl = URL.createObjectURL(blob);\n" +
-          "    const player = videojs('chaos-widget-player');\n" +
-          "    player.src({ src: blobUrl, type: 'application/x-mpegURL' });\n" +
-          "  <\/script>\n" +
-          "</body>\n" +
-          "</html>";
-
-        logMessage('Uploading standalone sovereign HTML widget to Drive vault...');
-        const textEncoder = new TextEncoder();
-        const htmlFileId = await uploadFileToDrive('release_widget.html', textEncoder.encode(standaloneHtmlContent), 'text/html');
-
-        logMessage(`🎉 Widget successfully built! File ID: ${htmlFileId}`);
-
-        playLocalWasmStream();
-        generateEmbedUI(htmlFileId);
-
-      } catch (err) {
-        logMessage('❌ Error in widget build pipeline: ' + err.message);
-        console.error("Widget Build Error:", err);
-      }
-    }
-
-    // --- INSTANT LOCAL PLAYBACK PREVIEW ---
-    function playLocalWasmStream() {
-      if (!player) {
-        player = videojs('chaos-player');
-      }
-
-      const m3u8Data = globalFFmpegInstance.FS('readFile', 'playlist.m3u8');
-      const files = globalFFmpegInstance.FS('readdir', '/');
-      const segmentFiles = files.filter(f => f.endsWith('.ts')).sort();
-      
-      let modifiedM3u8 = new TextDecoder('utf-8').decode(m3u8Data);
-      
-      for (const seg of segmentFiles) {
-        const segData = globalFFmpegInstance.FS('readFile', seg);
-        let binaryString = '';
-        const chunkSize = 8192;
-        for (let i = 0; i < segData.length; i += chunkSize) {
-          binaryString += String.fromCharCode.apply(null, segData.subarray(i, i + chunkSize));
-        }
-        const base64Segment = btoa(binaryString);
-        const dataUri = `data:video/mp2t;base64,${base64Segment}`;
-        
-        modifiedM3u8 = modifiedM3u8.split(seg).join(dataUri);
-      }
-
-      const playlistBlob = new Blob([modifiedM3u8], { type: 'application/x-mpegURL' });
-      const playlistBlobUrl = URL.createObjectURL(playlistBlob);
-
-      logMessage('Loading self-contained zero-network stream into Sovereign player...');
-      player.src({
-        src: playlistBlobUrl,
-        type: 'application/x-mpegURL'
-      });
-
-      player.ready(() => {
-        logMessage('▶️ Sovereign player ready for playback.');
-        player.play().catch(() => {
-          logMessage('ℹ️ Click play on the player controls.');
-        });
-      });
-    }
-
-    // --- DRIVE MULTIPART FILE UPLOAD HELPER ---
-   async function uploadFileToDrive(fileName, fileData, mimeType) {
-      const boundary = '-------314159265358979323846';
-      const delimiter = "\r\n--" + boundary + "\r\n";
-      const close_delim = "\r\n--" + boundary + "--";
-
-      const metadata = {
-        name: fileName,
-        parents: [driveFolderId]
-      };
-
-      const metadataPart = 
-        delimiter +
-        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-        JSON.stringify(metadata) +
-        delimiter +
-        'Content-Type: ' + mimeType + '\r\n\r\n';
-
-      const multipartRequestBody = new Blob([
-        metadataPart,
-        fileData,
-        close_delim
-      ], { type: 'multipart/related; boundary=' + boundary });
-
-      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-        method: 'POST',
-        headers: new Headers({
-          'Authorization': 'Bearer ' + accessToken,
-          'Content-Type': 'multipart/related; boundary=' + boundary
-        }),
-        body: multipartRequestBody
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        // Automatically check if token expired or is invalid
-        handleDriveError(new Error(data.error ? data.error.message : res.statusText));
-        throw new Error(data.error ? data.error.message : res.statusText);
-      }
-
-      // Grant public read permissions in background
-      fetch(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions`, {
-        method: 'POST',
-        headers: new Headers({
-          'Authorization': 'Bearer ' + accessToken,
-          'Content-Type': 'application/json'
-        }),
-        body: JSON.stringify({ role: 'reader', type: 'anyone' })
-      }).catch(() => {});
-
-      return data.id;
-    }
-
-    // Global Playback State Machine
-    let currentTrackIndex = 0;
-    let isShuffleActive = false;
-    let repeatMode = 'off'; // 'off' | 'all' | 'one'
-    let currentManifest = null;
-
+    // --- MASTER RELEASE DASHBOARD UI ENGINE ---
     function generateEmbedUI(manifest) {
       currentManifest = manifest;
 
-      // 1. Mount directly inside Card 4 (Step 4), replacing the old static video element
       let embedContainer = document.getElementById('sovereign-player-card-target');
       if (!embedContainer) {
-        const step4Card = document.querySelector('.card:has(#chaos-player)') || document.querySelectorAll('.card')[3];
-        if (step4Card) {
-          step4Card.innerHTML = `
-            <h3>4. Sovereign HLS Release Dashboard</h3>
-            <p>Stream your encrypted release directly from your authorized Google Drive storage.</p>
-            <div id="sovereign-player-card-target"></div>
-          `;
-          embedContainer = document.getElementById('sovereign-player-card-target');
-        } else {
-          embedContainer = document.getElementById('embed-output-container') || createEmbedContainer();
-        }
+        embedContainer = document.getElementById('embed-output-container') || createEmbedContainer();
       }
       embedContainer.innerHTML = '';
 
-      // --- MAIN RESPONSIVE DASHBOARD LAYOUT ---
       const wrapper = document.createElement('div');
       wrapper.id = 'chaos-sovereign-dashboard';
       wrapper.style.cssText = `
@@ -1618,13 +1182,12 @@
         transition: grid-template-columns 0.3s ease;
       `;
 
-      // Helper to update grid column layout dynamically when panels collapse
       function updateGridColumns() {
         const leftCollapsed = document.getElementById('left-panel-content')?.style.display === 'none';
         const rightCollapsed = document.getElementById('right-panel-content')?.style.display === 'none';
 
-        const leftWidth = leftCollapsed ? '48px' : '260px';
-        const rightWidth = rightCollapsed ? '48px' : '300px';
+        const leftWidth = leftCollapsed ? '42px' : '260px';
+        const rightWidth = rightCollapsed ? '42px' : '300px';
         wrapper.style.gridTemplateColumns = `${leftWidth} 1fr ${rightWidth}`;
       }
 
@@ -1633,8 +1196,8 @@
       header.style.cssText = `grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 14px; flex-wrap: wrap; gap: 12px;`;
       header.innerHTML = `
         <div>
-          <h2 style="margin: 0; font-size: 22px; color: #f0f6fc; font-weight: 700;">${manifest.title || 'Chaos Theory'}</h2>
-          <p style="margin: 4px 0 0; font-size: 14px; color: #8b949e;">${manifest.artist || 'walo, the underscore.'} • ${manifest.date ? manifest.date.split('-')[0] : '2026'} (${manifest.genre || 'Alt. Rock'})</p>
+          <h2 style="margin: 0; font-size: 22px; color: #f0f6fc; font-weight: 700;">${manifest.title || 'Chaos Theory Protocol'}</h2>
+          <p style="margin: 4px 0 0; font-size: 14px; color: #8b949e;">${manifest.artist || 'walo, the underscore.'} • ${manifest.date ? manifest.date.split('-')[0] : '2026'} (${manifest.genre || 'Sovereign Audio Vault'})</p>
         </div>
         <div style="display: flex; align-items: center; gap: 10px;">
           <button id="btn-share-release" style="background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
@@ -1657,7 +1220,7 @@
       
       const leftHeader = document.createElement('div');
       leftHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 6px; cursor: pointer;`;
-      leftHeader.innerHTML = `<h3 style="margin: 0; font-size: 13px; color: #f0f6fc;">📜 Credits</h3><span id="left-collapse-icon" style="color: #58a6ff; font-weight: bold;">◀</span>`;
+      leftHeader.innerHTML = `<h3 id="left-header-text" style="margin: 0; font-size: 13px; color: #f0f6fc;">📜 Credits</h3><span id="left-collapse-icon" style="color: #58a6ff; font-weight: bold;">◀</span>`;
       leftPanel.appendChild(leftHeader);
 
       const leftContent = document.createElement('div');
@@ -1671,11 +1234,11 @@
       leftContent.innerHTML = `
         ${coverImgHtml}
         <div>
-          <p style="margin: 4px 0;"><strong>Composer:</strong> ${manifest.artist}</p>
+          <p style="margin: 4px 0;"><strong>Composer:</strong> ${manifest.artist || 'walo, the underscore.'}</p>
           <p style="margin: 4px 0;"><strong>Rights:</strong> BMI Registered</p>
           <p style="margin: 4px 0;"><strong>Format:</strong> HLS Encrypted Stems</p>
           <p style="margin-top: 8px; color: #8b949e; font-style: italic; font-size: 11px; line-height: 1.3;">
-            Streaming under artist license. All rights reserved. © ${manifest.artist}.
+            Streaming under artist license. All rights reserved. © ${manifest.artist || 'walo, the underscore.'}.
           </p>
         </div>
       `;
@@ -1684,6 +1247,7 @@
       leftHeader.onclick = () => {
         const isHidden = leftContent.style.display === 'none';
         leftContent.style.display = isHidden ? 'flex' : 'none';
+        document.getElementById('left-header-text').style.display = isHidden ? 'block' : 'none';
         document.getElementById('left-collapse-icon').innerText = isHidden ? '◀' : '▶';
         updateGridColumns();
       };
@@ -1697,7 +1261,7 @@
       nowPlayingTitle.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 8px;`;
       nowPlayingTitle.innerHTML = `
         <h3 id="active-track-title" style="margin: 0; font-size: 15px; color: #f0f6fc;">Track 1: ${manifest.tracks[0]?.title || 'Select Track'}</h3>
-        <span id="active-track-num" style="font-size: 12px; color: #58a6ff; font-weight: 600;">1 / ${manifest.tracks.length}</span>
+        <span id="active-track-num" style="font-size: 12px; color: #58a6ff; font-weight: 600;">${manifest.tracks.length > 0 ? '1 / ' + manifest.tracks.length : '0 / 0'}</span>
       `;
       centerPanel.appendChild(nowPlayingTitle);
 
@@ -1705,7 +1269,7 @@
       playerFrame.id = 'sovereign-player-frame';
       playerFrame.style.cssText = `width: 100%; height: 230px; border: none; border-radius: 6px; background: #000;`;
       if (manifest.tracks[0]?.hlsStreamId) {
-        playerFrame.src = `https://drive.google.com/uc?id=${manifest.tracks[0].hlsStreamId}`;
+        playerFrame.src = `${APPS_SCRIPT_URL}?fileId=${manifest.tracks[0].hlsStreamId}`;
       }
       centerPanel.appendChild(playerFrame);
 
@@ -1726,36 +1290,41 @@
       
       const rightHeader = document.createElement('div');
       rightHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 6px; margin-bottom: 8px; cursor: pointer;`;
-      rightHeader.innerHTML = `<h3 style="margin: 0; font-size: 13px; color: #f0f6fc;">🎵 Queue (${manifest.tracks.length})</h3><span id="right-collapse-icon" style="color: #58a6ff; font-weight: bold;">▶</span>`;
+      rightHeader.innerHTML = `<h3 id="right-header-text" style="margin: 0; font-size: 13px; color: #f0f6fc;">🎵 Queue (${manifest.tracks.length})</h3><span id="right-collapse-icon" style="color: #58a6ff; font-weight: bold;">▶</span>`;
       rightPanel.appendChild(rightHeader);
 
       const trackListContainer = document.createElement('div');
       trackListContainer.id = 'right-panel-content';
       trackListContainer.style.cssText = `overflow-y: auto; flex-grow: 1; display: flex; flex-direction: column; gap: 6px; max-height: 320px;`;
 
-      manifest.tracks.forEach((track, idx) => {
-        const trackBtn = document.createElement('button');
-        trackBtn.className = 'track-select-btn';
-        trackBtn.dataset.index = idx;
-        trackBtn.style.cssText = `
-          background: ${idx === 0 ? '#1f6feb' : '#21262d'}; color: #c9d1d9; border: 1px solid #30363d;
-          padding: 8px 10px; border-radius: 6px; text-align: left; cursor: pointer; font-size: 12px;
-          display: flex; align-items: center; gap: 8px; transition: background 0.2s;
-        `;
-        
-        const trackThumb = track.thumbData 
-          ? `<img src="${track.thumbData}" style="width: 24px; height: 24px; border-radius: 3px; object-fit: cover;" />`
-          : `<div style="width: 24px; height: 24px; background: #30363d; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600;">${idx + 1}</div>`;
+      if (manifest.tracks.length === 0) {
+        trackListContainer.innerHTML = `<div style="color: #8b949e; font-size: 11px; font-style: italic; padding: 10px; text-align: center;">No tracks processed yet. Build a release above to populate queue.</div>`;
+      } else {
+        manifest.tracks.forEach((track, idx) => {
+          const trackBtn = document.createElement('button');
+          trackBtn.className = 'track-select-btn';
+          trackBtn.dataset.index = idx;
+          trackBtn.style.cssText = `
+            background: ${idx === 0 ? '#1f6feb' : '#21262d'}; color: #c9d1d9; border: 1px solid #30363d;
+            padding: 8px 10px; border-radius: 6px; text-align: left; cursor: pointer; font-size: 12px;
+            display: flex; align-items: center; gap: 8px; transition: background 0.2s;
+          `;
+          
+          const trackThumb = track.thumbData 
+            ? `<img src="${track.thumbData}" style="width: 24px; height: 24px; border-radius: 3px; object-fit: cover;" />`
+            : `<div style="width: 24px; height: 24px; background: #30363d; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600;">${idx + 1}</div>`;
 
-        trackBtn.innerHTML = `${trackThumb} <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1;">${track.trackNumber || idx + 1}. ${track.title}</span>`;
-        trackBtn.onclick = () => selectTrack(idx);
-        trackListContainer.appendChild(trackBtn);
-      });
+          trackBtn.innerHTML = `${trackThumb} <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1;">${track.trackNumber || idx + 1}. ${track.title}</span>`;
+          trackBtn.onclick = () => selectTrack(idx);
+          trackListContainer.appendChild(trackBtn);
+        });
+      }
       rightPanel.appendChild(trackListContainer);
 
       rightHeader.onclick = () => {
         const isHidden = trackListContainer.style.display === 'none';
         trackListContainer.style.display = isHidden ? 'flex' : 'none';
+        document.getElementById('right-header-text').style.display = isHidden ? 'block' : 'none';
         document.getElementById('right-collapse-icon').innerText = isHidden ? '▶' : '◀';
         updateGridColumns();
       };
@@ -1767,17 +1336,14 @@
       basePanel.innerHTML = `
         <h3 style="margin-top: 0; font-size: 13px; color: #f0f6fc; border-bottom: 1px solid #30363d; padding-bottom: 6px;">📝 Lyrics & Notes</h3>
         <div id="release-lyrics-box" style="font-family: monospace; font-size: 12px; color: #8b949e; white-space: pre-wrap; max-height: 120px; overflow-y: auto; padding: 8px; background: #0d1117; border-radius: 4px; border: 1px solid #21262d;">
-          ${manifest.tracks[0]?.caption || `[Select a track above to view lyrics and liner notes]\n\nChaos Theory Protocol.`}
+          ${manifest.tracks[0]?.caption || `[Select a track above to view lyrics and liner notes]\n\nChaos Theory Protocol — Sovereign Audio Distribution Suite.`}
         </div>
       `;
       wrapper.appendChild(basePanel);
 
       embedContainer.appendChild(wrapper);
 
-      // --- 6. AUTO-POPULATE STEP 5 EMBED CODE & DIRECT PLAYER LINK ---
       populateStep5EmbedBox(manifest);
-
-      // --- ATTACH CONTROL HANDLERS ---
       setupPlaybackHandlers(manifest);
     }
 
@@ -1786,17 +1352,16 @@
       const activeTrack = manifest.tracks[currentTrackIndex] || manifest.tracks[0];
       
       if (embedBox) {
-        // Option A: If your Apps Script handles routing via ?fileId=...
-        const scriptViewerUrl = `${APPS_SCRIPT_URL}?fileId=${activeTrack?.hlsStreamId || ''}`;
-        
-        // Option B: Or if you prefer direct script-rendered container embedding:
-        const embedHtml = `<iframe src="${scriptViewerUrl}" width="100%" height="680" style="border:none;border-radius:12px;background:#0d1117;" allow="encrypted-media"></iframe>`;
-        
-        embedBox.value = embedHtml;
+        if (activeTrack && activeTrack.hlsStreamId) {
+          const scriptViewerUrl = `${APPS_SCRIPT_URL}?fileId=${activeTrack.hlsStreamId}`;
+          const embedHtml = `<iframe src="${scriptViewerUrl}" width="100%" height="680" style="border:none;border-radius:12px;background:#0d1117;" allow="encrypted-media"></iframe>`;
+          embedBox.value = embedHtml;
+        } else {
+          embedBox.value = '';
+        }
       }
     }
 
-    // --- PLAYBACK CONTROL ENGINE ---
     function setupPlaybackHandlers(manifest) {
       const btnShuffle = document.getElementById('btn-shuffle');
       const btnRepeat = document.getElementById('btn-repeat');
@@ -1806,44 +1371,55 @@
       const btnShare = document.getElementById('btn-share-release');
       const btnCheckout = document.getElementById('btn-checkout-license');
 
-      btnShuffle.onclick = () => {
-        isShuffleActive = !isShuffleActive;
-        btnShuffle.style.color = isShuffleActive ? '#58a6ff' : '#8b949e';
-        btnShuffle.title = isShuffleActive ? 'Shuffle On' : 'Shuffle Off';
-      };
+      if (btnShuffle) {
+        btnShuffle.onclick = () => {
+          isShuffleActive = !isShuffleActive;
+          btnShuffle.style.color = isShuffleActive ? '#58a6ff' : '#8b949e';
+          btnShuffle.title = isShuffleActive ? 'Shuffle On' : 'Shuffle Off';
+        };
+      }
 
-      btnRepeat.onclick = () => {
-        if (repeatMode === 'off') {
-          repeatMode = 'all';
-          btnRepeat.style.color = '#58a6ff';
-          btnRepeat.innerText = '🔁';
-          btnRepeat.title = 'Repeat All';
-        } else if (repeatMode === 'all') {
-          repeatMode = 'one';
-          btnRepeat.style.color = '#f2cc60';
-          btnRepeat.innerText = '🔂';
-          btnRepeat.title = 'Repeat One';
-        } else {
-          repeatMode = 'off';
-          btnRepeat.style.color = '#8b949e';
-          btnRepeat.innerText = '🔁';
-          btnRepeat.title = 'Repeat Off';
-        }
-      };
+      if (btnRepeat) {
+        btnRepeat.onclick = () => {
+          if (repeatMode === 'off') {
+            repeatMode = 'all';
+            btnRepeat.style.color = '#58a6ff';
+            btnRepeat.innerText = '🔁';
+            btnRepeat.title = 'Repeat All';
+          } else if (repeatMode === 'all') {
+            repeatMode = 'one';
+            btnRepeat.style.color = '#f2cc60';
+            btnRepeat.innerText = '🔂';
+            btnRepeat.title = 'Repeat One';
+          } else {
+            repeatMode = 'off';
+            btnRepeat.style.color = '#8b949e';
+            btnRepeat.innerText = '🔁';
+            btnRepeat.title = 'Repeat Off';
+          }
+        };
+      }
 
-      btnPrev.onclick = () => {
-        let prevIdx = currentTrackIndex - 1;
-        if (prevIdx < 0) prevIdx = manifest.tracks.length - 1;
-        selectTrack(prevIdx);
-      };
+      if (btnPrev) {
+        btnPrev.onclick = () => {
+          if (!manifest.tracks || manifest.tracks.length === 0) return;
+          let prevIdx = currentTrackIndex - 1;
+          if (prevIdx < 0) prevIdx = manifest.tracks.length - 1;
+          selectTrack(prevIdx);
+        };
+      }
 
-      btnNext.onclick = () => {
-        triggerNextTrack();
-      };
+      if (btnNext) {
+        btnNext.onclick = () => {
+          triggerNextTrack();
+        };
+      }
 
-      btnMobile.onclick = () => {
-        openMobilePortraitModal(manifest);
-      };
+      if (btnMobile) {
+        btnMobile.onclick = () => {
+          openMobilePortraitModal(manifest);
+        };
+      }
 
       if (btnShare) {
         btnShare.onclick = () => {
@@ -1857,18 +1433,16 @@
         };
       }
     }
-    
+
     function selectTrack(idx) {
       if (!currentManifest || !currentManifest.tracks[idx]) return;
       currentTrackIndex = idx;
       const track = currentManifest.tracks[idx];
 
-      // Update Tracklist active state
       document.querySelectorAll('.track-select-btn').forEach(btn => {
         btn.style.background = parseInt(btn.dataset.index) === idx ? '#1f6feb' : '#21262d';
       });
 
-      // Update Frame and Headers
       const playerFrame = document.getElementById('sovereign-player-frame');
       const activeTitle = document.getElementById('active-track-title');
       const activeNum = document.getElementById('active-track-num');
@@ -1877,21 +1451,21 @@
 
       if (activeTitle) activeTitle.innerText = `Track ${idx + 1}: ${track.title}`;
       if (activeNum) activeNum.innerText = `${idx + 1} / ${currentManifest.tracks.length}`;
-      if (playerFrame && track.hlsStreamId) playerFrame.src = `https://drive.google.com/uc?id=${track.hlsStreamId}`;
+      if (playerFrame && track.hlsStreamId) playerFrame.src = `${APPS_SCRIPT_URL}?fileId=${track.hlsStreamId}`;
       if (metaImg && track.thumbData) metaImg.src = track.thumbData;
       if (lyricsBox) {
-        lyricsBox.innerText = track.lyrics || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.year || '2026'} ${currentManifest.artist}.`;
+        lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
       }
 
-      // Sync Mobile View if open
+      populateStep5EmbedBox(currentManifest);
       syncMobileCanvasView(track, idx);
     }
 
     function triggerNextTrack() {
-      if (!currentManifest) return;
+      if (!currentManifest || !currentManifest.tracks || currentManifest.tracks.length === 0) return;
 
       if (repeatMode === 'one') {
-        selectTrack(currentTrackIndex); // Replay current track
+        selectTrack(currentTrackIndex);
         return;
       }
 
@@ -1902,23 +1476,79 @@
         nextIdx = currentTrackIndex + 1;
         if (nextIdx >= currentManifest.tracks.length) {
           if (repeatMode === 'all') {
-            nextIdx = 0; // Loop back to start
+            nextIdx = 0;
           } else {
-            return; // Stop at end of queue
+            return;
           }
         }
       }
       selectTrack(nextIdx);
     }
 
-    // --- GLOBAL POSTMESSAGE AUTO-ADVANCE LISTENER ---
     window.addEventListener('message', (event) => {
       if (event.data && event.data.type === 'CHAOS_TRACK_ENDED') {
         triggerNextTrack();
       }
     });
 
-    // --- 6. FULL-SCREEN PORTRAIT MOBILE STREAMING CANVAS ---
+    function openShareOptionsModal(manifest) {
+      let modal = document.getElementById('chaos-share-modal');
+      if (modal) modal.remove();
+
+      modal = document.createElement('div');
+      modal.id = 'chaos-share-modal';
+      modal.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8);
+        z-index: 999999; display: flex; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;
+      `;
+
+      const activeTrack = manifest.tracks[currentTrackIndex];
+      const playerUrl = activeTrack?.hlsStreamId ? `${APPS_SCRIPT_URL}?fileId=${activeTrack.hlsStreamId}` : window.location.href;
+      const siteUrl = window.location.href;
+
+      modal.innerHTML = `
+        <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; max-width: 380px; width: 100%; color: #c9d1d9; font-family: system-ui, sans-serif;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 14px;">
+            <h3 style="margin: 0; font-size: 16px; color: #f0f6fc;">🔗 Share Release</h3>
+            <button id="close-share-modal" style="background: transparent; color: #8b949e; border: none; font-size: 18px; cursor: pointer;">✕</button>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button id="share-opt-player" style="background: #21262d; border: 1px solid #30363d; color: #f0f6fc; padding: 12px; border-radius: 8px; text-align: left; cursor: pointer;">
+              <strong style="display: block; font-size: 13px;">▶️ Share Player Stream</strong>
+              <span style="font-size: 11px; color: #8b949e;">Direct link to active track widget</span>
+            </button>
+            <button id="share-opt-site" style="background: #21262d; border: 1px solid #30363d; color: #f0f6fc; padding: 12px; border-radius: 8px; text-align: left; cursor: pointer;">
+              <strong style="display: block; font-size: 13px;">🌐 Share Website Domain</strong>
+              <span style="font-size: 11px; color: #8b949e;">Link to host page (${window.location.hostname})</span>
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      document.getElementById('close-share-modal').onclick = () => modal.remove();
+
+      document.getElementById('share-opt-player').onclick = () => {
+        dispatchShare(`Stream "${activeTrack?.title || manifest.title}"`, playerUrl);
+        modal.remove();
+      };
+
+      document.getElementById('share-opt-site').onclick = () => {
+        dispatchShare(`Listen to "${manifest.title}" by ${manifest.artist}`, siteUrl);
+        modal.remove();
+      };
+    }
+
+    function dispatchShare(text, url) {
+      if (navigator.share) {
+        navigator.share({ title: currentManifest?.title || 'Chaos Theory', text, url }).catch(() => {});
+      } else {
+        navigator.clipboard.writeText(url);
+        alert('Link copied to clipboard!');
+      }
+    }
+
     function openMobilePortraitModal(manifest) {
       let modal = document.getElementById('chaos-mobile-modal');
       if (modal) modal.remove();
@@ -1941,7 +1571,7 @@
         </div>
 
         <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; my: auto;">
-          <img id="mobile-canvas-art" src="${activeTrack?.thumbData || manifest.coverArt}" style="width: 280px; height: 280px; border-radius: 16px; object-fit: cover; box-shadow: 0 12px 32px rgba(0,0,0,0.8);" />
+          <img id="mobile-canvas-art" src="${activeTrack?.thumbData || manifest.coverArtData || ''}" style="width: 280px; height: 280px; border-radius: 16px; object-fit: cover; box-shadow: 0 12px 32px rgba(0,0,0,0.8);" />
           <div style="text-align: center; width: 100%;">
             <h2 id="mobile-canvas-title" style="margin: 0; font-size: 20px; color: #f0f6fc;">${activeTrack?.title || 'Select Track'}</h2>
             <p style="margin: 6px 0 0; font-size: 14px; color: #8b949e;">${manifest.artist}</p>
@@ -1955,7 +1585,7 @@
             <button onclick="document.getElementById('btn-next-track').click()" style="background: transparent; border: none; font-size: 26px; color: #f0f6fc; cursor: pointer;">⏭️</button>
             <button onclick="document.getElementById('btn-repeat').click()" style="background: transparent; border: none; font-size: 20px; color: #8b949e; cursor: pointer;">🔁</button>
           </div>
-          <p style="text-align: center; font-size: 11px; color: #8b949e; margin: 0;">© ${manifest.year || '2026'} ${manifest.artist}. All rights reserved.</p>
+          <p style="text-align: center; font-size: 11px; color: #8b949e; margin: 0;">© ${manifest.artist}. All rights reserved.</p>
         </div>
       `;
 
@@ -1975,7 +1605,6 @@
       if (mobileTitle) mobileTitle.innerText = track.title;
     }
 
-    // --- 7. PAYSTACK CHECKOUT & COMMERCIAL LICENSE MODAL ---
     function openPaystackCheckoutModal(manifest) {
       let modal = document.getElementById('chaos-paystack-modal');
       if (modal) modal.remove();
@@ -2030,6 +1659,7 @@
       document.body.appendChild(container);
       return container;
     }
+
     function copyEmbedCode() {
       const embedBox = document.getElementById('embed-output-box');
       if (!embedBox || !embedBox.value) {
@@ -2044,6 +1674,17 @@
         btn.innerText = '✅ Copied to Clipboard!';
         setTimeout(() => { btn.innerText = '📋 Copy Embed Code'; }, 2000);
       }
+    }
+
+    function copyPlayerDirectLink() {
+      const activeTrack = currentManifest?.tracks[currentTrackIndex] || currentManifest?.tracks[0];
+      if (!activeTrack || !activeTrack.hlsStreamId) {
+        alert('No active player stream found. Please process a release first.');
+        return;
+      }
+      const directUrl = `${APPS_SCRIPT_URL}?fileId=${activeTrack.hlsStreamId}`;
+      navigator.clipboard.writeText(directUrl);
+      alert(`Direct player script link for "${activeTrack.title}" copied to clipboard!`);
     }
   </script>
 </body>
