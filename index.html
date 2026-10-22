@@ -1220,9 +1220,10 @@
           globalFFmpegInstance.FS('writeFile', inFileName, new Uint8Array(arrayBuffer));
           arrayBuffer = null; // Free JS main thread memory reference
 
-          // 2. Run local HLS segmentation via WebAssembly
+          // 2. Run local HLS segmentation via WebAssembly (ignoring embedded cover art video streams with -vn)
           await globalFFmpegInstance.run(
             '-i', inFileName,
+            '-vn',                // <--- THIS IGNORES EMBEDDED COVER ART/IMAGES
             '-c:a', 'aac',
             '-b:a', '192k',
             '-hls_time', '6',
