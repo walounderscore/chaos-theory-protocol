@@ -1178,11 +1178,6 @@
 
     // --- PROVEN SINGLE-FILE HTML WIDGET BUILDER & MEMORY-SAFE ENCRYPTION ENGINE ---
     async function processAudio() {
-      if (!globalFFmpegInstance || !globalFFmpegInstance.isLoaded()) {
-        alert('FFmpeg engine is still initializing. Please wait a moment.');
-        return;
-      }
-
       const cards = document.querySelectorAll('.track-card');
       if (cards.length === 0) {
         alert('Please add at least one track to process.');
@@ -1210,15 +1205,31 @@
           const file = selectedUnifiedFiles[i] || selectedUnifiedFiles[0];
           logMessage(`⚡ [${i + 1}/${cards.length}] Processing Track ${trackNum}: "${trackTitle}" (${(file.size / (1024*1024)).toFixed(1)} MB)...`);
 
+          // 1. Completely destroy previous FFmpeg instance to wipe WASM RAM heap clean
+          if (globalFFmpegInstance) {
+            try { await globalFFmpegInstance.exit(); } catch(e) {}
+            globalFFmpegInstance = null;
+          }
+
+          logMessage(`🔄 Spinning up fresh FFmpeg instance for Track ${trackNum}...`);
+          const { createFFmpeg } = FFmpeg;
+          globalFFmpegInstance = createFFmpeg({ 
+            log: false,
+            mainName: 'main',
+            corePath: 'https://unpkg.com/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js'
+          });
+          await globalFFmpegInstance.load();
+
           const inFileName = `input_${i}.flac`;
           const outM3u8Name = `playlist_${i}.m3u8`;
 
-          // 1. Read binary audio into WASM virtual filesystem
+          // 2. Read binary audio into the clean WASM virtual filesystem
           let arrayBuffer = await file.arrayBuffer();
           globalFFmpegInstance.FS('writeFile', inFileName, new Uint8Array(arrayBuffer));
           arrayBuffer = null; 
 
-          // 2. Run local HLS segmentation with -vn
+          // 3. Run local HLS segmentation with -vn (dropping attached art)
+          logMessage(`✂️ Running HLS segmentation...`);
           await globalFFmpegInstance.run(
             '-i', inFileName,
             '-vn',
@@ -1230,22 +1241,17 @@
             outM3u8Name
           );
 
-          // 3. Package segments into Base64 widget
+          // 4. Package segments into Base64 widget and upload to Drive
           logMessage(`☁️ Packaging and syncing Track ${trackNum} to Drive...`);
           const htmlFileId = await packageSingleTrackWidget(i, outM3u8Name, trackTitle);
 
           manifest.tracks[i].hlsStreamId = htmlFileId;
           manifest.tracks[i].status = "packaged";
 
-          // 4. Thoroughly clean up virtual files and clear memory references
-          try {
-            globalFFmpegInstance.FS('unlink', inFileName);
-            globalFFmpegInstance.FS('unlink', outM3u8Name);
-          } catch(e) {}
-
           logMessage(`✅ Track ${trackNum} ("${trackTitle}") successfully processed and synced!`);
         }
 
+        // Finalize Release Manifest & Save to Drive
         logMessage(`💾 Saving master release manifest snapshot to Drive...`);
         await uploadManifestToDrive(manifest);
         exportSessionManifest(manifest);
