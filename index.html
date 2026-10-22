@@ -1264,10 +1264,11 @@
         await uploadManifestToDrive(manifest);
         exportSessionManifest(manifest);
 
+        // Mount multi-panel player directly in Step 4 & populate Step 5 embed box
         generateEmbedUI(manifest);
 
         logMessage(`🎉 All ${cards.length} track(s) packaged & release published successfully!`);
-        alert(`Release "${manifest.title}" has been successfully built and published to your Drive vault!`);
+        alert(`Release "${manifest.title}" has been successfully built and published to your Drive vault!`);;
 
       } catch (err) {
         logMessage('❌ Batch Processing Error: ' + err.message);
@@ -1279,14 +1280,14 @@
     }
 
     function copyPlayerDirectLink() {
-      const activeTrack = currentManifest?.tracks[currentTrackIndex];
+      const activeTrack = currentManifest?.tracks[currentTrackIndex] || currentManifest?.tracks[0];
       if (!activeTrack || !activeTrack.hlsStreamId) {
         alert('No active player stream found. Please process a release first.');
         return;
       }
       const directUrl = `https://drive.google.com/uc?id=${activeTrack.hlsStreamId}`;
       navigator.clipboard.writeText(directUrl);
-      alert('Direct player HLS link copied to clipboard!');
+      alert(`Direct HLS player link for "${activeTrack.title}" copied to clipboard!`);
     }
 
     function openShareOptionsModal(manifest) {
@@ -1588,18 +1589,44 @@
 
     function generateEmbedUI(manifest) {
       currentManifest = manifest;
-      const embedContainer = document.getElementById('embed-output-container') || createEmbedContainer();
+
+      // 1. Mount directly inside Card 4 (Step 4), replacing the old static video element
+      let embedContainer = document.getElementById('sovereign-player-card-target');
+      if (!embedContainer) {
+        const step4Card = document.querySelector('.card:has(#chaos-player)') || document.querySelectorAll('.card')[3];
+        if (step4Card) {
+          step4Card.innerHTML = `
+            <h3>4. Sovereign HLS Release Dashboard</h3>
+            <p>Stream your encrypted release directly from your authorized Google Drive storage.</p>
+            <div id="sovereign-player-card-target"></div>
+          `;
+          embedContainer = document.getElementById('sovereign-player-card-target');
+        } else {
+          embedContainer = document.getElementById('embed-output-container') || createEmbedContainer();
+        }
+      }
       embedContainer.innerHTML = '';
 
-      // --- MAIN RESPONSIVE CONTAINER ---
+      // --- MAIN RESPONSIVE DASHBOARD LAYOUT ---
       const wrapper = document.createElement('div');
       wrapper.id = 'chaos-sovereign-dashboard';
       wrapper.style.cssText = `
         background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 12px;
-        padding: 20px; font-family: system-ui, -apple-system, sans-serif; display: grid; gap: 20px;
-        grid-template-columns: 280px 1fr 340px; grid-template-rows: auto 1fr auto;
-        max-width: 1280px; margin: 20px auto; box-shadow: 0 12px 32px rgba(0,0,0,0.6); position: relative;
+        padding: 20px; font-family: system-ui, -apple-system, sans-serif; display: grid; gap: 16px;
+        grid-template-columns: 260px 1fr 300px; grid-template-rows: auto 1fr auto;
+        max-width: 1280px; margin: 10px auto; box-shadow: 0 12px 32px rgba(0,0,0,0.6); position: relative;
+        transition: grid-template-columns 0.3s ease;
       `;
+
+      // Helper to update grid column layout dynamically when panels collapse
+      function updateGridColumns() {
+        const leftCollapsed = document.getElementById('left-panel-content')?.style.display === 'none';
+        const rightCollapsed = document.getElementById('right-panel-content')?.style.display === 'none';
+
+        const leftWidth = leftCollapsed ? '48px' : '260px';
+        const rightWidth = rightCollapsed ? '48px' : '300px';
+        wrapper.style.gridTemplateColumns = `${leftWidth} 1fr ${rightWidth}`;
+      }
 
       // --- 1. HEADER & ACTION SUITE ---
       const header = document.createElement('div');
@@ -1607,7 +1634,7 @@
       header.innerHTML = `
         <div>
           <h2 style="margin: 0; font-size: 22px; color: #f0f6fc; font-weight: 700;">${manifest.title || 'Chaos Theory'}</h2>
-          <p style="margin: 4px 0 0; font-size: 14px; color: #8b949e;">${manifest.artist || 'walo, the underscore.'} • ${manifest.year || '2026'} (${manifest.genre || 'Alt. Rock'})</p>
+          <p style="margin: 4px 0 0; font-size: 14px; color: #8b949e;">${manifest.artist || 'walo, the underscore.'} • ${manifest.date ? manifest.date.split('-')[0] : '2026'} (${manifest.genre || 'Alt. Rock'})</p>
         </div>
         <div style="display: flex; align-items: center; gap: 10px;">
           <button id="btn-share-release" style="background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
@@ -1623,80 +1650,88 @@
       `;
       wrapper.appendChild(header);
 
-      // --- 2. LEFT PANEL: Credits, Metadata & Dynamic Artwork ---
-      const initialArt = manifest.tracks[0]?.thumbData || manifest.coverArt || '';
+      // --- 2. LEFT PANEL: Credits, Metadata & Collapsible Toggle ---
+      const initialArt = manifest.tracks[0]?.thumbData || manifest.coverArtData || manifest.coverArt || '';
       const leftPanel = document.createElement('div');
-      leftPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; font-size: 13px; display: flex; flex-direction: column; gap: 14px;`;
+      leftPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; overflow: hidden;`;
       
+      const leftHeader = document.createElement('div');
+      leftHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 6px; cursor: pointer;`;
+      leftHeader.innerHTML = `<h3 style="margin: 0; font-size: 13px; color: #f0f6fc;">📜 Credits</h3><span id="left-collapse-icon" style="color: #58a6ff; font-weight: bold;">◀</span>`;
+      leftPanel.appendChild(leftHeader);
+
+      const leftContent = document.createElement('div');
+      leftContent.id = 'left-panel-content';
+      leftContent.style.cssText = `display: flex; flex-direction: column; gap: 10px;`;
+
       const coverImgHtml = initialArt 
         ? `<img id="metadata-cover-art" src="${initialArt}" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 1px solid #30363d;" alt="Cover Art" />`
         : `<div id="metadata-cover-art" style="width: 100%; aspect-ratio: 1; background: #21262d; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #8b949e;">No Cover Art</div>`;
 
-      leftPanel.innerHTML = `
+      leftContent.innerHTML = `
         ${coverImgHtml}
         <div>
-          <h3 style="margin: 0 0 8px 0; font-size: 14px; color: #f0f6fc; border-bottom: 1px solid #30363d; padding-bottom: 8px;">📜 Credits & Metadata</h3>
-          <p style="margin: 4px 0;"><strong>Composer:</strong> ${manifest.composer || manifest.artist}</p>
-          <p style="margin: 4px 0;"><strong>Rights Admin:</strong> BMI Registered</p>
-          <p style="margin: 4px 0;"><strong>Protocol:</strong> Chaos Theory Vault</p>
+          <p style="margin: 4px 0;"><strong>Composer:</strong> ${manifest.artist}</p>
+          <p style="margin: 4px 0;"><strong>Rights:</strong> BMI Registered</p>
           <p style="margin: 4px 0;"><strong>Format:</strong> HLS Encrypted Stems</p>
-          <p style="margin-top: 12px; color: #8b949e; font-style: italic; font-size: 11px; line-height: 1.4;">
-            Streaming permitted under artist license. Unauthorised downloads, sync, or copying strictly prohibited under copyright law. © ${manifest.year || '2026'} ${manifest.artist}.
+          <p style="margin-top: 8px; color: #8b949e; font-style: italic; font-size: 11px; line-height: 1.3;">
+            Streaming under artist license. All rights reserved. © ${manifest.artist}.
           </p>
         </div>
       `;
+      leftPanel.appendChild(leftContent);
+
+      leftHeader.onclick = () => {
+        const isHidden = leftContent.style.display === 'none';
+        leftContent.style.display = isHidden ? 'flex' : 'none';
+        document.getElementById('left-collapse-icon').innerText = isHidden ? '◀' : '▶';
+        updateGridColumns();
+      };
       wrapper.appendChild(leftPanel);
 
-      // --- 3. CENTER PANEL: Stream Player & Playback Control Suite ---
+      // --- 3. CENTER PANEL: Stream Player & Controls ---
       const centerPanel = document.createElement('div');
-      centerPanel.style.cssText = `display: flex; flex-direction: column; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; gap: 16px; position: relative;`;
+      centerPanel.style.cssText = `display: flex; flex-direction: column; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; gap: 14px; position: relative;`;
       
       const nowPlayingTitle = document.createElement('div');
-      nowPlayingTitle.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 10px;`;
+      nowPlayingTitle.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 8px;`;
       nowPlayingTitle.innerHTML = `
-        <h3 id="active-track-title" style="margin: 0; font-size: 16px; color: #f0f6fc;">Track 1: ${manifest.tracks[0]?.title || 'Select Track'}</h3>
+        <h3 id="active-track-title" style="margin: 0; font-size: 15px; color: #f0f6fc;">Track 1: ${manifest.tracks[0]?.title || 'Select Track'}</h3>
         <span id="active-track-num" style="font-size: 12px; color: #58a6ff; font-weight: 600;">1 / ${manifest.tracks.length}</span>
       `;
       centerPanel.appendChild(nowPlayingTitle);
 
       const playerFrame = document.createElement('iframe');
       playerFrame.id = 'sovereign-player-frame';
-      playerFrame.style.cssText = `width: 100%; height: 220px; border: none; border-radius: 6px; background: #000;`;
+      playerFrame.style.cssText = `width: 100%; height: 230px; border: none; border-radius: 6px; background: #000;`;
       if (manifest.tracks[0]?.hlsStreamId) {
         playerFrame.src = `https://drive.google.com/uc?id=${manifest.tracks[0].hlsStreamId}`;
       }
       centerPanel.appendChild(playerFrame);
 
-      // Advanced Playback Control Bar (Shuffle & Repeat)
       const controlBar = document.createElement('div');
       controlBar.style.cssText = `display: flex; justify-content: space-around; align-items: center; background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #21262d;`;
       controlBar.innerHTML = `
-        <button id="btn-shuffle" style="background: transparent; color: #8b949e; border: none; font-size: 18px; cursor: pointer; transition: color 0.2s;" title="Shuffle Off">🔀</button>
+        <button id="btn-shuffle" style="background: transparent; color: #8b949e; border: none; font-size: 18px; cursor: pointer;" title="Shuffle Off">🔀</button>
         <button id="btn-prev-track" style="background: transparent; color: #c9d1d9; border: none; font-size: 20px; cursor: pointer;" title="Previous Track">⏮️</button>
         <button id="btn-next-track" style="background: transparent; color: #c9d1d9; border: none; font-size: 20px; cursor: pointer;" title="Next Track">⏭️</button>
-        <button id="btn-repeat" style="background: transparent; color: #8b949e; border: none; font-size: 18px; cursor: pointer; transition: color 0.2s;" title="Repeat Off">🔁</button>
+        <button id="btn-repeat" style="background: transparent; color: #8b949e; border: none; font-size: 18px; cursor: pointer;" title="Repeat Off">🔁</button>
       `;
       centerPanel.appendChild(controlBar);
       wrapper.appendChild(centerPanel);
 
-      // --- 4. RIGHT PANEL: Collapsible Tracklist & Interactive Queue ---
+      // --- 4. RIGHT PANEL: Tracklist & Collapsible Toggle ---
       const rightPanel = document.createElement('div');
-      rightPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; max-height: 420px;`;
+      rightPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; overflow: hidden;`;
       
       const rightHeader = document.createElement('div');
-      rightHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 10px; cursor: pointer;`;
-      rightHeader.innerHTML = `<h3 style="margin: 0; font-size: 14px; color: #f0f6fc;">🎵 Release Tracklist (${manifest.tracks.length})</h3><span id="collapse-icon">▼</span>`;
-      
-      const trackListContainer = document.createElement('div');
-      trackListContainer.id = 'track-list-container';
-      trackListContainer.style.cssText = `overflow-y: auto; flex-grow: 1; display: flex; flex-direction: column; gap: 6px;`;
-      
-      rightHeader.onclick = () => {
-        const isHidden = trackListContainer.style.display === 'none';
-        trackListContainer.style.display = isHidden ? 'flex' : 'none';
-        document.getElementById('collapse-icon').innerText = isHidden ? '▼' : '▲';
-      };
+      rightHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 6px; margin-bottom: 8px; cursor: pointer;`;
+      rightHeader.innerHTML = `<h3 style="margin: 0; font-size: 13px; color: #f0f6fc;">🎵 Queue (${manifest.tracks.length})</h3><span id="right-collapse-icon" style="color: #58a6ff; font-weight: bold;">▶</span>`;
       rightPanel.appendChild(rightHeader);
+
+      const trackListContainer = document.createElement('div');
+      trackListContainer.id = 'right-panel-content';
+      trackListContainer.style.cssText = `overflow-y: auto; flex-grow: 1; display: flex; flex-direction: column; gap: 6px; max-height: 320px;`;
 
       manifest.tracks.forEach((track, idx) => {
         const trackBtn = document.createElement('button');
@@ -1704,36 +1739,56 @@
         trackBtn.dataset.index = idx;
         trackBtn.style.cssText = `
           background: ${idx === 0 ? '#1f6feb' : '#21262d'}; color: #c9d1d9; border: 1px solid #30363d;
-          padding: 8px 12px; border-radius: 6px; text-align: left; cursor: pointer; font-size: 12px;
-          display: flex; align-items: center; gap: 10px; transition: background 0.2s;
+          padding: 8px 10px; border-radius: 6px; text-align: left; cursor: pointer; font-size: 12px;
+          display: flex; align-items: center; gap: 8px; transition: background 0.2s;
         `;
         
         const trackThumb = track.thumbData 
-          ? `<img src="${track.thumbData}" style="width: 26px; height: 26px; border-radius: 4px; object-fit: cover;" />`
-          : `<div style="width: 26px; height: 26px; background: #30363d; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;">${idx + 1}</div>`;
+          ? `<img src="${track.thumbData}" style="width: 24px; height: 24px; border-radius: 3px; object-fit: cover;" />`
+          : `<div style="width: 24px; height: 24px; background: #30363d; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600;">${idx + 1}</div>`;
 
-        trackBtn.innerHTML = `${trackThumb} <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1;">${track.number || idx + 1}. ${track.title}</span>`;
+        trackBtn.innerHTML = `${trackThumb} <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1;">${track.trackNumber || idx + 1}. ${track.title}</span>`;
         trackBtn.onclick = () => selectTrack(idx);
         trackListContainer.appendChild(trackBtn);
       });
       rightPanel.appendChild(trackListContainer);
+
+      rightHeader.onclick = () => {
+        const isHidden = trackListContainer.style.display === 'none';
+        trackListContainer.style.display = isHidden ? 'flex' : 'none';
+        document.getElementById('right-collapse-icon').innerText = isHidden ? '▶' : '◀';
+        updateGridColumns();
+      };
       wrapper.appendChild(rightPanel);
 
-      // --- 5. BASE PANEL: Lyrics & Liner Notes Text Container ---
+      // --- 5. BASE PANEL: Lyrics Text Box ---
       const basePanel = document.createElement('div');
-      basePanel.style.cssText = `grid-column: 1 / -1; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;`;
+      basePanel.style.cssText = `grid-column: 1 / -1; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px;`;
       basePanel.innerHTML = `
-        <h3 style="margin-top: 0; font-size: 14px; color: #f0f6fc; border-bottom: 1px solid #30363d; padding-bottom: 8px;">📝 Lyrics & Liner Notes</h3>
-        <div id="release-lyrics-box" style="font-family: monospace; font-size: 13px; color: #8b949e; white-space: pre-wrap; max-height: 140px; overflow-y: auto; padding: 10px; background: #0d1117; border-radius: 6px; border: 1px solid #21262d;">
-          ${manifest.tracks[0]?.lyrics || `[Select a track above to view lyrics and liner notes]\n\nChaos Theory Protocol — Sovereign Audio Distribution Suite.`}
+        <h3 style="margin-top: 0; font-size: 13px; color: #f0f6fc; border-bottom: 1px solid #30363d; padding-bottom: 6px;">📝 Lyrics & Notes</h3>
+        <div id="release-lyrics-box" style="font-family: monospace; font-size: 12px; color: #8b949e; white-space: pre-wrap; max-height: 120px; overflow-y: auto; padding: 8px; background: #0d1117; border-radius: 4px; border: 1px solid #21262d;">
+          ${manifest.tracks[0]?.caption || `[Select a track above to view lyrics and liner notes]\n\nChaos Theory Protocol.`}
         </div>
       `;
       wrapper.appendChild(basePanel);
 
       embedContainer.appendChild(wrapper);
 
-      // --- ATTACH EVENT HANDLERS FOR SHUFFLE, REPEAT, PREV, NEXT ---
+      // --- 6. AUTO-POPULATE STEP 5 EMBED CODE & DIRECT PLAYER LINK ---
+      populateStep5EmbedBox(manifest);
+
+      // --- ATTACH CONTROL HANDLERS ---
       setupPlaybackHandlers(manifest);
+    }
+
+    function populateStep5EmbedBox(manifest) {
+      const embedBox = document.getElementById('embed-output-box');
+      const activeTrack = manifest.tracks[currentTrackIndex] || manifest.tracks[0];
+      
+      if (embedBox) {
+        const embedHtml = `<iframe src="https://drive.google.com/uc?id=${activeTrack?.hlsStreamId || ''}" width="100%" height="680" style="border:none;border-radius:12px;background:#0d1117;" allow="encrypted-media"></iframe>`;
+        embedBox.value = embedHtml;
+      }
     }
 
     // --- PLAYBACK CONTROL ENGINE ---
