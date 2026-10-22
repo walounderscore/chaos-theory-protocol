@@ -1220,7 +1220,9 @@
           });
           await globalFFmpegInstance.load();
 
-          const inFileName = `input_${i}.flac`;
+          // Dynamically capture the real file extension (e.g., .flac, .mp3, .wav)
+          const fileExt = file.name.split('.').pop().toLowerCase();
+          const inFileName = `input_${i}.${fileExt}`;
           const outM3u8Name = `playlist_${i}.m3u8`;
 
           // 2. Read binary audio into the clean WASM virtual filesystem
