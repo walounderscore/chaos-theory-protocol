@@ -1398,7 +1398,7 @@
       const playlistBase64 = btoa(unescape(encodeURIComponent(cloudM3u8Content)));
       const manifest = compileCurrentManifest();
       const trackData = manifest.tracks[trackIndex] || manifest.tracks[0];
-      const trackPoster = trackData?.thumbData || manifest.coverArtData || '';
+      const trackPoster = trackData?.thumbData || manifest.artistImgData || manifest.coverArtData || '';
 
       const standaloneHtmlContent = 
         "<!DOCTYPE html>\n" +
@@ -1410,31 +1410,37 @@
         "  <link href=\"https://vjs.zencdn.net/8.10.0/video-js.css\" rel=\"stylesheet\" />\n" +
         "  <script src=\"https://vjs.zencdn.net/8.10.0/video.min.js\"><\/script>\n" +
         "  <style>\n" +
-        "    body { font-family: system-ui, -apple-system, sans-serif; background: #0d1117; color: #c9d1d9; margin: 0; padding: 12px; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; }\n" +
-        "    .dashboard { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 16px; width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }\n" +
-        "    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 10px; }\n" +
-        "    .player-box { width: 100%; height: 240px; background: #000; border-radius: 6px; overflow: hidden; position: relative; }\n" +
+        "    * { box-sizing: border-box; }\n" +
+        "    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; margin: 0; padding: 16px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }\n" +
+        "    .dashboard { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; width: 100%; max-width: 620px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 12px 32px rgba(0,0,0,0.6); transition: all 0.3s ease; }\n" +
+        "    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #21262d; padding-bottom: 12px; }\n" +
+        "    .track-heading { margin: 0; font-size: 26px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px; line-height: 1.2; }\n" +
+        "    .artist-subheading { margin: 4px 0 0 0; font-size: 16px; color: #8b949e; font-weight: 400; }\n" +
+        "    .mobile-btn { background: #238636; color: white; border: none; padding: 8px 14px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; transition: background 0.2s; }\n" +
+        "    .mobile-btn:hover { background: #2ea043; }\n" +
+        "    .player-box { width: 100%; height: 280px; background: #000; border-radius: 8px; overflow: hidden; position: relative; border: 1px solid #30363d; }\n" +
         "    .video-js { width: 100%; height: 100%; }\n" +
-        "    .lyrics-box { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 11px; color: #8b949e; max-height: 100px; overflow-y: auto; white-space: pre-wrap; }\n" +
-        "    /* Mobile immersive overlay mode */\n" +
-        "    .dashboard.mobile-fullscreen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; max-width: none; border-radius: 0; z-index: 99999; padding: 24px; box-sizing: border-box; justify-content: space-between; }\n" +
-        "    .dashboard.mobile-fullscreen .player-box { height: 320px; }\n" +
+        "    .lyrics-container { background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 12px; }\n" +
+        "    .lyrics-box { font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace; font-size: 12px; color: #8b949e; max-height: 120px; overflow-y: auto; white-space: pre-wrap; margin-top: 6px; }\n" +
+        "    /* Custom Mobile Fullscreen UI Mode */\n" +
+        "    .dashboard.mobile-mode-active { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; max-width: none; border-radius: 0; z-index: 999999; padding: 24px; justify-content: space-between; background: #0d1117; }\n" +
+        "    .dashboard.mobile-mode-active .player-box { height: 380px; }\n" +
         "  </style>\n" +
         "</head>\n" +
         "<body>\n" +
         "  <div id=\"main-dashboard\" class=\"dashboard\">\n" +
         "    <div class=\"header\">\n" +
         "      <div>\n" +
-        "        <h3 style=\"margin: 0; font-size: 16px; color: #f0f6fc;\">" + trackTitle + "</h3>\n" +
-        "        <p style=\"margin: 2px 0 0; font-size: 12px; color: #8b949e;\">" + manifest.artist + "</p>\n" +
+        "        <h1 class=\"track-heading\">" + trackTitle + "</h1>\n" +
+        "        <p class=\"artist-subheading\">" + manifest.artist + "</p>\n" +
         "      </div>\n" +
-        "      <button onclick=\"toggleMobileMode()\" style=\"background: #238636; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;\">📱 Mobile Mode</button>\n" +
+        "      <button class=\"mobile-btn\" onclick=\"toggleMobileMode()\">📱 Mobile Mode</button>\n" +
         "    </div>\n" +
         "    <div class=\"player-box\">\n" +
         "      <video id=\"chaos-widget-player\" class=\"video-js vjs-default-skin vjs-big-play-centered\" controls preload=\"auto\" poster=\"" + trackPoster + "\" data-setup='{}'></video>\n" +
         "    </div>\n" +
-        "    <div>\n" +
-        "      <h4 style=\"margin: 0 0 4px 0; font-size: 12px; color: #f0f6fc;\">📝 Liner Notes & Lyrics</h4>\n" +
+        "    <div class=\"lyrics-container\">\n" +
+        "      <h4 style=\"margin: 0; font-size: 13px; color: #f0f6fc;\">📝 Liner Notes & Lyrics</h4>\n" +
         "      <div class=\"lyrics-box\">" + (trackData?.caption || 'All rights reserved. © ' + manifest.artist) + "</div>\n" +
         "    </div>\n" +
         "  </div>\n" +
@@ -1452,7 +1458,7 @@
         "\n" +
         "    function toggleMobileMode() {\n" +
         "      const dash = document.getElementById('main-dashboard');\n" +
-        "      dash.classList.toggle('mobile-fullscreen');\n" +
+        "      dash.classList.toggle('mobile-mode-active');\n" +
         "    }\n" +
         "\n" +
         "    player.on('ended', function() {\n" +
@@ -1550,16 +1556,19 @@
       };
       wrapper.appendChild(leftPanel);
 
-      // --- 3. CENTER PANEL: Stream Player (DIRECT VIDEO.JS ELEMENT, NO IFRAME) ---
+      // --- 3. CENTER PANEL: Stream Player ---
       const centerPanel = document.createElement('div');
       centerPanel.style.cssText = `display: flex; flex-direction: column; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; gap: 14px; position: relative;`;
       
       const activeTrack = manifest.tracks[0];
       const nowPlayingTitle = document.createElement('div');
-      nowPlayingTitle.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 8px;`;
+      nowPlayingTitle.style.cssText = `display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #30363d; padding-bottom: 12px;`;
       nowPlayingTitle.innerHTML = `
-        <h3 id="active-track-title" style="margin: 0; font-size: 15px; color: #f0f6fc;">${activeTrack?.title || 'Select Track'} — ${manifest.artist || 'walo, the underscore.'}</h3>
-        <span id="active-track-num" style="font-size: 12px; color: #58a6ff; font-weight: 600;">${manifest.tracks.length > 0 ? '1 / ' + manifest.tracks.length : '0 / 0'}</span>
+        <div>
+          <h1 id="active-track-title" style="margin: 0; font-size: 26px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px; line-height: 1.2;">${activeTrack?.title || 'Select Track'}</h1>
+          <p id="active-track-artist" style="margin: 4px 0 0 0; font-size: 16px; color: #8b949e; font-weight: 400;">${manifest.artist || 'walo, the underscore.'}</p>
+        </div>
+        <span id="active-track-num" style="font-size: 13px; color: #58a6ff; font-weight: 700; background: #0d1117; padding: 4px 8px; border-radius: 4px; border: 1px solid #21262d;">${manifest.tracks.length > 0 ? '1 / ' + manifest.tracks.length : '0 / 0'}</span>
       `;
       centerPanel.appendChild(nowPlayingTitle);
 
@@ -1747,11 +1756,13 @@
       });
 
       const activeTitle = document.getElementById('active-track-title');
+      const activeArtist = document.getElementById('active-track-artist');
       const activeNum = document.getElementById('active-track-num');
       const metaImg = document.getElementById('metadata-cover-art');
       const lyricsBox = document.getElementById('release-lyrics-box');
 
-      if (activeTitle) activeTitle.innerText = `${track.title} — ${currentManifest.artist || 'walo, the underscore.'}`;
+      if (activeTitle) activeTitle.innerText = track.title;
+      if (activeArtist) activeArtist.innerText = currentManifest.artist || 'walo, the underscore.';
       if (activeNum) activeNum.innerText = `${idx + 1} / ${currentManifest.tracks.length}`;
       if (metaImg) {
         metaImg.src = currentManifest.artistImgData || track.thumbData || currentManifest.coverArtData || '';
