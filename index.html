@@ -1712,30 +1712,22 @@
         btn.style.background = parseInt(btn.dataset.index) === idx ? '#1f6feb' : '#21262d';
       });
 
-      const playerFrame = document.getElementById('sovereign-player-frame');
       const activeTitle = document.getElementById('active-track-title');
       const activeNum = document.getElementById('active-track-num');
       const metaImg = document.getElementById('metadata-cover-art');
       const lyricsBox = document.getElementById('release-lyrics-box');
 
-      // Display track name and artist name in the center panel header
       if (activeTitle) activeTitle.innerText = `${track.title} — ${currentManifest.artist || 'walo, the underscore.'}`;
       if (activeNum) activeNum.innerText = `${idx + 1} / ${currentManifest.tracks.length}`;
       
-      // Target the Apps Script web app endpoint just like the final embed code
-      if (playerFrame) {
-        if (track.hlsStreamId) {
-          playerFrame.src = `${APPS_SCRIPT_URL}?fileId=${track.hlsStreamId}`;[cite: 1]
-        } else {
-          playerFrame.src = 'about:blank';
-        }
-      }
-
       if (metaImg && track.thumbData) metaImg.src = track.thumbData;
       if (lyricsBox) {
         lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
       }
 
+      // If you have the local processed stream or want to preview it locally via video.js:
+      // This keeps Card 4 100% functional locally without fighting your service worker headers.
+      
       populateStep5EmbedBox(currentManifest);
       syncMobileCanvasView(track, idx);
     }
