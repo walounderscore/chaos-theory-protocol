@@ -1610,6 +1610,9 @@
           <p style="margin: 4px 0 0; font-size: 14px; color: #8b949e;">${manifest.artist || 'walo, the underscore.'} • ${manifest.year || '2026'} (${manifest.genre || 'Alt. Rock'})</p>
         </div>
         <div style="display: flex; align-items: center; gap: 10px;">
+          <button id="btn-share-release" style="background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+            🔗 Share
+          </button>
           <button id="btn-mobile-canvas" style="background: #238636; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
             📱 Mobile Mode
           </button>
@@ -1740,8 +1743,8 @@
       const btnPrev = document.getElementById('btn-prev-track');
       const btnNext = document.getElementById('btn-next-track');
       const btnMobile = document.getElementById('btn-mobile-canvas');
-      const btnShare = document.getElementById('btn-mobile-canvas');
-      const btnCheckout = document.getElementById('copy-btn');
+      const btnShare = document.getElementById('btn-share-release');
+      const btnCheckout = document.getElementById('btn-checkout-license');
 
       btnShuffle.onclick = () => {
         isShuffleActive = !isShuffleActive;
@@ -1782,14 +1785,19 @@
         openMobilePortraitModal(manifest);
       };
 
-      btnShare.onclick = () => {
-        openShareOptionsModal(manifest);
+      if (btnShare) {
+        btnShare.onclick = () => {
+          openShareOptionsModal(manifest);
+        };
+      }
 
-      btnCheckout.onclick = () => {
-        openPaystackCheckoutModal(manifest);
-      };
+      if (btnCheckout) {
+        btnCheckout.onclick = () => {
+          openPaystackCheckoutModal(manifest);
+        };
+      }
     }
-
+    
     function selectTrack(idx) {
       if (!currentManifest || !currentManifest.tracks[idx]) return;
       currentTrackIndex = idx;
