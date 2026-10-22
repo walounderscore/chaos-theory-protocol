@@ -2269,14 +2269,13 @@
     }
 
     function copyPlayerDirectLink() {
-      const activeTrack = currentManifest?.tracks[currentTrackIndex] || currentManifest?.tracks[0];
-      if (!activeTrack || !activeTrack.hlsStreamId) {
-        alert('No active player stream found. Please process a release first.');
+      if (!currentManifest || !currentManifest.masterDashboardFileId) {
+        alert('No master release dashboard found. Please process a release first.');
         return;
       }
-      const directUrl = `${APPS_SCRIPT_URL}?fileId=${activeTrack.hlsStreamId}`;
+      const directUrl = `${APPS_SCRIPT_URL}?fileId=${currentManifest.masterDashboardFileId}`;
       navigator.clipboard.writeText(directUrl);
-      alert(`Direct player script link for "${activeTrack.title}" copied to clipboard!`);
+      alert(`Direct link for master release dashboard copied to clipboard!`);
     }
   </script>
 </body>
