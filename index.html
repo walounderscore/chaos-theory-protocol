@@ -1678,8 +1678,8 @@
       populateStep5EmbedBox(manifest);
       setupPlaybackHandlers(manifest);
 
-      // Auto-load & auto-play track 1 if tracks exist
-      if (manifest.tracks && manifest.tracks.length > 0) {
+      // Only auto-load track 1 if audio has been processed/cached into local blob map
+      if (manifest.tracks && manifest.tracks.length > 0 && localTrackBlobMap && localTrackBlobMap[0]) {
         setTimeout(() => { selectTrack(0); }, 300);
       }
     }
@@ -1803,7 +1803,7 @@
         lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
       }
 
-      // Safeguarded Stream Preview Loading
+      // Stream directly into local video.js player only if blob exists
       if (window.videojs && localTrackBlobMap && localTrackBlobMap[idx]) {
         try {
           let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
@@ -1818,7 +1818,7 @@
           console.log("Local stream preview loading error:", e);
         }
       } else {
-        logMessage(`⚠️ Stream blob not found for "${track.title}". Please process audio stems first.`);
+        logMessage(`ℹ️ Select track metadata loaded. Process audio stems to enable live playback.`);
       }
 
       populateStep5EmbedBox(currentManifest);
