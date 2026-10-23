@@ -1970,6 +1970,25 @@
        lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
      }
 
+     // Ensure Cover Art displays via a dedicated persistent overlay in the video container
+     const videoContainer = document.querySelector('#sovereign-local-player')?.parentElement;
+     if (videoContainer) {
+       let customPoster = document.getElementById('vjs-custom-poster');
+       if (!customPoster) {
+         customPoster = document.createElement('img');
+         customPoster.id = 'vjs-custom-poster';
+         customPoster.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 3; pointer-events: none;';
+         videoContainer.style.position = 'relative';
+         videoContainer.appendChild(customPoster);
+       }
+       if (playerPoster) {
+         customPoster.src = playerPoster;
+         customPoster.style.display = 'block';
+       } else {
+         customPoster.style.display = 'none';
+       }
+     }
+
      if (window.videojs) {
        try {
          let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
@@ -1988,39 +2007,26 @@
            sourceType = 'application/x-mpegURL';
          }
 
-         // 1. Force Video.js to update and display the correct poster/artwork layer
          if (localPlayer) {
-           localPlayer.poster(playerPoster);
-           
-           // Ensure the poster image element inside Video.js reflects the change immediately
-           const posterImg = localPlayer.el().querySelector('.vjs-poster');
-           if (posterImg && playerPoster) {
-             posterImg.style.backgroundImage = `url("${playerPoster}")`;
-             posterImg.style.display = 'block';
+           if (mediaSourceUrl) {
+             localPlayer.src({ src: mediaSourceUrl, type: sourceType });
+             localPlayer.load();
+             localPlayer.play().catch(err => {
+               console.log("Autoplay waiting for user gesture:", err);
+             });
+           } else {
+             localPlayer.reset();
+             const errorDisplay = localPlayer.errorDisplay;
+             if (errorDisplay) {
+               errorDisplay.fill('Load your tracklist to listen here.');
+             }
            }
-         }
 
-         if (mediaSourceUrl) {
-           localPlayer.src({ src: mediaSourceUrl, type: sourceType });
-           localPlayer.ready(() => {
-             localPlayer.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
+           localPlayer.off('ended');
+           localPlayer.on('ended', () => {
+             triggerNextTrack();
            });
-         } else {
-           localPlayer.reset();
-           if (playerPoster) {
-             localPlayer.poster(playerPoster);
-           }
-           const errorDisplay = localPlayer.errorDisplay;
-           if (errorDisplay) {
-             errorDisplay.fill('Load your tracklist to listen here.');
-           }
          }
-
-         // Bind automatic queue advancement
-         localPlayer.off('ended');
-         localPlayer.on('ended', () => {
-           triggerNextTrack();
-         });
        } catch (e) {
          console.log("Playback error:", e);
        }
@@ -2130,7 +2136,7 @@
         padding: 24px; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; color: #c9d1d9;
       `;
 
-      const activeTrack = manifest.tracks[currentTrackIndex];
+      const activeTrack = manifest.tracks[currentTrackIndex] || manifest.tracks[0];
 
       modal.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -2163,7 +2169,7 @@
             <button onclick="document.getElementById('btn-prev-track').click()" style="background: transparent; border: none; font-size: 22px; color: #f0f6fc; cursor: pointer;" title="Previous">⏮️</button>
             <button id="mobile-play-pause-btn" style="background: #238636; color: #fff; border: none; width: 50px; height: 50px; border-radius: 50%; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(35,134,54,0.4);" title="Play/Pause">⏸️</button>
             <button onclick="document.getElementById('btn-next-track').click()" style="background: transparent; border: none; font-size: 22px; color: #f0f6fc; cursor: pointer;" title="Next">⏭️</button>
-            <button onclick="document.getElementById('btn-repeat').click()" style="background: transparent; border: none; font-size: 18px; color: #8b949e; cursor: pointer;" title="Repeat">🔁</button>
+            <button id="mobile-repeat-btn" style="background: transparent; border: none; font-size: 18px; color: #8b949e; cursor: pointer;" title="Repeat">🔁</button>
           </div>
           <p style="text-align: center; font-size: 11px; color: #8b949e; margin: 0;">© ${manifest.artist}. All rights reserved.</p>
         </div>
@@ -2171,14 +2177,14 @@
 
       document.body.appendChild(modal);
 
-      // --- Bind Live Player Events & Controls ---
-      const playerInstance = window.videojs ? videojs.getPlayer('sovereign-local-player') : null;
-      const playPauseBtn = document.getElementById('mobile-play-pause-btn');
-      const seekBar = document.getElementById('mobile-seek-bar');
-      const currentTimeEl = document.getElementById('mobile-current-time');
-      const durationEl = document.getElementById('mobile-duration');
+      // --- Bind Header Actions ---
+      document.getElementById('close-mobile-modal').onclick = () => modal.remove();
+      document.getElementById('mobile-checkout-btn').onclick = () => {
+        modal.remove();
+        openPaystackCheckoutModal(manifest);
+      };
 
-      // Inside openMobilePortraitModal function:
+      // --- Repeat Logic & Desktop Synchronization ---
       const mobileRepeatBtn = document.getElementById('mobile-repeat-btn');
       
       function updateMobileRepeatUI() {
@@ -2200,18 +2206,20 @@
 
       updateMobileRepeatUI();
 
-      mobileRepeatBtn.onclick = () => {
-        if (repeatMode === 'off') repeatMode = 'all';
-        else if (repeatMode === 'all') repeatMode = 'one';
-        else repeatMode = 'off';
+      if (mobileRepeatBtn) {
+        mobileRepeatBtn.onclick = () => {
+          if (repeatMode === 'off') repeatMode = 'all';
+          else if (repeatMode === 'all') repeatMode = 'one';
+          else repeatMode = 'off';
 
-        // Sync desktop repeat UI if present
-        const desktopRepeatBtn = document.getElementById('btn-repeat');
-        if (desktopRepeatBtn) desktopRepeatBtn.click();
-        
-        updateMobileRepeatUI();
-      };
-      
+          const desktopRepeatBtn = document.getElementById('btn-repeat');
+          if (desktopRepeatBtn) desktopRepeatBtn.click();
+          
+          updateMobileRepeatUI();
+        };
+      }
+
+      // --- Live Player Binding & Time Utilities ---
       function formatTime(seconds) {
         if (isNaN(seconds)) return "0:00";
         const mins = Math.floor(seconds / 60);
@@ -2219,49 +2227,49 @@
         return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
       }
 
+      const playerInstance = window.videojs ? (videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player')) : null;
+      const playPauseBtn = document.getElementById('mobile-play-pause-btn');
+      const seekBar = document.getElementById('mobile-seek-bar');
+      const currentTimeEl = document.getElementById('mobile-current-time');
+      const durationEl = document.getElementById('mobile-duration');
+
       if (playerInstance) {
-        // Initial button state & icons
-        playPauseBtn.innerText = playerInstance.paused() ? '▶️' : '⏸️';
+        if (playPauseBtn) {
+          playPauseBtn.innerText = playerInstance.paused() ? '▶️' : '⏸️';
 
-        playPauseBtn.onclick = () => {
-          if (playerInstance.paused()) {
-            playerInstance.play();
-            playPauseBtn.innerText = '⏸️';
-          } else {
-            playerInstance.pause();
-            playPauseBtn.innerText = '▶️';
-          }
-        };
+          playPauseBtn.onclick = () => {
+            if (playerInstance.paused()) {
+              playerInstance.play();
+              playPauseBtn.innerText = '⏸️';
+            } else {
+              playerInstance.pause();
+              playPauseBtn.innerText = '▶️';
+            }
+          };
+        }
 
-        // Update progress bar & time counters during playback
         playerInstance.on('timeupdate', () => {
           const current = playerInstance.currentTime();
           const duration = playerInstance.duration() || 0;
-          if (duration > 0) {
+          if (duration > 0 && seekBar) {
             seekBar.value = (current / duration) * 100;
           }
-          currentTimeEl.innerText = formatTime(current);
-          durationEl.innerText = formatTime(duration);
+          if (currentTimeEl) currentTimeEl.innerText = formatTime(current);
+          if (durationEl) durationEl.innerText = formatTime(duration);
         });
 
-        // Allow scrubbing via the range slider
-        seekBar.oninput = () => {
-          const duration = playerInstance.duration() || 0;
-          if (duration > 0) {
-            playerInstance.currentTime((seekBar.value / 100) * duration);
-          }
-        };
+        if (seekBar) {
+          seekBar.oninput = () => {
+            const duration = playerInstance.duration() || 0;
+            if (duration > 0) {
+              playerInstance.currentTime((seekBar.value / 100) * duration);
+            }
+          };
+        }
 
-        // Sync play/pause icon if audio state changes elsewhere
-        playerInstance.on('play', () => { playPauseBtn.innerText = '⏸️'; });
-        playerInstance.on('pause', () => { playPauseBtn.innerText = '▶️'; });
+        playerInstance.on('play', () => { if (playPauseBtn) playPauseBtn.innerText = '⏸️'; });
+        playerInstance.on('pause', () => { if (playPauseBtn) playPauseBtn.innerText = '▶️'; });
       }
-
-      document.getElementById('close-mobile-modal').onclick = () => modal.remove();
-      document.getElementById('mobile-checkout-btn').onclick = () => {
-        modal.remove();
-        openPaystackCheckoutModal(manifest);
-      };
     }
 
     function syncMobileCanvasView(track, idx) {
