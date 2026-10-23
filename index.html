@@ -1713,90 +1713,147 @@
     }
     
     async function uploadReleaseDashboardHtml(manifest) {
-      logMessage(`📦 Generating master 3-column sovereign release dashboard HTML...`);
+  logMessage(`📦 Generating master 3-column sovereign release dashboard HTML...`);
 
-      const doc = document.implementation.createHTMLDocument(`${manifest.title} - Sovereign Release`);
-      
-      const metaCharset = document.createElement('meta');
-      metaCharset.setAttribute('charset', 'UTF-8');
-      doc.head.appendChild(metaCharset);
+  const doc = document.implementation.createHTMLDocument(`${manifest.title} - Sovereign Release`);
 
-      const metaViewport = document.createElement('meta');
-      metaViewport.setAttribute('name', 'viewport');
-      metaViewport.setAttribute('content', 'width=device-width, initial-scale=1.0');
-      doc.head.appendChild(metaViewport);
+  // Head Meta & Resources
+  const metaCharset = document.createElement('meta');
+  metaCharset.setAttribute('charset', 'UTF-8');
+  doc.head.appendChild(metaCharset);
 
-      const titleEl = document.createElement('title');
-      titleEl.innerText = `${manifest.title} - Sovereign Release`;
-      doc.head.appendChild(titleEl);
+  const metaViewport = document.createElement('meta');
+  metaViewport.setAttribute('name', 'viewport');
+  metaViewport.setAttribute('content', 'width=device-width, initial-scale=1.0');
+  doc.head.appendChild(metaViewport);
 
-      const vjsCss = document.createElement('link');
-      vjsCss.setAttribute('href', 'https://vjs.zencdn.net/8.10.0/video-js.css');
-      vjsCss.setAttribute('rel', 'stylesheet');
-      doc.head.appendChild(vjsCss);
+  const titleEl = document.createElement('title');
+  titleEl.innerText = `${manifest.title} - Sovereign Release`;
+  doc.head.appendChild(titleEl);
 
-      const vjsScript = document.createElement('script');
-      vjsScript.setAttribute('src', 'https://vjs.zencdn.net/8.10.0/video.min.js');
-      doc.head.appendChild(vjsScript);
+  const vjsCss = document.createElement('link');
+  vjsCss.setAttribute('href', 'https://vjs.zencdn.net/8.10.0/video-js.css');
+  vjsCss.setAttribute('rel', 'stylesheet');
+  doc.head.appendChild(vjsCss);
 
-      const styleEl = document.createElement('style');
-      styleEl.innerText = `
-        * { box-sizing: border-box; }
-        body { font-family: system-ui, -apple-system, sans-serif; background: #0d1117; color: #c9d1d9; margin: 0; padding: 16px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-        #sovereign-player-card-target { width: 100%; max-width: 960px; }
-        button { cursor: pointer; }
-        .track-select-btn:hover { background: #30363d !important; }
-      `;
-      doc.head.appendChild(styleEl);
+  const vjsScript = document.createElement('script');
+  vjsScript.setAttribute('src', 'https://vjs.zencdn.net/8.10.0/video.min.js');
+  doc.head.appendChild(vjsScript);
 
-      const targetDiv = document.createElement('div');
-      targetDiv.id = 'sovereign-player-card-target';
-      doc.body.appendChild(targetDiv);
+  const styleEl = document.createElement('style');
+  styleEl.innerText = `
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0d1117; color: #c9d1d9; margin: 0; padding: 16px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    #sovereign-player-card-target { width: 100%; max-width: 960px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; }
+    .player-3col-grid { display: grid; grid-template-columns: 280px 1fr 280px; gap: 16px; margin-top: 16px; }
+    @media (max-width: 850px) { .player-3col-grid { grid-template-columns: 1fr; } }
+    .vjs-poster { background-size: cover !important; }
+    button { cursor: pointer; }
+    .track-select-btn { transition: background 0.2s; }
+    .track-select-btn:hover { background: #30363d !important; }
+  `;
+  doc.head.appendChild(styleEl);
 
-      // Runtime bundle inside the standalone standalone iframe/page
-      const runtimeScript = document.createElement('script');
-      runtimeScript.innerText = `
-        const APPS_SCRIPT_URL = '${APPS_SCRIPT_URL}';
-        const currentManifest = ${JSON.stringify(manifest)};
-        let currentTrackIndex = 0;
-        let isShuffleActive = false;
-        let repeatMode = 'off';
-        let selectedUnifiedFiles = [];
+  const targetDiv = document.createElement('div');
+  targetDiv.id = 'sovereign-player-card-target';
+  doc.body.appendChild(targetDiv);
 
-        window.addEventListener('DOMContentLoaded', () => {
-          // Render full Card 4 UI
-          generateEmbedUI(currentManifest);
+  // Runtime Script Execution inside standalone standalone iframe / link
+  const runtimeScript = document.createElement('script');
+  runtimeScript.innerText = `
+    const APPS_SCRIPT_URL = '${APPS_SCRIPT_URL}';
+    let currentManifest = ${JSON.stringify(manifest)};
+    let currentTrackIndex = 0;
+    let isShuffleActive = false;
+    let repeatMode = 'off';
+    let selectedUnifiedFiles = [];
 
-          // Strip top section title inside embedded iframe view
-          const headerTitle = document.querySelector('#sovereign-player-card-target h3');
-          const headerSubtext = document.querySelector('#sovereign-player-card-target p');
-          if (headerTitle && headerTitle.innerText.includes('Sovereign HLS Release Dashboard')) headerTitle.style.display = 'none';
-          if (headerSubtext && headerSubtext.innerText.includes('Google Drive vault')) headerSubtext.style.display = 'none';
-        });
-
-        ${generateEmbedUI.toString()}
-        ${selectTrack.toString()}
-        ${triggerNextTrack.toString()}
-        ${populateStep5EmbedBox.toString()}
-        ${setupPlaybackHandlers.toString()}
-        ${syncMobileCanvasView.toString()}
-        ${openShareOptionsModal.toString()}
-        ${dispatchShare.toString()}
-        ${openMobilePortraitModal.toString()}
-        ${openPaystackCheckoutModal.toString()}
-      `;
-      doc.body.appendChild(runtimeScript);
-
-      const serializer = new XMLSerializer();
-      const htmlContent = '<!DOCTYPE html>\n' + serializer.serializeToString(doc);
-
-      const textEncoder = new TextEncoder();
-      const sanitizedName = (manifest.title || 'release').toLowerCase().replace(/[^a-z0-9]/g, '_') + '_master_dashboard.html';
-      const fileId = await uploadFileToDrive(sanitizedName, textEncoder.encode(htmlContent), 'text/html');
-      
-      manifest.masterDashboardFileId = fileId;
-      return fileId;
+    // Safe initialization handler that waits for Video.js CDN to load
+    function initStandalonePlayer() {
+      if (typeof videojs === 'undefined') {
+        setTimeout(initStandalonePlayer, 100);
+        return;
+      }
+      buildPlayerFramework();
+      generateEmbedUI(currentManifest);
     }
+
+    function buildPlayerFramework() {
+      const target = document.getElementById('sovereign-player-card-target');
+      if (!target) return;
+
+      target.innerHTML = \`
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #21262d; padding-bottom: 12px;">
+          <div>
+            <h2 id="embed-manifest-title" style="margin: 0; font-size: 1.2rem; color: #f0f6fc;">\${currentManifest.title}</h2>
+            <p id="embed-manifest-artist" style="margin: 4px 0 0; font-size: 0.85rem; color: #8b949e;">\${currentManifest.artist}</p>
+          </div>
+          <button onclick="openPaystackCheckoutModal(currentManifest)" style="background: #238636; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; font-size: 0.85rem;">🛒 Buy Release</button>
+        </div>
+
+        <div class="player-3col-grid">
+          <!-- Column 1: Playlist Queue -->
+          <div style="background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 12px; max-height: 400px; overflow-y: auto;">
+            <h4 style="margin: 0 0 10px; font-size: 0.8rem; text-transform: uppercase; color: #8b949e;">Tracklist</h4>
+            <div id="embed-queue-list" style="display: flex; flex-direction: column; gap: 6px;"></div>
+          </div>
+
+          <!-- Column 2: Center Media Player -->
+          <div style="display: flex; flex-direction: column; gap: 12px; align-items: center;">
+            <div style="width: 100%; aspect-ratio: 1/1; background: #000; border-radius: 8px; overflow: hidden; position: relative;">
+              <video id="sovereign-local-player" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" style="width: 100%; height: 100%;"></video>
+            </div>
+            
+            <div style="width: 100%; text-align: center;">
+              <strong id="active-track-title" style="display: block; font-size: 1rem; color: #f0f6fc;">Select a track</strong>
+              <span id="active-track-artist" style="font-size: 0.8rem; color: #8b949e;">\${currentManifest.artist}</span>
+            </div>
+
+            <!-- Player Bar Controls -->
+            <div style="display: flex; gap: 12px; align-items: center; justify-content: center; width: 100%;">
+              <button id="btn-shuffle" onclick="isShuffleActive=!isShuffleActive; this.style.color=isShuffleActive?'#58a6ff':'#8b949e';" style="background: transparent; border: none; color: #8b949e; font-size: 1.1rem;" title="Shuffle">🔀</button>
+              <button id="btn-prev-track" onclick="selectTrack(currentTrackIndex > 0 ? currentTrackIndex - 1 : currentManifest.tracks.length - 1)" style="background: transparent; border: none; color: #f0f6fc; font-size: 1.2rem;" title="Previous">⏮️</button>
+              <button id="btn-next-track" onclick="triggerNextTrack()" style="background: transparent; border: none; color: #f0f6fc; font-size: 1.2rem;" title="Next">⏭️</button>
+              <button id="btn-repeat" onclick="if(repeatMode==='off')repeatMode='all';else if(repeatMode==='all')repeatMode='one';else repeatMode='off'; this.style.color=repeatMode!=='off'?'#58a6ff':'#8b949e';" style="background: transparent; border: none; color: #8b949e; font-size: 1.1rem;" title="Repeat">🔁</button>
+            </div>
+          </div>
+
+          <!-- Column 3: Artwork & Liner Notes -->
+          <div style="background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+            <img id="metadata-cover-art" src="\${currentManifest.coverArtData || ''}" style="width: 100%; height: 160px; object-fit: cover; border-radius: 6px; background: #21262d;" />
+            <div id="release-lyrics-box" style="font-size: 0.75rem; color: #8b949e; white-space: pre-line; overflow-y: auto; max-height: 180px;">
+              Select a track to view lyrics and liner notes.
+            </div>
+          </div>
+        </div>
+      \`;
+    }
+
+    document.addEventListener('DOMContentLoaded', initStandalonePlayer);
+
+    ${generateEmbedUI.toString()}
+    ${selectTrack.toString()}
+    ${triggerNextTrack.toString()}
+    ${populateStep5EmbedBox.toString()}
+    ${setupPlaybackHandlers.toString()}
+    ${syncMobileCanvasView.toString()}
+    ${openShareOptionsModal.toString()}
+    ${dispatchShare.toString()}
+    ${openMobilePortraitModal.toString()}
+    ${openPaystackCheckoutModal.toString()}
+  `;
+  doc.body.appendChild(runtimeScript);
+
+  const serializer = new XMLSerializer();
+  const htmlContent = '<!DOCTYPE html>\n' + serializer.serializeToString(doc);
+
+  const textEncoder = new TextEncoder();
+  const sanitizedName = (manifest.title || 'release').toLowerCase().replace(/[^a-z0-9]/g, '_') + '_master_dashboard.html';
+  const fileId = await uploadFileToDrive(sanitizedName, textEncoder.encode(htmlContent), 'text/html');
+  
+  manifest.masterDashboardFileId = fileId;
+  return fileId;
+}
     
     
     function populateStep5EmbedBox(manifest) {
