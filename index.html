@@ -2041,26 +2041,89 @@
           <button id="mobile-checkout-btn" style="background: #1f6feb; color: #fff; border: none; padding: 6px 12px; border-radius: 16px; font-size: 11px; font-weight: 600;">Buy / License</button>
         </div>
 
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; my: auto;">
-          <img id="mobile-canvas-art" src="${activeTrack?.thumbData || manifest.coverArtData || ''}" style="width: 280px; height: 280px; border-radius: 16px; object-fit: cover; box-shadow: 0 12px 32px rgba(0,0,0,0.8);" />
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; margin: auto 0;">
+          <img id="mobile-canvas-art" src="${activeTrack?.thumbData || manifest.coverArtData || ''}" style="width: 260px; height: 260px; border-radius: 16px; object-fit: cover; box-shadow: 0 12px 32px rgba(0,0,0,0.8);" />
           <div style="text-align: center; width: 100%;">
             <h2 id="mobile-canvas-title" style="margin: 0; font-size: 20px; color: #f0f6fc;">${activeTrack?.title || 'Select Track'}</h2>
             <p style="margin: 6px 0 0; font-size: 14px; color: #8b949e;">${manifest.artist}</p>
           </div>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 400px; margin: 0 auto;">
+        <div style="display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 400px; margin: 0 auto;">
+          <!-- Time Bar & Progress Slider -->
+          <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
+            <input type="range" id="mobile-seek-bar" value="0" min="0" max="100" step="0.1" style="width: 100%; accent-color: #58a6ff; cursor: pointer;">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #8b949e; font-family: monospace;">
+              <span id="mobile-current-time">0:00</span>
+              <span id="mobile-duration">0:00</span>
+            </div>
+          </div>
+
+          <!-- Playback Controls -->
           <div style="display: flex; justify-content: space-around; align-items: center;">
-            <button onclick="document.getElementById('btn-shuffle').click()" style="background: transparent; border: none; font-size: 20px; color: #8b949e; cursor: pointer;">🔀</button>
-            <button onclick="document.getElementById('btn-prev-track').click()" style="background: transparent; border: none; font-size: 26px; color: #f0f6fc; cursor: pointer;">⏮️</button>
-            <button onclick="document.getElementById('btn-next-track').click()" style="background: transparent; border: none; font-size: 26px; color: #f0f6fc; cursor: pointer;">⏭️</button>
-            <button onclick="document.getElementById('btn-repeat').click()" style="background: transparent; border: none; font-size: 20px; color: #8b949e; cursor: pointer;">🔁</button>
+            <button onclick="document.getElementById('btn-shuffle').click()" style="background: transparent; border: none; font-size: 18px; color: #8b949e; cursor: pointer;" title="Shuffle">🔀</button>
+            <button onclick="document.getElementById('btn-prev-track').click()" style="background: transparent; border: none; font-size: 22px; color: #f0f6fc; cursor: pointer;" title="Previous">⏮️</button>
+            <button id="mobile-play-pause-btn" style="background: #238636; color: #fff; border: none; width: 50px; height: 50px; border-radius: 50%; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(35,134,54,0.4);" title="Play/Pause">⏸️</button>
+            <button onclick="document.getElementById('btn-next-track').click()" style="background: transparent; border: none; font-size: 22px; color: #f0f6fc; cursor: pointer;" title="Next">⏭️</button>
+            <button onclick="document.getElementById('btn-repeat').click()" style="background: transparent; border: none; font-size: 18px; color: #8b949e; cursor: pointer;" title="Repeat">🔁</button>
           </div>
           <p style="text-align: center; font-size: 11px; color: #8b949e; margin: 0;">© ${manifest.artist}. All rights reserved.</p>
         </div>
       `;
 
       document.body.appendChild(modal);
+
+      // --- Bind Live Player Events & Controls ---
+      const playerInstance = window.videojs ? videojs.getPlayer('sovereign-local-player') : null;
+      const playPauseBtn = document.getElementById('mobile-play-pause-btn');
+      const seekBar = document.getElementById('mobile-seek-bar');
+      const currentTimeEl = document.getElementById('mobile-current-time');
+      const durationEl = document.getElementById('mobile-duration');
+
+      function formatTime(seconds) {
+        if (isNaN(seconds)) return "0:00";
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+      }
+
+      if (playerInstance) {
+        // Initial button state & icons
+        playPauseBtn.innerText = playerInstance.paused() ? '▶️' : '⏸️';
+
+        playPauseBtn.onclick = () => {
+          if (playerInstance.paused()) {
+            playerInstance.play();
+            playPauseBtn.innerText = '⏸️';
+          } else {
+            playerInstance.pause();
+            playPauseBtn.innerText = '▶️';
+          }
+        };
+
+        // Update progress bar & time counters during playback
+        playerInstance.on('timeupdate', () => {
+          const current = playerInstance.currentTime();
+          const duration = playerInstance.duration() || 0;
+          if (duration > 0) {
+            seekBar.value = (current / duration) * 100;
+          }
+          currentTimeEl.innerText = formatTime(current);
+          durationEl.innerText = formatTime(duration);
+        });
+
+        // Allow scrubbing via the range slider
+        seekBar.oninput = () => {
+          const duration = playerInstance.duration() || 0;
+          if (duration > 0) {
+            playerInstance.currentTime((seekBar.value / 100) * duration);
+          }
+        };
+
+        // Sync play/pause icon if audio state changes elsewhere
+        playerInstance.on('play', () => { playPauseBtn.innerText = '⏸️'; });
+        playerInstance.on('pause', () => { playPauseBtn.innerText = '▶️'; });
+      }
 
       document.getElementById('close-mobile-modal').onclick = () => modal.remove();
       document.getElementById('mobile-checkout-btn').onclick = () => {
