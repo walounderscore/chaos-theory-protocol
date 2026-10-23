@@ -1996,9 +1996,22 @@
 
            if (mediaSourceUrl) {
              localPlayer.src({ src: mediaSourceUrl, type: sourceType });
+             localPlayer.load(); // 🛠️ Ensures HLS manifests load cleanly after encryption
+             
              localPlayer.ready(() => {
-               localPlayer.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
+               localPlayer.play().then(() => {
+                 // 🛠️ Hides the poster layer once playing so control bar is fully clickable
+                 const posterEl = localPlayer.el().querySelector('.vjs-poster');
+                 if (posterEl) posterEl.style.display = 'none';
+               }).catch(err => console.log("Autoplay waiting for user gesture:", err));
              });
+
+             // Also clear poster display if user hits play manually
+             localPlayer.on('play', () => {
+               const posterEl = localPlayer.el().querySelector('.vjs-poster');
+               if (posterEl) posterEl.style.display = 'none';
+             });
+
            } else {
              localPlayer.reset();
              if (playerPoster) localPlayer.poster(playerPoster);
