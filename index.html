@@ -1482,11 +1482,11 @@
       return htmlFileId;
     }
     
-    // --- MASTER RELEASE DASHBOARD UI ENGINE ---
+    // --- UNIFIED UI ENGINE (Single Source of Truth for Card 4 & Embeds) ---
     async function generateEmbedUI(manifest) {
       currentManifest = manifest;
 
-      // Define initialArt correctly right at the top
+      // Ensure resting state uses Artist Portrait first, falling back to Album Cover or Track Thumb
       const initialArt = manifest.artistImgData || manifest.coverArtData || manifest.tracks[0]?.thumbData || '';
       
       let embedContainer = document.getElementById('sovereign-player-card-target');
@@ -1507,9 +1507,7 @@
       function updateGridColumns() {
         const leftCollapsed = document.getElementById('left-panel-content')?.style.display === 'none';
         const rightCollapsed = document.getElementById('right-panel-content')?.style.display === 'none';
-        const leftWidth = leftCollapsed ? '42px' : '260px';
-        const rightWidth = rightCollapsed ? '42px' : '300px';
-        wrapper.style.gridTemplateColumns = `${leftWidth} 1fr ${rightWidth}`;
+        wrapper.style.gridTemplateColumns = `${leftCollapsed ? '42px' : '260px'} 1fr ${rightCollapsed ? '42px' : '300px'}`;
       }
 
       // --- 1. HEADER ---
@@ -1529,8 +1527,6 @@
       wrapper.appendChild(header);
 
       // --- 2. LEFT PANEL: Credits ---
-      // Credits panel explicitly uses the Artist Portrait first, falling back to album cover
-      const initialCreditsArt = manifest.artistImgData || manifest.coverArtData || manifest.tracks[0]?.thumbData || '';
       const leftPanel = document.createElement('div');
       leftPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; overflow: hidden;`;
       
@@ -1542,6 +1538,7 @@
       const leftContent = document.createElement('div');
       leftContent.id = 'left-panel-content';
       leftContent.style.cssText = `display: flex; flex-direction: column; gap: 10px;`;
+      
       const coverImgHtml = initialArt 
         ? `<img id="metadata-cover-art" src="${initialArt}" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 1px solid #30363d;" alt="Cover Art" />`
         : `<div id="metadata-cover-art" style="width: 100%; aspect-ratio: 1; background: #21262d; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #8b949e;">No Cover Art</div>`;
@@ -1568,7 +1565,7 @@
       };
       wrapper.appendChild(leftPanel);
 
-      // --- 3. CENTER PANEL: Stream Player ---
+      // --- 3. CENTER PANEL: Stream Player (Fixed Autoplay & Resting State Poster) ---
       const centerPanel = document.createElement('div');
       centerPanel.style.cssText = `display: flex; flex-direction: column; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; gap: 14px; position: relative;`;
       
@@ -1590,7 +1587,7 @@
       videoEl.controls = true;
       videoEl.preload = 'auto';
       videoEl.style.cssText = 'width: 100%; height: 230px; border-radius: 6px; background: #000;';
-      if (initialArt) videoEl.poster = initialArt;
+      if (initialArt) videoEl.poster = initialArt; // Proper resting state poster assignment
       centerPanel.appendChild(videoEl);
 
       const controlBar = document.createElement('div');
@@ -1665,19 +1662,17 @@
       populateStep5EmbedBox(manifest);
       setupPlaybackHandlers(manifest);
 
-      // Only auto-load track 1 if audio has been processed/cached into local blob map
-      if (manifest.tracks && manifest.tracks.length > 0 && localTrackBlobMap && localTrackBlobMap[0]) {
+      // Auto-load and trigger autoplay on the first track immediately upon generation
+      if (manifest.tracks && manifest.tracks.length > 0) {
         setTimeout(() => { selectTrack(0); }, 300);
       }
     }
-
+    
     async function uploadReleaseDashboardHtml(manifest) {
       logMessage(`📦 Generating master 3-column sovereign release dashboard HTML...`);
 
-      // Create a standalone document structure
       const doc = document.implementation.createHTMLDocument(`${manifest.title} - Sovereign Release`);
       
-      // Add Head elements
       const metaCharset = doc.createElement('meta');
       metaCharset.setAttribute('charset', 'UTF-8');
       doc.head.appendChild(metaCharset);
@@ -1710,12 +1705,11 @@
       `;
       doc.head.appendChild(styleEl);
 
-      // Add Body container
       const targetDiv = doc.createElement('div');
       targetDiv.id = 'sovereign-player-card-target';
       doc.body.appendChild(targetDiv);
 
-      // Embed runtime script cleanly without backtick escaping issues
+      // Pass the manifest data cleanly into the runtime script environment
       const runtimeScript = doc.createElement('script');
       runtimeScript.innerText = `
         const APPS_SCRIPT_URL = '${APPS_SCRIPT_URL}';
@@ -1725,170 +1719,35 @@
         let repeatMode = 'off';
 
         window.addEventListener('DOMContentLoaded', () => {
-          renderMasterDashboard(manifest);
+          // Re-uses the clean master dashboard renderer structure using 'manifest'
+          if (typeof generateEmbedUI === 'function') {
+            generateEmbedUI(manifest);
+          }
         });
 
-        function renderMasterDashboard(manifest) {
-          let embedContainer = document.getElementById('sovereign-player-card-target');
-          if (!embedContainer) return;
-          embedContainer.innerHTML = '';
-
-          const wrapper = document.createElement('div');
-          wrapper.id = 'chaos-sovereign-dashboard';
-          wrapper.style.cssText = 'color: #c9d1d9; font-family: system-ui, -apple-system, sans-serif; display: grid; gap: 16px; grid-template-columns: 260px 1fr 300px; grid-template-rows: auto 1fr auto; width: 100%; margin: 0 auto; position: relative; box-sizing: border-box;';
-
-          function updateGridColumns() {
-            const leftCollapsed = document.getElementById('left-panel-content')?.style.display === 'none';
-            const rightCollapsed = document.getElementById('right-panel-content')?.style.display === 'none';
-            wrapper.style.gridTemplateColumns = (leftCollapsed ? '42px' : '260px') + ' 1fr ' + (rightCollapsed ? '42px' : '300px');
-          }
-
-          // --- 1. HEADER ---
-          const header = document.createElement('div');
-          header.style.cssText = 'grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 14px; flex-wrap: wrap; gap: 12px;';
-          header.innerHTML = '<div><h2 style="margin: 0; font-size: 22px; color: #f0f6fc; font-weight: 700;">' + (manifest.title || 'Chaos Theory Protocol') + '</h2><p style="margin: 4px 0 0; font-size: 14px; color: #8b949e;">' + (manifest.artist || 'walo, the underscore.') + ' • ' + (manifest.date ? manifest.date.split('-')[0] : '2026') + ' (' + (manifest.genre || 'Sovereign Audio Vault') + ')</p></div>';
-          wrapper.appendChild(header);
-
-          // --- 2. LEFT PANEL: Credits ---
-          const initialCreditsArt = manifest.artistImgData || manifest.coverArtData || manifest.tracks[0]?.thumbData || '';
-          const leftPanel = document.createElement('div');
-          leftPanel.style.cssText = 'background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; overflow: hidden;';
-          
-          const leftHeader = document.createElement('div');
-          leftHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 6px; cursor: pointer;';
-          leftHeader.innerHTML = '<h3 id="left-header-text" style="margin: 0; font-size: 13px; color: #f0f6fc;">📜 Credits</h3><span id="left-collapse-icon" style="color: #58a6ff; font-weight: bold;">◀</span>';
-          leftPanel.appendChild(leftHeader);
-
-          const leftContent = document.createElement('div');
-          leftContent.id = 'left-panel-content';
-          leftContent.style.cssText = 'display: flex; flex-direction: column; gap: 10px;';
-          const coverImgHtml = initialCreditsArt 
-            ? '<img id="metadata-cover-art" src="' + initialCreditsArt + '" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 1px solid #30363d;" alt="Cover Art" />'
-            : '<div id="metadata-cover-art" style="width: 100%; aspect-ratio: 1; background: #21262d; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #8b949e;">No Cover Art</div>';
-
-          leftContent.innerHTML = coverImgHtml + '<div><p style="margin: 4px 0;"><strong>Composer:</strong> ' + (manifest.artist || 'walo, the underscore.') + '</p><p style="margin: 4px 0;"><strong>Rights:</strong> BMI Registered</p><p style="margin: 4px 0;"><strong>Format:</strong> HLS Encrypted Stems</p><p style="margin-top: 8px; color: #8b949e; font-style: italic; font-size: 11px; line-height: 1.3;">Streaming under artist license. All rights reserved. © ' + (manifest.artist || 'walo, the underscore.') + '.</p></div>';
-          leftPanel.appendChild(leftContent);
-
-          leftHeader.onclick = () => {
-            const isHidden = leftContent.style.display === 'none';
-            leftContent.style.display = isHidden ? 'flex' : 'none';
-            document.getElementById('left-header-text').style.display = isHidden ? 'block' : 'none';
-            document.getElementById('left-collapse-icon').innerText = isHidden ? '◀' : '▶';
-            updateGridColumns();
-          };
-          wrapper.appendChild(leftPanel);
-
-          // --- 3. CENTER PANEL: Stream Player ---
-          const centerPanel = document.createElement('div');
-          centerPanel.style.cssText = 'display: flex; flex-direction: column; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; gap: 14px; position: relative;';
-          
-          const activeTrack = manifest.tracks[0];
-          const nowPlayingTitle = document.createElement('div');
-          nowPlayingTitle.style.cssText = 'display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #30363d; padding-bottom: 12px;';
-          nowPlayingTitle.innerHTML = '<div><h1 id="active-track-title" style="margin: 0; font-size: 16px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px; line-height: 1.2;">' + (activeTrack?.title || 'Select Track') + '</h1><p id="active-track-artist" style="margin: 4px 0 0 0; font-size: 14px; color: #8b949e; font-weight: 400;">' + (manifest.artist || 'walo, the underscore.') + '</p></div><span id="active-track-num" style="font-size: 13px; color: #58a6ff; font-weight: 700; background: #0d1117; padding: 4px 8px; border-radius: 4px; border: 1px solid #21262d;">1 / ' + manifest.tracks.length + '</span>';
-          centerPanel.appendChild(nowPlayingTitle);
-
-          const videoEl = document.createElement('video');
-          videoEl.id = 'sovereign-master-player';
-          videoEl.className = 'video-js vjs-default-skin vjs-big-play-centered';
-          videoEl.controls = true;
-          videoEl.preload = 'auto';
-          videoEl.style.cssText = 'width: 100%; height: 250px; border-radius: 6px; background: #000;';
-          if (initialCreditsArt) videoEl.poster = initialCreditsArt;
-          centerPanel.appendChild(videoEl);
-
-          const controlBar = document.createElement('div');
-          controlBar.style.cssText = 'display: flex; justify-content: space-around; align-items: center; background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #21262d;';
-          controlBar.innerHTML = '<button id="btn-shuffle" style="background: transparent; color: #8b949e; border: none; font-size: 18px; cursor: pointer;" title="Shuffle">🔀</button><button id="btn-prev-track" style="background: transparent; color: #c9d1d9; border: none; font-size: 20px; cursor: pointer;" title="Previous">⏮️</button><button id="btn-next-track" style="background: transparent; color: #c9d1d9; border: none; font-size: 20px; cursor: pointer;" title="Next">⏭️</button><button id="btn-repeat" style="background: transparent; color: #8b949e; border: none; font-size: 18px; cursor: pointer;" title="Repeat">🔁</button>';
-          centerPanel.appendChild(controlBar);
-          wrapper.appendChild(centerPanel);
-
-          // --- 4. RIGHT PANEL: Queue ---
-          const rightPanel = document.createElement('div');
-          rightPanel.style.cssText = 'background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; overflow: hidden;';
-          
-          const rightHeader = document.createElement('div');
-          rightHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 6px; margin-bottom: 8px; cursor: pointer;';
-          rightHeader.innerHTML = '<h3 id="right-header-text" style="margin: 0; font-size: 13px; color: #f0f6fc;">🎵 Queue (' + manifest.tracks.length + ')</h3><span id="right-collapse-icon" style="color: #58a6ff; font-weight: bold;">▶</span>';
-          rightPanel.appendChild(rightHeader);
-
-          const trackListContainer = document.createElement('div');
-          trackListContainer.id = 'right-panel-content';
-          trackListContainer.style.cssText = 'overflow-y: auto; flex-grow: 1; display: flex; flex-direction: column; gap: 6px; max-height: 320px;';
-
-          manifest.tracks.forEach((track, idx) => {
-            const trackBtn = document.createElement('button');
-            trackBtn.className = 'track-select-btn';
-            trackBtn.dataset.index = idx;
-            trackBtn.style.cssText = 'background: ' + (idx === 0 ? '#1f6feb' : '#21262d') + '; color: #c9d1d9; border: 1px solid #30363d; padding: 8px 10px; border-radius: 6px; text-align: left; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 8px; transition: background 0.2s;';
-            const trackThumb = track.thumbData 
-              ? '<img src="' + track.thumbData + '" style="width: 24px; height: 24px; border-radius: 3px; object-fit: cover;" />'
-              : '<div style="width: 24px; height: 24px; background: #30363d; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600;">' + (idx + 1) + '</div>';
-
-            trackBtn.innerHTML = trackThumb + '<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1;">' + (track.trackNumber || idx + 1) + '. ' + track.title + '</span>';
-            trackBtn.onclick = () => selectMasterTrack(idx);
-            trackListContainer.appendChild(trackBtn);
-          });
-          rightPanel.appendChild(trackListContainer);
-
-          rightHeader.onclick = () => {
-            const isHidden = trackListContainer.style.display === 'none';
-            trackListContainer.style.display = isHidden ? 'flex' : 'none';
-            document.getElementById('right-header-text').style.display = isHidden ? 'block' : 'none';
-            document.getElementById('right-collapse-icon').innerText = isHidden ? '▶' : '◀';
-            updateGridColumns();
-          };
-          wrapper.appendChild(rightPanel);
-
-          // --- 5. BASE PANEL: Lyrics ---
-          const basePanel = document.createElement('div');
-          basePanel.style.cssText = 'grid-column: 1 / -1; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px;';
-          basePanel.innerHTML = '<h3 style="margin-top: 0; font-size: 13px; color: #f0f6fc; border-bottom: 1px solid #30363d; padding-bottom: 6px;">📝 Lyrics & Notes</h3><div id="release-lyrics-box" style="font-family: monospace; font-size: 12px; color: #8b949e; white-space: pre-wrap; max-height: 120px; overflow-y: auto; padding: 8px; background: #0d1117; border-radius: 4px; border: 1px solid #21262d;">' + (manifest.tracks[0]?.caption || 'All rights reserved. © ' + manifest.artist) + '</div>';
-          wrapper.appendChild(basePanel);
-
-          embedContainer.appendChild(wrapper);
-
-          setTimeout(() => { selectMasterTrack(0); }, 200);
-        }
-
-        function selectMasterTrack(idx) {
-          if (!manifest.tracks[idx]) return;
-          currentTrackIndex = idx;
-          const track = manifest.tracks[idx];
-
-          document.querySelectorAll('.track-select-btn').forEach(btn => {
-            btn.style.background = parseInt(btn.dataset.index) === idx ? '#1f6feb' : '#21262d';
-          });
-
-          document.getElementById('active-track-title').innerText = track.title;
-          document.getElementById('active-track-artist').innerText = manifest.artist || 'walo, the underscore.';
-          document.getElementById('active-track-num').innerText = (idx + 1) + ' / ' + manifest.tracks.length;
-          document.getElementById('release-lyrics-box').innerText = track.caption || '[Liner Notes / Lyrics for ' + track.title + ']\\n\\nAll rights reserved. © ' + manifest.artist + '.';
-
-          const metaImg = document.getElementById('metadata-cover-art');
-          const creditsArt = manifest.artistImgData || track.thumbData || manifest.coverArtData || '';
-          if (metaImg) metaImg.src = creditsArt;
-
-          const playerPoster = track.thumbData || manifest.coverArtData || manifest.artistImgData || '';
-          const streamUrl = APPS_SCRIPT_URL + '?fileId=' + track.hlsStreamId;
-
-          if (window.videojs) {
-            let player = videojs('sovereign-master-player') || videojs('sovereign-master-player');
-            player.src({ src: streamUrl, type: 'application/x-mpegURL' });
-            if (playerPoster) player.poster(playerPoster);
-            player.ready(() => { player.play().catch(() => {}); });
-          }
-        }
+        // Safe fallback runner if generateEmbedUI logic needs to run standalone in the iframe
+        ${generateEmbedUI.toString()}
+        ${selectTrack.toString()}
+        ${triggerNextTrack.toString()}
+        ${populateStep5EmbedBox.toString()}
+        ${setupPlaybackHandlers.toString()}
+        ${syncMobileCanvasView.toString()}
+        ${openShareOptionsModal.toString()}
+        ${dispatchShare.toString()}
+        ${openMobilePortraitModal.toString()}
+        ${openPaystackCheckoutModal.toString()}
       `;
-      doc.body.appendChild(runtimeScript);
+      doc.head.appendChild(runtimeScript); // Appended to head/body cleanly
 
-      // Serialize the cleanly built document to HTML string
       const serializer = new XMLSerializer();
       const htmlContent = '<!DOCTYPE html>\n' + serializer.serializeToString(doc);
 
       const textEncoder = new TextEncoder();
       const sanitizedName = (manifest.title || 'release').toLowerCase().replace(/[^a-z0-9]/g, '_') + '_master_dashboard.html';
       const fileId = await uploadFileToDrive(sanitizedName, textEncoder.encode(htmlContent), 'text/html');
+      
+      // Store reference ID in manifest so Step 5 embed box can pull it instantly
+      manifest.masterDashboardFileId = fileId;
       return fileId;
     }
     
@@ -1980,61 +1839,54 @@
     }
 
    async function selectTrack(idx) {
-      if (!currentManifest || !currentManifest.tracks[idx]) return;
-      currentTrackIndex = idx;
-      const track = currentManifest.tracks[idx];
+     if (!currentManifest || !currentManifest.tracks[idx]) return;
+     currentTrackIndex = idx;
+     const track = currentManifest.tracks[idx];
 
-      document.querySelectorAll('.track-select-btn').forEach(btn => {
-        btn.style.background = parseInt(btn.dataset.index) === idx ? '#1f6feb' : '#21262d';
-      });
+     document.querySelectorAll('.track-select-btn').forEach(btn => {
+       btn.style.background = parseInt(btn.dataset.index) === idx ? '#1f6feb' : '#21262d';
+     });
 
-      const activeTitle = document.getElementById('active-track-title');
-      const activeArtist = document.getElementById('active-track-artist');
-      const activeNum = document.getElementById('active-track-num');
-      const metaImg = document.getElementById('metadata-cover-art');
-      const lyricsBox = document.getElementById('release-lyrics-box');
+     const activeTitle = document.getElementById('active-track-title');
+     const activeArtist = document.getElementById('active-track-artist');
+     const activeNum = document.getElementById('active-track-num');
+     const metaImg = document.getElementById('metadata-cover-art');
+     const lyricsBox = document.getElementById('release-lyrics-box');
 
-      // Header text updates
-      if (activeTitle) activeTitle.innerText = track.title;
-      if (activeArtist) activeArtist.innerText = currentManifest.artist || 'walo, the underscore.';
-      if (activeNum) activeNum.innerText = `${idx + 1} / ${currentManifest.tracks.length}`;
+     if (activeTitle) activeTitle.innerText = track.title;
+     if (activeArtist) activeArtist.innerText = currentManifest.artist || 'walo, the underscore.';
+     if (activeNum) activeNum.innerText = `${idx + 1} / ${currentManifest.tracks.length}`;
 
-      // Artwork and Poster hierarchy
-      const creditsArt = currentManifest.artistImgData || track.thumbData || currentManifest.coverArtData || '';
-      const playerPoster = track.thumbData || currentManifest.coverArtData || currentManifest.artistImgData || '';
+     const creditsArt = currentManifest.artistImgData || track.thumbData || currentManifest.coverArtData || '';
+     const playerPoster = track.thumbData || currentManifest.coverArtData || currentManifest.artistImgData || '';
 
-      if (metaImg) {
-        metaImg.src = creditsArt;
-      }
+     if (metaImg) metaImg.src = creditsArt;
+     if (lyricsBox) {
+       lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
+     }
 
-      if (lyricsBox) {
-        lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
-      }
+     // 🚀 Instant Local Object URL Playback with Autoplay Trigger
+     if (window.videojs && selectedUnifiedFiles && selectedUnifiedFiles[idx]) {
+       try {
+         let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
+         
+         const localFile = selectedUnifiedFiles[idx];
+         const localFileUrl = URL.createObjectURL(localFile);
+         
+         localPlayer.src({ src: localFileUrl, type: localFile.type || 'audio/mp4' });
+         if (playerPoster) localPlayer.poster(playerPoster);
 
-      // 📂 Play directly from the local file selected on your machine
-      if (window.videojs && selectedUnifiedFiles && selectedUnifiedFiles[idx]) {
-        try {
-          let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
-          
-          const localFile = selectedUnifiedFiles[idx];
-          const localFileUrl = URL.createObjectURL(localFile);
-          
-          localPlayer.src({ src: localFileUrl, type: localFile.type || 'audio/mp4' });
-          if (playerPoster) localPlayer.poster(playerPoster);
+         localPlayer.ready(() => {
+           localPlayer.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
+         });
+       } catch (e) {
+         console.log("Local file playback error:", e);
+       }
+     }
 
-          localPlayer.ready(() => {
-            localPlayer.play().catch(() => {});
-          });
-        } catch (e) {
-          console.log("Local file playback error:", e);
-        }
-      } else {
-        logMessage(`ℹ️ Local file not found for "${track.title}". Please select your audio stems in Step 3.`);
-      }
-
-      populateStep5EmbedBox(currentManifest);
-      syncMobileCanvasView(track, idx);
-    }
+     populateStep5EmbedBox(currentManifest);
+     syncMobileCanvasView(track, idx);
+   }
     
     function triggerNextTrack() {
       if (!currentManifest || !currentManifest.tracks || currentManifest.tracks.length === 0) return;
