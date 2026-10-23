@@ -1959,7 +1959,7 @@
      const lyricsBox = document.getElementById('release-lyrics-box');
 
      if (activeTitle) activeTitle.innerText = track.title;
-     if (activeArtist) activeArtist.innerText = currentManifest.artist || 'Artist';
+     if (activeArtist) activeArtist.innerText = currentManifest.artist || 'walo, the underscore.';
      if (activeNum) activeNum.innerText = `${idx + 1} / ${currentManifest.tracks.length}`;
 
      const creditsArt = currentManifest.artistImgData || track.thumbData || currentManifest.coverArtData || '';
@@ -1970,29 +1970,11 @@
        lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
      }
 
-     // Ensure Cover Art displays via a dedicated persistent overlay in the video container
-     const videoContainer = document.querySelector('#sovereign-local-player')?.parentElement;
-     if (videoContainer) {
-       let customPoster = document.getElementById('vjs-custom-poster');
-       if (!customPoster) {
-         customPoster = document.createElement('img');
-         customPoster.id = 'vjs-custom-poster';
-         customPoster.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 3; pointer-events: none;';
-         videoContainer.style.position = 'relative';
-         videoContainer.appendChild(customPoster);
-       }
-       if (playerPoster) {
-         customPoster.src = playerPoster;
-         customPoster.style.display = 'block';
-       } else {
-         customPoster.style.display = 'none';
-       }
-     }
-
+     // 🚀 Instant Local Object URL Playback & Poster Sync
      if (window.videojs) {
        try {
          let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
-         if (!localPlayer && typeof videojs === 'function') {
+         if (!localPlayer) {
            localPlayer = videojs('sovereign-local-player');
          }
 
@@ -2008,20 +1990,25 @@
          }
 
          if (localPlayer) {
+           if (playerPoster) {
+             localPlayer.poster(playerPoster);
+           }
+
            if (mediaSourceUrl) {
              localPlayer.src({ src: mediaSourceUrl, type: sourceType });
-             localPlayer.load();
-             localPlayer.play().catch(err => {
-               console.log("Autoplay waiting for user gesture:", err);
+             localPlayer.ready(() => {
+               localPlayer.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
              });
            } else {
              localPlayer.reset();
+             if (playerPoster) localPlayer.poster(playerPoster);
              const errorDisplay = localPlayer.errorDisplay;
              if (errorDisplay) {
                errorDisplay.fill('Load your tracklist to listen here.');
              }
            }
 
+           // Ensure 'ended' event triggers queue advancement
            localPlayer.off('ended');
            localPlayer.on('ended', () => {
              triggerNextTrack();
@@ -2146,30 +2133,19 @@
         </div>
 
         <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; margin: auto 0;">
-          <img id="mobile-canvas-art" src="${activeTrack?.thumbData || manifest.coverArtData || ''}" style="width: 260px; height: 260px; border-radius: 16px; object-fit: cover; box-shadow: 0 12px 32px rgba(0,0,0,0.8);" />
+          <img id="mobile-canvas-art" src="${activeTrack?.thumbData || manifest.coverArtData || ''}" style="width: 240px; height: 240px; border-radius: 16px; object-fit: cover; box-shadow: 0 12px 32px rgba(0,0,0,0.8);" />
           <div style="text-align: center; width: 100%;">
             <h2 id="mobile-canvas-title" style="margin: 0; font-size: 20px; color: #f0f6fc;">${activeTrack?.title || 'Select Track'}</h2>
             <p style="margin: 6px 0 0; font-size: 14px; color: #8b949e;">${manifest.artist}</p>
           </div>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 400px; margin: 0 auto;">
-          <!-- Time Bar & Progress Slider -->
-          <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
-            <input type="range" id="mobile-seek-bar" value="0" min="0" max="100" step="0.1" style="width: 100%; accent-color: #58a6ff; cursor: pointer;">
-            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #8b949e; font-family: monospace;">
-              <span id="mobile-current-time">0:00</span>
-              <span id="mobile-duration">0:00</span>
-            </div>
-          </div>
-
-          <!-- Playback Controls -->
+        <div style="display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 400px; margin: 0 auto;">
           <div style="display: flex; justify-content: space-around; align-items: center;">
-            <button onclick="document.getElementById('btn-shuffle').click()" style="background: transparent; border: none; font-size: 18px; color: #8b949e; cursor: pointer;" title="Shuffle">🔀</button>
-            <button onclick="document.getElementById('btn-prev-track').click()" style="background: transparent; border: none; font-size: 22px; color: #f0f6fc; cursor: pointer;" title="Previous">⏮️</button>
-            <button id="mobile-play-pause-btn" style="background: #238636; color: #fff; border: none; width: 50px; height: 50px; border-radius: 50%; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(35,134,54,0.4);" title="Play/Pause">⏸️</button>
-            <button onclick="document.getElementById('btn-next-track').click()" style="background: transparent; border: none; font-size: 22px; color: #f0f6fc; cursor: pointer;" title="Next">⏭️</button>
-            <button id="mobile-repeat-btn" style="background: transparent; border: none; font-size: 18px; color: #8b949e; cursor: pointer;" title="Repeat">🔁</button>
+            <button onclick="document.getElementById('btn-shuffle').click()" style="background: transparent; border: none; font-size: 20px; color: #8b949e; cursor: pointer;" title="Shuffle">🔀</button>
+            <button onclick="document.getElementById('btn-prev-track').click()" style="background: transparent; border: none; font-size: 26px; color: #f0f6fc; cursor: pointer;" title="Previous">⏮️</button>
+            <button onclick="document.getElementById('btn-next-track').click()" style="background: transparent; border: none; font-size: 26px; color: #f0f6fc; cursor: pointer;" title="Next">⏭️</button>
+            <button onclick="document.getElementById('btn-repeat').click()" style="background: transparent; border: none; font-size: 20px; color: #8b949e; cursor: pointer;" title="Repeat">🔁</button>
           </div>
           <p style="text-align: center; font-size: 11px; color: #8b949e; margin: 0;">© ${manifest.artist}. All rights reserved.</p>
         </div>
@@ -2177,12 +2153,12 @@
 
       document.body.appendChild(modal);
 
-      // --- Bind Header Actions ---
       document.getElementById('close-mobile-modal').onclick = () => modal.remove();
       document.getElementById('mobile-checkout-btn').onclick = () => {
         modal.remove();
         openPaystackCheckoutModal(manifest);
       };
+    }
 
       // --- Repeat Logic & Desktop Synchronization ---
       const mobileRepeatBtn = document.getElementById('mobile-repeat-btn');
