@@ -1729,7 +1729,7 @@
       styleEl.innerText = `
         * { box-sizing: border-box; }
         body { font-family: system-ui, -apple-system, sans-serif; background: #0d1117; color: #c9d1d9; margin: 0; padding: 16px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-        #sovereign-player-card-target { width: 100%; max-width: 920px; }
+        #sovereign-player-card-target { width: 100%; max-width: 960px; }
         button { cursor: pointer; }
         .track-select-btn:hover { background: #30363d !important; }
       `;
@@ -1739,22 +1739,27 @@
       targetDiv.id = 'sovereign-player-card-target';
       doc.body.appendChild(targetDiv);
 
-      // Embed the manifest and call generateEmbedUI on DOMContentLoaded
+      // Runtime bundle inside the standalone standalone iframe/page
       const runtimeScript = document.createElement('script');
       runtimeScript.innerText = `
         const APPS_SCRIPT_URL = '${APPS_SCRIPT_URL}';
-        const manifest = ${JSON.stringify(manifest)};
+        const currentManifest = ${JSON.stringify(manifest)};
         let currentTrackIndex = 0;
         let isShuffleActive = false;
         let repeatMode = 'off';
+        let selectedUnifiedFiles = [];
 
         window.addEventListener('DOMContentLoaded', () => {
-          if (typeof generateEmbedUI === 'function') {
-            generateEmbedUI(manifest);
-          }
+          // Render full Card 4 UI
+          generateEmbedUI(currentManifest);
+
+          // Strip top section title inside embedded iframe view
+          const headerTitle = document.querySelector('#sovereign-player-card-target h3');
+          const headerSubtext = document.querySelector('#sovereign-player-card-target p');
+          if (headerTitle && headerTitle.innerText.includes('Sovereign HLS Release Dashboard')) headerTitle.style.display = 'none';
+          if (headerSubtext && headerSubtext.innerText.includes('Google Drive vault')) headerSubtext.style.display = 'none';
         });
 
-        // Pack necessary runtime functions into the standalone scope
         ${generateEmbedUI.toString()}
         ${selectTrack.toString()}
         ${triggerNextTrack.toString()}
@@ -2080,6 +2085,40 @@
       const currentTimeEl = document.getElementById('mobile-current-time');
       const durationEl = document.getElementById('mobile-duration');
 
+      // Inside openMobilePortraitModal function:
+      const mobileRepeatBtn = document.getElementById('mobile-repeat-btn');
+      
+      function updateMobileRepeatUI() {
+        if (!mobileRepeatBtn) return;
+        if (repeatMode === 'off') {
+          mobileRepeatBtn.innerText = '🔁';
+          mobileRepeatBtn.style.opacity = '0.5';
+          mobileRepeatBtn.title = 'Repeat: Off';
+        } else if (repeatMode === 'all') {
+          mobileRepeatBtn.innerText = '🔁';
+          mobileRepeatBtn.style.opacity = '1.0';
+          mobileRepeatBtn.title = 'Repeat: All Tracks';
+        } else if (repeatMode === 'one') {
+          mobileRepeatBtn.innerText = '🔂';
+          mobileRepeatBtn.style.opacity = '1.0';
+          mobileRepeatBtn.title = 'Repeat: Single Track';
+        }
+      }
+
+      updateMobileRepeatUI();
+
+      mobileRepeatBtn.onclick = () => {
+        if (repeatMode === 'off') repeatMode = 'all';
+        else if (repeatMode === 'all') repeatMode = 'one';
+        else repeatMode = 'off';
+
+        // Sync desktop repeat UI if present
+        const desktopRepeatBtn = document.getElementById('btn-repeat');
+        if (desktopRepeatBtn) desktopRepeatBtn.click();
+        
+        updateMobileRepeatUI();
+      };
+      
       function formatTime(seconds) {
         if (isNaN(seconds)) return "0:00";
         const mins = Math.floor(seconds / 60);
