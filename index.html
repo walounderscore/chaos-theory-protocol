@@ -1970,50 +1970,56 @@
        lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
      }
 
-     // 🚀 Instant Local Object URL Playback & Poster Sync
      if (window.videojs) {
        try {
          let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
-         if (!localPlayer) {
-           localPlayer = videojs('sovereign-local-player');
-         }
+         if (!localPlayer) localPlayer = videojs('sovereign-local-player');
 
          let mediaSourceUrl = '';
          let sourceType = 'audio/mp4';
 
+         // 🔒 STEN-FIRST RULE: Always prioritize local file object mapping for Card 4 previewing
          if (selectedUnifiedFiles && selectedUnifiedFiles[idx]) {
-           mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
-           sourceType = selectedUnifiedFiles[idx].type || 'audio/mp4';
+           const localFile = selectedUnifiedFiles[idx];
+           mediaSourceUrl = URL.createObjectURL(localFile);
+           sourceType = localFile.type || 'audio/mp4';
          } else if (track.hlsStreamId) {
            mediaSourceUrl = `${APPS_SCRIPT_URL}?fileId=${track.hlsStreamId}`;
            sourceType = 'application/x-mpegURL';
          }
 
-         if (localPlayer) {
-           if (playerPoster) {
-             localPlayer.poster(playerPoster);
-           }
-
-           if (mediaSourceUrl) {
-             localPlayer.src({ src: mediaSourceUrl, type: sourceType });
-             localPlayer.ready(() => {
-               localPlayer.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
-             });
-           } else {
-             localPlayer.reset();
-             if (playerPoster) localPlayer.poster(playerPoster);
-             const errorDisplay = localPlayer.errorDisplay;
-             if (errorDisplay) {
-               errorDisplay.fill('Load your tracklist to listen here.');
-             }
-           }
-
-           // Ensure 'ended' event triggers queue advancement
-           localPlayer.off('ended');
-           localPlayer.on('ended', () => {
-             triggerNextTrack();
-           });
+         if (mediaSourceUrl) {
+           localPlayer.src({ src: mediaSourceUrl, type: sourceType });
          }
+
+         if (playerPoster) {
+           localPlayer.poster(playerPoster);
+         }
+
+         // Attempt autoplay, but gracefully handle browser restrictions so controls stay interactive
+         localPlayer.ready(() => {
+           localPlayer.play().then(() => {
+             const posterEl = localPlayer.el().querySelector('.vjs-poster');
+             if (posterEl) posterEl.style.display = 'none';
+           }).catch(err => {
+             console.log("Autoplay restricted by browser policy (user interaction required):", err);
+             // Ensure poster doesn't block controls if autoplay is blocked
+             const posterEl = localPlayer.el().querySelector('.vjs-poster');
+             if (posterEl) {
+               posterEl.style.pointerEvents = 'none';
+             }
+           });
+         });
+
+         localPlayer.on('play', () => {
+           const posterEl = localPlayer.el().querySelector('.vjs-poster');
+           if (posterEl) posterEl.style.display = 'none';
+         });
+
+         localPlayer.off('ended');
+         localPlayer.on('ended', () => {
+           triggerNextTrack();
+         });
        } catch (e) {
          console.log("Playback error:", e);
        }
