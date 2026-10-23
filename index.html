@@ -1947,6 +1947,7 @@
      currentTrackIndex = idx;
      const track = currentManifest.tracks[idx];
 
+     // Highlight active track in queue list
      document.querySelectorAll('.track-select-btn').forEach(btn => {
        btn.style.background = parseInt(btn.dataset.index) === idx ? '#1f6feb' : '#21262d';
      });
@@ -1958,7 +1959,7 @@
      const lyricsBox = document.getElementById('release-lyrics-box');
 
      if (activeTitle) activeTitle.innerText = track.title;
-     if (activeArtist) activeArtist.innerText = currentManifest.artist || 'walo, the underscore.';
+     if (activeArtist) activeArtist.innerText = currentManifest.artist || 'Artist';
      if (activeNum) activeNum.innerText = `${idx + 1} / ${currentManifest.tracks.length}`;
 
      const creditsArt = currentManifest.artistImgData || track.thumbData || currentManifest.coverArtData || '';
@@ -1972,7 +1973,10 @@
      if (window.videojs) {
        try {
          let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
-         
+         if (!localPlayer && typeof videojs === 'function') {
+           localPlayer = videojs('sovereign-local-player');
+         }
+
          let mediaSourceUrl = '';
          let sourceType = 'audio/mp4';
 
@@ -1984,9 +1988,16 @@
            sourceType = 'application/x-mpegURL';
          }
 
-         // Explicitly set poster before updating source
-         if (playerPoster) {
+         // 1. Force Video.js to update and display the correct poster/artwork layer
+         if (localPlayer) {
            localPlayer.poster(playerPoster);
+           
+           // Ensure the poster image element inside Video.js reflects the change immediately
+           const posterImg = localPlayer.el().querySelector('.vjs-poster');
+           if (posterImg && playerPoster) {
+             posterImg.style.backgroundImage = `url("${playerPoster}")`;
+             posterImg.style.display = 'block';
+           }
          }
 
          if (mediaSourceUrl) {
@@ -1995,16 +2006,17 @@
              localPlayer.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
            });
          } else {
-           // If no source/file is linked yet, trigger custom error state gracefully
            localPlayer.reset();
-           if (playerPoster) localPlayer.poster(playerPoster);
+           if (playerPoster) {
+             localPlayer.poster(playerPoster);
+           }
            const errorDisplay = localPlayer.errorDisplay;
            if (errorDisplay) {
              errorDisplay.fill('Load your tracklist to listen here.');
            }
          }
 
-         // Ensure 'ended' event triggers next track automatically
+         // Bind automatic queue advancement
          localPlayer.off('ended');
          localPlayer.on('ended', () => {
            triggerNextTrack();
