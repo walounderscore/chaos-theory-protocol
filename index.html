@@ -203,9 +203,10 @@
       <h3>5. Release Embed & Direct Stream Code</h3>
       <p>Copy the HTML iframe snippet to embed your sovereign player on external sites, or grab the direct stream link.</p>
       <textarea id="embed-output-box" class="embed-box" readonly placeholder="Awaiting audio processing and Drive sync to generate embed code..."></textarea>
-      <div style="display: flex; gap: 10px; margin-top: 10px;">
+      <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
         <button class="copy-btn" onclick="copyEmbedCode()">📋 Copy Embed Code</button>
         <button class="copy-btn" style="background: #238636;" onclick="copyPlayerDirectLink()">🔗 Copy Player Link</button>
+        <button class="copy-btn" style="background: #21262d; border: 1px solid #30363d;" onclick="forceRegenerateEmbed()">🔄 Regenerate Embed Code</button>
       </div>
     </div>
 
@@ -289,6 +290,32 @@
         dateInput.value = new Date().toISOString().split('T')[0];
       }
       updateLiveAlbumBadge();
+
+      window.addEventListener('keydown', (e) => {
+      // Ignore if typing in input fields
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+
+      if (e.code === 'MediaTrackNext') {
+        e.preventDefault();
+        triggerNextTrack();
+      } else if (e.code === 'MediaTrackPrevious') {
+        e.preventDefault();
+        if (currentManifest && currentManifest.tracks) {
+          let prevIdx = currentTrackIndex - 1;
+          if (prevIdx < 0) prevIdx = currentManifest.tracks.length - 1;
+          selectTrack(prevIdx);
+        }
+      } else if (e.code === 'MediaPlayPause') {
+        e.preventDefault();
+        if (window.videojs) {
+          let localPlayer = videojs.getPlayer('sovereign-local-player');
+          if (localPlayer) {
+            if (localPlayer.paused()) localPlayer.play();
+            else localPlayer.pause();
+          }
+        }
+      }
+    });
 
       // Render Resting Unpopulated Master UI on load
       generateEmbedUI(createUnpopulatedRestingManifest());
@@ -587,12 +614,15 @@
       // Restore Artist Portrait / Image
       if (manifest.artistImgData) {
         currentArtistImgBase64 = manifest.artistImgData;
-        const artistInput = document.getElementById('artist-image-file');
-        // Update the Credits panel preview image if active
         const metaImg = document.getElementById('metadata-cover-art');
         if (metaImg) metaImg.src = manifest.artistImgData;
       }
       updateLiveAlbumBadge();
+
+      // 🚀 Instant Restoration of Active Card 4 Playlist and Step 5 Embed
+      currentManifest = manifest;
+      generateEmbedUI(manifest);
+      populateStep5EmbedBox(manifest);
 
       if (manifest.tracks && manifest.tracks.length > 0) {
         const container = document.getElementById('track-queue-container');
@@ -698,7 +728,7 @@
         document.getElementById('build-release-btn').disabled = false;
       }
 
-      alert(`Session "${manifest.title || 'Untitled'}" restored! Please re-select your audio stems to link binary files.`);
+      logMessage(`⚡ Restored session snapshot "${manifest.title || 'Untitled'}". Reselect all audio to change files.`);
     }
 
     let currentArtistImgBase64 = null;
@@ -1673,29 +1703,29 @@
 
       const doc = document.implementation.createHTMLDocument(`${manifest.title} - Sovereign Release`);
       
-      const metaCharset = doc.createElement('meta');
+      const metaCharset = document.createElement('meta');
       metaCharset.setAttribute('charset', 'UTF-8');
       doc.head.appendChild(metaCharset);
 
-      const metaViewport = doc.createElement('meta');
+      const metaViewport = document.createElement('meta');
       metaViewport.setAttribute('name', 'viewport');
       metaViewport.setAttribute('content', 'width=device-width, initial-scale=1.0');
       doc.head.appendChild(metaViewport);
 
-      const titleEl = doc.createElement('title');
+      const titleEl = document.createElement('title');
       titleEl.innerText = `${manifest.title} - Sovereign Release`;
       doc.head.appendChild(titleEl);
 
-      const vjsCss = doc.createElement('link');
+      const vjsCss = document.createElement('link');
       vjsCss.setAttribute('href', 'https://vjs.zencdn.net/8.10.0/video-js.css');
       vjsCss.setAttribute('rel', 'stylesheet');
       doc.head.appendChild(vjsCss);
 
-      const vjsScript = doc.createElement('script');
+      const vjsScript = document.createElement('script');
       vjsScript.setAttribute('src', 'https://vjs.zencdn.net/8.10.0/video.min.js');
       doc.head.appendChild(vjsScript);
 
-      const styleEl = doc.createElement('style');
+      const styleEl = document.createElement('style');
       styleEl.innerText = `
         * { box-sizing: border-box; }
         body { font-family: system-ui, -apple-system, sans-serif; background: #0d1117; color: #c9d1d9; margin: 0; padding: 16px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
@@ -1705,12 +1735,12 @@
       `;
       doc.head.appendChild(styleEl);
 
-      const targetDiv = doc.createElement('div');
+      const targetDiv = document.createElement('div');
       targetDiv.id = 'sovereign-player-card-target';
       doc.body.appendChild(targetDiv);
 
-      // Pass the manifest data cleanly into the runtime script environment
-      const runtimeScript = doc.createElement('script');
+      // Embed the manifest and call generateEmbedUI on DOMContentLoaded
+      const runtimeScript = document.createElement('script');
       runtimeScript.innerText = `
         const APPS_SCRIPT_URL = '${APPS_SCRIPT_URL}';
         const manifest = ${JSON.stringify(manifest)};
@@ -1719,13 +1749,12 @@
         let repeatMode = 'off';
 
         window.addEventListener('DOMContentLoaded', () => {
-          // Re-uses the clean master dashboard renderer structure using 'manifest'
           if (typeof generateEmbedUI === 'function') {
             generateEmbedUI(manifest);
           }
         });
 
-        // Safe fallback runner if generateEmbedUI logic needs to run standalone in the iframe
+        // Pack necessary runtime functions into the standalone scope
         ${generateEmbedUI.toString()}
         ${selectTrack.toString()}
         ${triggerNextTrack.toString()}
@@ -1737,7 +1766,7 @@
         ${openMobilePortraitModal.toString()}
         ${openPaystackCheckoutModal.toString()}
       `;
-      doc.head.appendChild(runtimeScript); // Appended to head/body cleanly
+      doc.body.appendChild(runtimeScript);
 
       const serializer = new XMLSerializer();
       const htmlContent = '<!DOCTYPE html>\n' + serializer.serializeToString(doc);
@@ -1746,7 +1775,6 @@
       const sanitizedName = (manifest.title || 'release').toLowerCase().replace(/[^a-z0-9]/g, '_') + '_master_dashboard.html';
       const fileId = await uploadFileToDrive(sanitizedName, textEncoder.encode(htmlContent), 'text/html');
       
-      // Store reference ID in manifest so Step 5 embed box can pull it instantly
       manifest.masterDashboardFileId = fileId;
       return fileId;
     }
@@ -1865,22 +1893,38 @@
        lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
      }
 
-     // 🚀 Instant Local Object URL Playback with Autoplay Trigger
-     if (window.videojs && selectedUnifiedFiles && selectedUnifiedFiles[idx]) {
+     // 🚀 Instant Local/Cloud Object URL Playback with Autoplay & Ended Hook
+     if (window.videojs) {
        try {
          let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
          
-         const localFile = selectedUnifiedFiles[idx];
-         const localFileUrl = URL.createObjectURL(localFile);
-         
-         localPlayer.src({ src: localFileUrl, type: localFile.type || 'audio/mp4' });
-         if (playerPoster) localPlayer.poster(playerPoster);
+         let mediaSourceUrl = '';
+         let sourceType = 'audio/mp4';
 
-         localPlayer.ready(() => {
-           localPlayer.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
-         });
+         if (selectedUnifiedFiles && selectedUnifiedFiles[idx]) {
+           mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
+           sourceType = selectedUnifiedFiles[idx].type || 'audio/mp4';
+         } else if (track.hlsStreamId) {
+           mediaSourceUrl = `${APPS_SCRIPT_URL}?fileId=${track.hlsStreamId}`;
+           sourceType = 'application/x-mpegURL';
+         }
+
+         if (mediaSourceUrl) {
+           localPlayer.src({ src: mediaSourceUrl, type: sourceType });
+           if (playerPoster) localPlayer.poster(playerPoster);
+
+           localPlayer.ready(() => {
+             localPlayer.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
+           });
+
+           // Ensure 'ended' event triggers next track automatically
+           localPlayer.off('ended');
+           localPlayer.on('ended', () => {
+             triggerNextTrack();
+           });
+         }
        } catch (e) {
-         console.log("Local file playback error:", e);
+         console.log("Playback error:", e);
        }
      }
 
@@ -2111,6 +2155,22 @@
       const directUrl = `${APPS_SCRIPT_URL}?fileId=${currentManifest.masterDashboardFileId}`;
       navigator.clipboard.writeText(directUrl);
       alert(`Direct link for master release dashboard copied to clipboard!`);
+    }
+
+    function forceRegenerateEmbed() {
+      // Re-compile the current manifest from your active workspace inputs
+      const manifest = compileCurrentManifest();
+      
+      // Keep the master dashboard file ID if it was already generated
+      if (currentManifest && currentManifest.masterDashboardFileId) {
+        manifest.masterDashboardFileId = currentManifest.masterDashboardFileId;
+      }
+
+      // Re-run the embed code builder function locally
+      populateStep5EmbedBox(manifest);
+      currentManifest = manifest;
+
+      logMessage(`🔄 Embed code snippet regenerated from local workspace state.`);
     }
   </script>
 </body>
