@@ -1723,15 +1723,15 @@
     }
     
     async function uploadReleaseDashboardHtml(manifest) {
-      logMessage(`📦 Generating lightweight master sovereign release dashboard HTML...`);
+      logMessage(`📦 Generating master 3-column sovereign release dashboard HTML...`);
 
-      // 🛠️ Clone and strip heavy base64 strings so file size stays small (~50KB)
+      // 1. Strip heavy base64 strings so file size stays tiny (~5KB) instead of 28MB
       const lightManifest = JSON.parse(JSON.stringify(manifest));
       lightManifest.coverArtData = null;
       lightManifest.artistImgData = null;
       if (lightManifest.tracks) {
         lightManifest.tracks.forEach(t => {
-          t.thumbData = null; // Stems fetch from cloud / drive IDs instead of heavy inline data
+          t.thumbData = null;
         });
       }
 
@@ -1773,6 +1773,7 @@
       targetDiv.id = 'sovereign-player-card-target';
       doc.body.appendChild(targetDiv);
 
+      // 2. Pass the lightweight manifest data cleanly into the runtime script environment
       const runtimeScript = doc.createElement('script');
       runtimeScript.innerText = `
         const APPS_SCRIPT_URL = '${APPS_SCRIPT_URL}';
@@ -1793,6 +1794,7 @@
         ${populateStep5EmbedBox.toString()}
         ${setupPlaybackHandlers.toString()}
         ${syncMobileCanvasView.toString()}
+        complexModalHandlersOpenOrDismiss()
         ${openShareOptionsModal.toString()}
         ${dispatchShare.toString()}
         ${openMobilePortraitModal.toString()}
