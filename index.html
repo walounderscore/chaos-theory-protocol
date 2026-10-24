@@ -1743,14 +1743,17 @@
     }
     
     async function uploadReleaseDashboardHtml(manifest) {
-      logMessage(`📦 Generating master 3-column sovereign release dashboard HTML...`);
-      // Strip massive audio strings so the master dashboard HTML stays ~50KB
+      logMessage(`📦 Generating lightweight master sovereign release dashboard HTML...`);
+
+      // 🛠️ Create a lightweight copy for the master dashboard to prevent size errors
       const dashboardManifest = JSON.parse(JSON.stringify(manifest));
-      dashboardManifest.tracks.forEach(track => {
-        delete track.playlistBase64; // Remove heavy Base64 payload from master file
-      });
-      
-      const doc = document.implementation.createHTMLDocument(`${manifest.title} - Sovereign Release`);
+      if (dashboardManifest.tracks) {
+        dashboardManifest.tracks.forEach(track => {
+          delete track.playlistBase64; // Keep base64 in individual track widgets, not master file!
+        });
+      }
+
+      const doc = document.implementation.createHTMLDocument(`${dashboardManifest.title} - Sovereign Release`);
       
       const metaCharset = doc.createElement('meta');
       metaCharset.setAttribute('charset', 'UTF-8');
@@ -1762,7 +1765,7 @@
       doc.head.appendChild(metaViewport);
 
       const titleEl = doc.createElement('title');
-      titleEl.innerText = `${manifest.title} - Sovereign Release`;
+      titleEl.innerText = `${dashboardManifest.title} - Sovereign Release`;
       doc.head.appendChild(titleEl);
 
       const vjsCss = doc.createElement('link');
@@ -1788,14 +1791,13 @@
       targetDiv.id = 'sovereign-player-card-target';
       doc.body.appendChild(targetDiv);
 
-      // Build runtime script with HTML error boundary protection
       let scriptCode = "(function() {\n";
       scriptCode += "  window.addEventListener('error', function (e) {\n";
       scriptCode += "    document.body.innerHTML = '<pre style=\"color:red;padding:20px;white-space:pre-wrap\">' + (e.message || 'Unknown error') + '\\n' + (e.filename || '') + ':' + (e.lineno || '') + '</pre>';\n";
       scriptCode += "  });\n\n";
 
       scriptCode += "  const APPS_SCRIPT_URL = " + JSON.stringify(APPS_SCRIPT_URL) + ";\n";
-      scriptCode += "  const manifest = " + JSON.stringify(manifest) + ";\n";
+      scriptCode += "  const manifest = " + JSON.stringify(dashboardManifest) + ";\n";
       scriptCode += "  let currentTrackIndex = 0;\n";
       scriptCode += "  let isShuffleActive = false;\n";
       scriptCode += "  let repeatMode = 'off';\n\n";
@@ -1837,7 +1839,6 @@
       runtimeScript.appendChild(doc.createTextNode(scriptCode));
       doc.body.appendChild(runtimeScript);
 
-      // Use HTML outerHTML serialization instead of XMLSerializer to prevent entity escaping
       const htmlContent = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
 
       const sanitizedName = (manifest.title || 'release').toLowerCase().replace(/[^a-z0-9]/g, '_') + '_master_dashboard.html';
