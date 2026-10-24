@@ -2291,7 +2291,7 @@
       alert(`Direct link for master release dashboard copied to clipboard!`);
     }
 
-    function forceRegenerateEmbed() {
+    async function forceRegenerateEmbed() {
       // Re-compile the current manifest from your active workspace inputs
       const manifest = compileCurrentManifest();
       
@@ -2305,6 +2305,17 @@
       currentManifest = manifest;
 
       logMessage(`🔄 Embed code snippet regenerated from local workspace state.`);
+
+      // 🚀 Automatically push the fresh, lightweight HTML dashboard to Google Drive
+      try {
+        logMessage(`📦 Uploading updated lightweight master dashboard to Drive...`);
+        const fileId = await uploadReleaseDashboardHtml(manifest);
+        logMessage(`✅ Master dashboard successfully re-uploaded! ID: ${fileId}`);
+        alert("Embed regenerated and master dashboard updated on Google Drive!");
+      } catch (err) {
+        logMessage(`❌ Failed to push updated master dashboard: ${err.message}`);
+        alert("Dashboard updated locally, but Drive upload failed: " + err.message);
+      }
     }
   </script>
 </body>
