@@ -1957,6 +1957,7 @@
      currentTrackIndex = idx;
      const track = currentManifest.tracks[idx];
 
+     // Highlight active track in queue list
      document.querySelectorAll('.track-select-btn').forEach(btn => {
        btn.style.background = parseInt(btn.dataset.index) === idx ? '#1f6feb' : '#21262d';
      });
@@ -1965,7 +1966,6 @@
      const activeArtist = document.getElementById('active-track-artist');
      const activeNum = document.getElementById('active-track-num');
      const metaImg = document.getElementById('metadata-cover-art');
-     const centerCover = document.getElementById('center-cover-artwork');
      const lyricsBox = document.getElementById('release-lyrics-box');
 
      if (activeTitle) activeTitle.innerText = track.title;
@@ -1976,22 +1976,21 @@
      const playerPoster = track.thumbData || currentManifest.coverArtData || currentManifest.artistImgData || '';
 
      if (metaImg) metaImg.src = creditsArt;
-     if (centerCover && playerPoster) centerCover.src = playerPoster;
      if (lyricsBox) {
        lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
      }
 
+     // 🚀 Instant Local Object URL Playback & Dynamic Poster Sync
      if (window.videojs) {
        try {
-         let localPlayer = videojs.getPlayer('sovereign-local-player');
+         let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
          if (!localPlayer) {
-           localPlayer = videojs('sovereign-local-player', { controls: true, autoplay: false });
+           localPlayer = videojs('sovereign-local-player');
          }
 
          let mediaSourceUrl = '';
          let sourceType = 'audio/mp4';
 
-         // Prioritize local file object mapping for Card 4 previewing
          if (selectedUnifiedFiles && selectedUnifiedFiles[idx]) {
            mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
            sourceType = selectedUnifiedFiles[idx].type || 'audio/mp4';
@@ -2000,15 +1999,32 @@
            sourceType = 'application/x-mpegURL';
          }
 
-         if (mediaSourceUrl) {
-           localPlayer.src({ src: mediaSourceUrl, type: sourceType });
-           localPlayer.ready(() => {
-             localPlayer.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
+         if (localPlayer) {
+           // 🛠️ CRITICAL FIX: Explicitly update Video.js poster for the active track
+           if (playerPoster) {
+             localPlayer.poster(playerPoster);
+           }
+
+           if (mediaSourceUrl) {
+             localPlayer.src({ src: mediaSourceUrl, type: sourceType });
+             localPlayer.ready(() => {
+               localPlayer.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
+             });
+           } else {
+             localPlayer.reset();
+             if (playerPoster) localPlayer.poster(playerPoster);
+             const errorDisplay = localPlayer.errorDisplay;
+             if (errorDisplay) {
+               errorDisplay.fill('Load your tracklist to listen here.');
+             }
+           }
+
+           // Ensure 'ended' event triggers queue advancement
+           localPlayer.off('ended');
+           localPlayer.on('ended', () => {
+             triggerNextTrack();
            });
          }
-
-         localPlayer.off('ended');
-         localPlayer.on('ended', () => triggerNextTrack());
        } catch (e) {
          console.log("Playback error:", e);
        }
