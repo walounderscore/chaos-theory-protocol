@@ -1822,6 +1822,20 @@
 
       return fileId;
     }
+
+    function populateStep5EmbedBox(manifest) {
+      const embedBox = document.getElementById('embed-output-box');
+      
+      if (embedBox) {
+        if (manifest.masterDashboardFileId) {
+          const masterViewerUrl = `${APPS_SCRIPT_URL}?fileId=${manifest.masterDashboardFileId}`;
+          const embedHtml = `<iframe src="${masterViewerUrl}" width="100%" height="720" style="border:none;border-radius:12px;background:#0d1117;" allow="encrypted-media"></iframe>`;
+          embedBox.value = embedHtml;
+        } else {
+          embedBox.value = '';
+        }
+      }
+    }
     
     function setupPlaybackHandlers(manifest) {
       const btnShuffle = document.getElementById('btn-shuffle');
