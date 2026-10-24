@@ -1977,13 +1977,19 @@
          let mediaSourceUrl = '';
          let sourceType = 'audio/mp4';
 
-         if (selectedUnifiedFiles && selectedUnifiedFiles[idx]) {
-           mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
-           sourceType = selectedUnifiedFiles[idx].type || 'audio/mp4';
-         } else if (track.hlsStreamId) {
-           mediaSourceUrl = `${APPS_SCRIPT_URL}?fileId=${track.hlsStreamId}`;
-           sourceType = 'application/x-mpegURL';
-         }
+         if (
+          typeof selectedUnifiedFiles !== "undefined" &&
+          selectedUnifiedFiles &&
+          selectedUnifiedFiles[idx]
+        ) {
+          // Local builder mode: use local File object
+          mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
+          sourceType = selectedUnifiedFiles[idx].type || 'audio/mp4';
+        } else if (track.hlsStreamId) {
+          // Drive-hosted dashboard mode: fallback to Apps Script .m3u8 endpoint
+          mediaSourceUrl = `${APPS_SCRIPT_URL}?fileId=${encodeURIComponent(track.hlsStreamId)}`;
+          sourceType = 'application/x-mpegURL';
+        }
 
          if (localPlayer) {
            // 🛠️ CRITICAL FIX: Explicitly update Video.js poster for the active track
