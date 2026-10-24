@@ -1763,33 +1763,41 @@
       targetDiv.id = 'sovereign-player-card-target';
       doc.body.appendChild(targetDiv);
 
+      // Build script code using string concatenation (+) to prevent backtick collisions
+      let scriptCode = "(function() {\n";
+      scriptCode += "  const APPS_SCRIPT_URL = " + JSON.stringify(APPS_SCRIPT_URL) + ";\n";
+      scriptCode += "  const manifest = " + JSON.stringify(manifest) + ";\n";
+      scriptCode += "  let currentTrackIndex = 0;\n";
+      scriptCode += "  let isShuffleActive = false;\n";
+      scriptCode += "  let repeatMode = 'off';\n\n";
+      scriptCode += "  window.addEventListener('DOMContentLoaded', () => {\n";
+      scriptCode += "    if (typeof generateEmbedUI === 'function') {\n";
+      scriptCode += "      generateEmbedUI(manifest);\n";
+      scriptCode += "    }\n";
+      scriptCode += "  });\n\n";
+
+      const funcs = [
+        typeof generateEmbedUI === 'function' ? generateEmbedUI : null,
+        typeof selectTrack === 'function' ? selectTrack : null,
+        typeof triggerNextTrack === 'function' ? triggerNextTrack : null,
+        typeof populateStep5EmbedBox === 'function' ? populateStep5EmbedBox : null,
+        typeof setupPlaybackHandlers === 'function' ? setupPlaybackHandlers : null,
+        typeof syncMobileCanvasView === 'function' ? syncMobileCanvasView : null,
+        typeof openShareOptionsModal === 'function' ? openShareOptionsModal : null,
+        typeof dispatchShare === 'function' ? dispatchShare : null,
+        typeof openMobilePortraitModal === 'function' ? openMobilePortraitModal : null,
+        typeof openPaystackCheckoutModal === 'function' ? openPaystackCheckoutModal : null
+      ];
+
+      funcs.forEach(f => {
+        if (f) {
+          scriptCode += f.toString() + "\n\n";
+        }
+      });
+
+      scriptCode += "})();";
+
       const runtimeScript = doc.createElement('script');
-      const scriptCode = `
-        (function() {
-          const APPS_SCRIPT_URL = '${APPS_SCRIPT_URL}';
-          const manifest = ${JSON.stringify(manifest)};
-          let currentTrackIndex = 0;
-          let isShuffleActive = false;
-          let repeatMode = 'off';
-
-          window.addEventListener('DOMContentLoaded', () => {
-            if (typeof generateEmbedUI === 'function') {
-              generateEmbedUI(manifest);
-            }
-          });
-
-          ${typeof generateEmbedUI === 'function' ? generateEmbedUI.toString() : ''}
-          ${typeof selectTrack === 'function' ? selectTrack.toString() : ''}
-          ${typeof triggerNextTrack === 'function' ? triggerNextTrack.toString() : ''}
-          ${typeof populateStep5EmbedBox === 'function' ? populateStep5EmbedBox.toString() : ''}
-          ${typeof setupPlaybackHandlers === 'function' ? setupPlaybackHandlers.toString() : ''}
-          ${typeof syncMobileCanvasView === 'function' ? syncMobileCanvasView.toString() : ''}
-          ${typeof openShareOptionsModal === 'function' ? openShareOptionsModal.toString() : ''}
-          ${typeof dispatchShare === 'function' ? dispatchShare.toString() : ''}
-          ${typeof openMobilePortraitModal === 'function' ? openMobilePortraitModal.toString() : ''}
-          ${typeof openPaystackCheckoutModal === 'function' ? openPaystackCheckoutModal.toString() : ''}
-        })();
-      `;
       runtimeScript.appendChild(doc.createTextNode(scriptCode));
       doc.body.appendChild(runtimeScript);
 
@@ -1804,20 +1812,6 @@
       return fileId;
     }
     
-    function populateStep5EmbedBox(manifest) {
-      const embedBox = document.getElementById('embed-output-box');
-      
-      if (embedBox) {
-        if (manifest.masterDashboardFileId) {
-          const masterViewerUrl = `${APPS_SCRIPT_URL}?fileId=${manifest.masterDashboardFileId}`;
-          const embedHtml = `<iframe src="${masterViewerUrl}" width="100%" height="720" style="border:none;border-radius:12px;background:#0d1117;" allow="encrypted-media"></iframe>`;
-          embedBox.value = embedHtml;
-        } else {
-          embedBox.value = '';
-        }
-      }
-    }
-
     function setupPlaybackHandlers(manifest) {
       const btnShuffle = document.getElementById('btn-shuffle');
       const btnRepeat = document.getElementById('btn-repeat');
