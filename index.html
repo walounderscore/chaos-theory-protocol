@@ -1773,7 +1773,7 @@
       targetDiv.id = 'sovereign-player-card-target';
       doc.body.appendChild(targetDiv);
 
-      // 2. Pass the lightweight manifest data cleanly into the runtime script environment
+      // Pass the lightweight manifest data cleanly into the runtime script environment
       const runtimeScript = doc.createElement('script');
       runtimeScript.innerText = `
         const APPS_SCRIPT_URL = '${APPS_SCRIPT_URL}';
@@ -1783,23 +1783,25 @@
         let repeatMode = 'off';
 
         window.addEventListener('DOMContentLoaded', () => {
+          // Re-uses the clean master dashboard renderer structure using 'manifest'
           if (typeof generateEmbedUI === 'function') {
             generateEmbedUI(manifest);
           }
         });
 
-        ${generateEmbedUI.toString()}
-        ${selectTrack.toString()}
-        ${triggerNextTrack.toString()}
-        ${populateStep5EmbedBox.toString()}
-        ${setupPlaybackHandlers.toString()}
-        ${syncMobileCanvasView.toString()}
-        ${openShareOptionsModal.toString()}
-        ${dispatchShare.toString()}
-        ${openMobilePortraitModal.toString()}
-        ${openPaystackCheckoutModal.toString()}
+        // Safe fallback runner if generateEmbedUI logic needs to run standalone in the iframe
+        ${typeof generateEmbedUI === 'function' ? generateEmbedUI.toString() : ''}
+        ${typeof selectTrack === 'function' ? selectTrack.toString() : ''}
+        ${typeof triggerNextTrack === 'function' ? triggerNextTrack.toString() : ''}
+        ${typeof populateStep5EmbedBox === 'function' ? populateStep5EmbedBox.toString() : ''}
+        ${typeof setupPlaybackHandlers === 'function' ? setupPlaybackHandlers.toString() : ''}
+        ${typeof syncMobileCanvasView === 'function' ? syncMobileCanvasView.toString() : ''}
+        ${typeof openShareOptionsModal === 'function' ? openShareOptionsModal.toString() : ''}
+        ${typeof dispatchShare === 'function' ? dispatchShare.toString() : ''}
+        ${typeof openMobilePortraitModal === 'function' ? openMobilePortraitModal.toString() : ''}
+        ${typeof openPaystackCheckoutModal === 'function' ? openPaystackCheckoutModal.toString() : ''}
       `;
-      doc.head.appendChild(runtimeScript);
+      doc.head.appendChild(runtimeScript); // Appended to head/body cleanly
 
       const serializer = new XMLSerializer();
       const htmlContent = '<!DOCTYPE html>\n' + serializer.serializeToString(doc);
@@ -1808,6 +1810,7 @@
       const sanitizedName = (manifest.title || 'release').toLowerCase().replace(/[^a-z0-9]/g, '_') + '_master_dashboard.html';
       const fileId = await uploadFileToDrive(sanitizedName, textEncoder.encode(htmlContent), 'text/html');
       
+      // Store reference ID in manifest so Step 5 embed box can pull it instantly
       manifest.masterDashboardFileId = fileId;
       return fileId;
     }
