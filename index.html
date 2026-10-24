@@ -1972,44 +1972,55 @@
        lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
      }
 
-     // 🚀 Local Builder Preview Mode vs On-Demand Hosted Widget Mode
-     if (
-       typeof selectedUnifiedFiles !== "undefined" &&
-       selectedUnifiedFiles &&
-       selectedUnifiedFiles[idx]
-     ) {
-       // Local builder preview mode: use local File object with Video.js
-       if (window.videojs) {
-         try {
-           let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
-           if (!localPlayer) localPlayer = videojs('sovereign-local-player');
+     // 🚀 Standardized Video.js Player Engine (Keeps center panel intact)
+     if (window.videojs) {
+       try {
+         let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
+         if (!localPlayer) {
+           localPlayer = videojs('sovereign-local-player');
+         }
 
-           const mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
-           const sourceType = selectedUnifiedFiles[idx].type || 'audio/mp4';
+         let mediaSourceUrl = '';
+         let sourceType = 'audio/mp4';
 
-           if (localPlayer) {
-             if (playerPoster) localPlayer.poster(playerPoster);
+         if (
+           typeof selectedUnifiedFiles !== "undefined" &&
+           selectedUnifiedFiles &&
+           selectedUnifiedFiles[idx]
+         ) {
+           // Local builder preview mode: use local File object
+           mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
+           sourceType = selectedUnifiedFiles[idx].type || 'audio/mp4';
+         } else if (track.widgetFileId) {
+           // Hosted / Published mode: stream via the Apps Script endpoint URL
+           mediaSourceUrl = `${APPS_SCRIPT_URL}?fileId=${encodeURIComponent(track.widgetFileId)}`;
+           sourceType = 'text/html'; // or iframe container management if handling raw HTML widgets
+         }
+
+         if (localPlayer) {
+           if (playerPoster) {
+             localPlayer.poster(playerPoster);
+           }
+
+           if (mediaSourceUrl) {
              localPlayer.src({ src: mediaSourceUrl, type: sourceType });
              localPlayer.ready(() => {
                localPlayer.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
              });
-
-             localPlayer.off('ended');
-             localPlayer.on('ended', () => { triggerNextTrack(); });
+           } else {
+             localPlayer.reset();
+             if (playerPoster) localPlayer.poster(playerPoster);
            }
-         } catch (e) {
-           console.log("Playback error:", e);
+
+           // Ensure 'ended' event triggers queue advancement
+           localPlayer.off('ended');
+           localPlayer.on('ended', () => {
+             triggerNextTrack();
+           });
          }
+       } catch (e) {
+         console.log("Playback error:", e);
        }
-     } else if (track.widgetFileId) {
-       // 🎯 Hosted / Published Mode: Load track on demand via its individual standalone widget iframe container
-       const widgetUrl = `${APPS_SCRIPT_URL}?fileId=${encodeURIComponent(track.widgetFileId)}`;
-       
-       // Find the center panel player box and mount the isolated track widget iframe
-       const centerPanel = document.querySelector('#chaos-sovereign-dashboard > div:nth-child(3)') || document.body;
-       const playerBox = centerPanel.querySelector('.player-box') || centerPanel;
-       
-       playerBox.innerHTML = `<iframe src="${widgetUrl}" width="100%" height="100%" style="border:none; border-radius:6px; background:#000;" allow="autoplay"></iframe>`;
      }
 
      populateStep5EmbedBox(currentManifest);
