@@ -1744,7 +1744,12 @@
     
     async function uploadReleaseDashboardHtml(manifest) {
       logMessage(`📦 Generating master 3-column sovereign release dashboard HTML...`);
-
+      // Strip massive audio strings so the master dashboard HTML stays ~50KB
+      const dashboardManifest = JSON.parse(JSON.stringify(manifest));
+      dashboardManifest.tracks.forEach(track => {
+        delete track.playlistBase64; // Remove heavy Base64 payload from master file
+      });
+      
       const doc = document.implementation.createHTMLDocument(`${manifest.title} - Sovereign Release`);
       
       const metaCharset = doc.createElement('meta');
@@ -1966,59 +1971,44 @@
        lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
      }
 
-     // 🚀 Instant Local Object URL Playback (Zero Network Requests for Audio)
-     if (window.videojs) {
-       try {
-         let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
-         if (!localPlayer) {
-           localPlayer = videojs('sovereign-local-player');
-         }
+     // 🚀 Local Builder Preview Mode vs On-Demand Hosted Widget Mode
+     if (
+       typeof selectedUnifiedFiles !== "undefined" &&
+       selectedUnifiedFiles &&
+       selectedUnifiedFiles[idx]
+     ) {
+       // Local builder preview mode: use local File object with Video.js
+       if (window.videojs) {
+         try {
+           let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
+           if (!localPlayer) localPlayer = videojs('sovereign-local-player');
 
-         let mediaSourceUrl = '';
-         let sourceType = 'audio/mp4';
+           const mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
+           const sourceType = selectedUnifiedFiles[idx].type || 'audio/mp4';
 
-         if (
-           typeof selectedUnifiedFiles !== "undefined" &&
-           selectedUnifiedFiles &&
-           selectedUnifiedFiles[idx]
-         ) {
-           // Local builder preview mode: use local File object
-           mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
-           sourceType = selectedUnifiedFiles[idx].type || 'audio/mp4';
-         } else if (track.playlistBase64) {
-           // Dashboard / Hosted mode: decode embedded Base64 playlist into a local Blob URL
-           const binString = atob(track.playlistBase64);
-           const bytes = Uint8Array.from(binString, (m) => m.codePointAt(0));
-           const m3u8Text = new TextDecoder().decode(bytes);
-           const blob = new Blob([m3u8Text], { type: 'application/x-mpegURL' });
-           mediaSourceUrl = URL.createObjectURL(blob);
-           sourceType = 'application/x-mpegURL';
-         }
-
-         if (localPlayer) {
-           if (playerPoster) {
-             localPlayer.poster(playerPoster);
-           }
-
-           if (mediaSourceUrl) {
+           if (localPlayer) {
+             if (playerPoster) localPlayer.poster(playerPoster);
              localPlayer.src({ src: mediaSourceUrl, type: sourceType });
              localPlayer.ready(() => {
                localPlayer.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
              });
-           } else {
-             localPlayer.reset();
-             if (playerPoster) localPlayer.poster(playerPoster);
-           }
 
-           // Ensure 'ended' event triggers queue advancement
-           localPlayer.off('ended');
-           localPlayer.on('ended', () => {
-             triggerNextTrack();
-           });
+             localPlayer.off('ended');
+             localPlayer.on('ended', () => { triggerNextTrack(); });
+           }
+         } catch (e) {
+           console.log("Playback error:", e);
          }
-       } catch (e) {
-         console.log("Playback error:", e);
        }
+     } else if (track.widgetFileId) {
+       // 🎯 Hosted / Published Mode: Load track on demand via its individual standalone widget iframe container
+       const widgetUrl = `${APPS_SCRIPT_URL}?fileId=${encodeURIComponent(track.widgetFileId)}`;
+       
+       // Find the center panel player box and mount the isolated track widget iframe
+       const centerPanel = document.querySelector('#chaos-sovereign-dashboard > div:nth-child(3)') || document.body;
+       const playerBox = centerPanel.querySelector('.player-box') || centerPanel;
+       
+       playerBox.innerHTML = `<iframe src="${widgetUrl}" width="100%" height="100%" style="border:none; border-radius:6px; background:#000;" allow="autoplay"></iframe>`;
      }
 
      populateStep5EmbedBox(currentManifest);
