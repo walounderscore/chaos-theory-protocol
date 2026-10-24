@@ -1317,9 +1317,14 @@
           );
 
           logMessage(`☁️ Packaging and syncing Track ${trackNum} to Drive...`);
-          const htmlFileId = await packageSingleTrackWidget(i, outM3u8Name, trackTitle);
-
-          manifest.tracks[i].hlsStreamId = htmlFileId;
+          const packaged = await packageSingleTrackWidget(
+            i,
+            outM3u8Name,
+            trackTitle
+          );
+          
+          manifest.tracks[i].hlsStreamId = packaged.hlsStreamId;
+          manifest.tracks[i].widgetFileId = packaged.widgetFileId;
           manifest.tracks[i].status = "packaged";
 
           logMessage(`✅ Track ${trackNum} ("${trackTitle}") successfully processed and synced!`);
@@ -1520,10 +1525,25 @@
         "</body>\n" +
         "</html>";
 
-      const textEncoder = new TextEncoder();
-      const sanitizedName = trackTitle.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_widget.html';
-      const htmlFileId = await uploadFileToDrive(sanitizedName, textEncoder.encode(standaloneHtmlContent), 'text/html');
-      return htmlFileId;
+      // 1. Upload the actual HLS playlist for Video.js
+      const playlistFileId = await uploadFileToDrive(
+        playlistName,
+        new TextEncoder().encode(cloudM3u8Content),
+        "application/x-mpegURL"
+      );
+      
+      // 2. Upload the standalone HTML widget separately
+      const widgetFileId = await uploadFileToDrive(
+        sanitizedName,
+        textEncoder.encode(standaloneHtmlContent),
+        "text/html"
+      );
+      
+      // 3. Return both IDs
+      return {
+        hlsStreamId: playlistFileId,
+        widgetFileId: widgetFileId
+      };
     }
     
     // --- UNIFIED UI ENGINE (Single Source of Truth for Card 4 & Embeds) ---
@@ -1723,103 +1743,195 @@
     }
     
     async function uploadReleaseDashboardHtml(manifest) {
-      logMessage(`📦 Generating master 3-column sovereign release dashboard HTML...`);
-
-      const doc = document.implementation.createHTMLDocument(`${manifest.title} - Sovereign Release`);
-      
-      const metaCharset = doc.createElement('meta');
-      metaCharset.setAttribute('charset', 'UTF-8');
+      logMessage(`📦 Generating standalone sovereign release dashboard HTML...`);
+    
+      const doc = document.implementation.createHTMLDocument(
+        `${manifest.title} - Sovereign Release`
+      );
+    
+      const metaCharset = doc.createElement("meta");
+      metaCharset.setAttribute("charset", "UTF-8");
       doc.head.appendChild(metaCharset);
-
-      const metaViewport = doc.createElement('meta');
-      metaViewport.setAttribute('name', 'viewport');
-      metaViewport.setAttribute('content', 'width=device-width, initial-scale=1.0');
+    
+      const metaViewport = doc.createElement("meta");
+      metaViewport.setAttribute("name", "viewport");
+      metaViewport.setAttribute("content", "width=device-width, initial-scale=1.0");
       doc.head.appendChild(metaViewport);
-
-      const titleEl = doc.createElement('title');
+    
+      const titleEl = doc.createElement("title");
       titleEl.innerText = `${manifest.title} - Sovereign Release`;
       doc.head.appendChild(titleEl);
-
-      const vjsCss = doc.createElement('link');
-      vjsCss.setAttribute('href', 'https://vjs.zencdn.net/8.10.0/video-js.css');
-      vjsCss.setAttribute('rel', 'stylesheet');
+    
+      const vjsCss = doc.createElement("link");
+      vjsCss.setAttribute("href", "https://vjs.zencdn.net/8.10.0/video-js.css");
+      vjsCss.setAttribute("rel", "stylesheet");
       doc.head.appendChild(vjsCss);
-
-      const vjsScript = doc.createElement('script');
-      vjsScript.setAttribute('src', 'https://vjs.zencdn.net/8.10.0/video.min.js');
+    
+      const vjsScript = doc.createElement("script");
+      vjsScript.setAttribute("src", "https://vjs.zencdn.net/8.10.0/video.min.js");
       doc.head.appendChild(vjsScript);
-
-      const styleEl = doc.createElement('style');
-      styleEl.appendChild(doc.createTextNode(`
+    
+      const styleEl = doc.createElement("style");
+      styleEl.textContent = `
         * { box-sizing: border-box; }
-        body { font-family: system-ui, -apple-system, sans-serif; background: #0d1117; color: #c9d1d9; margin: 0; padding: 16px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-        #sovereign-player-card-target { width: 100%; max-width: 920px; }
-        button { cursor: pointer; }
-        .track-select-btn:hover { background: #30363d !important; }
-      `));
+        body { margin:0; padding:20px; background:#0d1117; color:#c9d1d9; font-family:system-ui,sans-serif; }
+        .dashboard { max-width:720px; margin:auto; background:#161b22; border:1px solid #30363d; border-radius:12px; padding:20px; }
+        .track-item { display:block; width:100%; text-align:left; margin-bottom:8px; padding:10px; border:1px solid #30363d; border-radius:6px; background:#21262d; color:#c9d1d9; cursor:pointer; }
+        .track-item.active { border-color:#58a6ff; background:#30363d; }
+      `;
       doc.head.appendChild(styleEl);
-
-      const targetDiv = doc.createElement('div');
-      targetDiv.id = 'sovereign-player-card-target';
-      doc.body.appendChild(targetDiv);
-
-      // Build script code using string concatenation (+) to prevent backtick collisions
-      let scriptCode = "(function() {\n";
-      scriptCode += "  const APPS_SCRIPT_URL = " + JSON.stringify(APPS_SCRIPT_URL) + ";\n";
-      scriptCode += "  const manifest = " + JSON.stringify(manifest) + ";\n";
-      scriptCode += "  let currentTrackIndex = 0;\n";
-      scriptCode += "  let isShuffleActive = false;\n";
-      scriptCode += "  let repeatMode = 'off';\n\n";
-      scriptCode += "  window.addEventListener('DOMContentLoaded', () => {\n";
-      scriptCode += "    if (typeof generateEmbedUI === 'function') {\n";
-      scriptCode += "      generateEmbedUI(manifest);\n";
-      scriptCode += "    }\n";
-      scriptCode += "  });\n\n";
-
-      // Gather functions safely with built-in fallbacks if undefined
-      const funcs = [
-        typeof generateEmbedUI === 'function' ? generateEmbedUI : null,
-        typeof selectTrack === 'function' ? selectTrack : null,
-        typeof triggerNextTrack === 'function' ? triggerNextTrack : null,
-        typeof populateStep5EmbedBox === 'function' ? populateStep5EmbedBox : function() { console.log('populateStep5EmbedBox stub active'); },
-        typeof setupPlaybackHandlers === 'function' ? setupPlaybackHandlers : null,
-        typeof syncMobileCanvasView === 'function' ? syncMobileCanvasView : null,
-        typeof openShareOptionsModal === 'function' ? openShareOptionsModal : null,
-        typeof dispatchShare === 'function' ? dispatchShare : null,
-        typeof openMobilePortraitModal === 'function' ? openMobilePortraitModal : null,
-        typeof openPaystackCheckoutModal === 'function' ? openPaystackCheckoutModal : null
-      ];
-
-      funcs.forEach(f => {
-        if (f) {
-          scriptCode += f.toString() + "\n\n";
-        }
-      });
-
-      scriptCode += "})();";
-
-      const runtimeScript = doc.createElement('script');
-      runtimeScript.appendChild(doc.createTextNode(scriptCode));
+    
+      const wrapper = doc.createElement("div");
+      wrapper.className = "dashboard";
+    
+      wrapper.innerHTML = `
+        <h1>${escapeHtml(manifest.title || "Untitled Release")}</h1>
+        <p>${escapeHtml(manifest.artist || "Unknown Artist")}</p>
+    
+        <video
+          id="sovereign-audio-player"
+          class="video-js vjs-default-skin vjs-big-play-centered"
+          controls
+          preload="auto"
+          style="width:100%; height:260px; background:#000;"
+        ></video>
+    
+        <div id="track-list" style="margin-top:16px;"></div>
+      `;
+    
+      doc.body.appendChild(wrapper);
+    
+      const safeManifest = JSON.stringify(manifest)
+        .replace(/</g, "\\u003c")
+        .replace(/>/g, "\\u003e")
+        .replace(/&/g, "\\u0026");
+    
+      const scriptCode = `
+        (function () {
+          const manifest = ${safeManifest};
+          let currentPlayer = null;
+    
+          function escapeHtml(text) {
+            const div = document.createElement("div");
+            div.textContent = text == null ? "" : String(text);
+            return div.innerHTML;
+          }
+    
+          function initPlayer() {
+            if (typeof videojs === "undefined") {
+              document.body.innerHTML =
+                '<pre style="color:red;padding:20px">Video.js failed to load.</pre>';
+              return;
+            }
+    
+            currentPlayer = videojs("sovereign-audio-player");
+    
+            const list = document.getElementById("track-list");
+            list.innerHTML = "";
+    
+            if (!manifest.tracks || manifest.tracks.length === 0) {
+              list.innerHTML = "<p>No tracks available.</p>";
+              return;
+            }
+    
+            manifest.tracks.forEach(function (track, index) {
+              const button = document.createElement("button");
+              button.className = "track-item";
+              button.innerHTML =
+                (index + 1) + ". " + escapeHtml(track.title || track.fileName);
+    
+              button.addEventListener("click", function () {
+                playTrack(index);
+              });
+    
+              list.appendChild(button);
+            });
+    
+            playTrack(0);
+          }
+    
+          function playTrack(index) {
+            const track = manifest.tracks[index];
+            if (!track || !track.hlsStreamId) {
+              console.warn("Missing hlsStreamId for track", index, track);
+              return;
+            }
+    
+            const buttons = document.querySelectorAll(".track-item");
+            buttons.forEach(function (button, i) {
+              button.classList.toggle("active", i === index);
+            });
+    
+            currentPlayer.src({
+              src: "${APPS_SCRIPT_URL}?fileId=" + encodeURIComponent(track.hlsStreamId),
+              type: "application/x-mpegURL"
+            });
+    
+            currentPlayer.ready(function () {
+              currentPlayer.play().catch(function (err) {
+                console.log("Autoplay blocked:", err);
+              });
+            });
+          }
+    
+          window.addEventListener("error", function (event) {
+            document.body.innerHTML =
+              '<pre style="color:red;padding:20px;white-space:pre-wrap">' +
+              (event.message || "Unknown error") + "</pre>";
+          });
+    
+          if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", initPlayer);
+          } else {
+            initPlayer();
+          }
+        })();
+      `;
+    
+      // Syntax validation pass before uploading to Drive
+      try {
+        new Function(scriptCode);
+      } catch (err) {
+        console.error("Generated dashboard script is invalid:", err);
+        logMessage("Dashboard script syntax error: " + err.message);
+        throw err;
+      }
+    
+      const runtimeScript = doc.createElement("script");
+      runtimeScript.textContent = scriptCode;
       doc.body.appendChild(runtimeScript);
-
-      // Use HTML outerHTML serialization instead of XMLSerializer to prevent entity escaping
+    
       const htmlContent = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
-
-      const sanitizedName = (manifest.title || 'release').toLowerCase().replace(/[^a-z0-9]/g, '_') + '_master_dashboard.html';
+    
+      const sanitizedName =
+        (manifest.title || "release")
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "_") + "_master_dashboard.html";
+    
       const textEncoder = new TextEncoder();
-      const fileId = await uploadFileToDrive(sanitizedName, textEncoder.encode(htmlContent), 'text/html');
-      
+      const fileId = await uploadFileToDrive(
+        sanitizedName,
+        textEncoder.encode(htmlContent),
+        "text/html"
+      );
+    
       manifest.masterDashboardFileId = fileId;
-
-      if (typeof populateStep5EmbedBox === 'function') {
+    
+      if (typeof populateStep5EmbedBox === "function") {
         try {
           populateStep5EmbedBox(manifest);
         } catch (err) {
-          console.warn('Non-fatal UI update note:', err);
+          console.warn("Non-fatal UI update note:", err);
         }
       }
-
+    
       return fileId;
+    }
+    
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text == null ? "" : String(text);
+      return div.innerHTML;
     }
 
     function populateStep5EmbedBox(manifest) {
