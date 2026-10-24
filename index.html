@@ -1802,8 +1802,8 @@
       runtimeScript.appendChild(doc.createTextNode(scriptCode));
       doc.body.appendChild(runtimeScript);
 
-      const serializer = new XMLSerializer();
-      const htmlContent = '<!DOCTYPE html>\n' + serializer.serializeToString(doc);
+      // Use HTML outerHTML serialization instead of XMLSerializer to prevent entity escaping
+      const htmlContent = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
 
       const sanitizedName = (manifest.title || 'release').toLowerCase().replace(/[^a-z0-9]/g, '_') + '_master_dashboard.html';
       const textEncoder = new TextEncoder();
@@ -1811,7 +1811,6 @@
       
       manifest.masterDashboardFileId = fileId;
 
-      // Safe invocation of populateStep5EmbedBox in parent scope if it exists
       if (typeof populateStep5EmbedBox === 'function') {
         try {
           populateStep5EmbedBox(manifest);
