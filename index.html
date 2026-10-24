@@ -1763,7 +1763,6 @@
       targetDiv.id = 'sovereign-player-card-target';
       doc.body.appendChild(targetDiv);
 
-      // Pass the manifest data cleanly into the runtime script environment using text nodes
       const runtimeScript = doc.createElement('script');
       const scriptCode = `
         const APPS_SCRIPT_URL = '${APPS_SCRIPT_URL}';
@@ -1797,9 +1796,9 @@
 
       const sanitizedName = (manifest.title || 'release').toLowerCase().replace(/[^a-z0-9]/g, '_') + '_master_dashboard.html';
       
-      // Use native Apps Script blob handling to bypass any engine-specific TextEncoder scoping errors
-      const blob = Utilities.newBlob(htmlContent, 'text/html', sanitizedName);
-      const fileId = await uploadFileToDrive(sanitizedName, blob.getBytes(), 'text/html');
+      // Use browser-native TextEncoder to convert string to bytes cleanly
+      const textEncoder = new TextEncoder();
+      const fileId = await uploadFileToDrive(sanitizedName, textEncoder.encode(htmlContent), 'text/html');
       
       manifest.masterDashboardFileId = fileId;
       return fileId;
