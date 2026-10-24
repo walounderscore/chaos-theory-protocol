@@ -1765,28 +1765,30 @@
 
       const runtimeScript = doc.createElement('script');
       const scriptCode = `
-        const APPS_SCRIPT_URL = '${APPS_SCRIPT_URL}';
-        const manifest = ${JSON.stringify(manifest)};
-        let currentTrackIndex = 0;
-        let isShuffleActive = false;
-        let repeatMode = 'off';
+        (function() {
+          const APPS_SCRIPT_URL = '${APPS_SCRIPT_URL}';
+          const manifest = ${JSON.stringify(manifest)};
+          let currentTrackIndex = 0;
+          let isShuffleActive = false;
+          let repeatMode = 'off';
 
-        window.addEventListener('DOMContentLoaded', () => {
-          if (typeof generateEmbedUI === 'function') {
-            generateEmbedUI(manifest);
-          }
-        });
+          window.addEventListener('DOMContentLoaded', () => {
+            if (typeof generateEmbedUI === 'function') {
+              generateEmbedUI(manifest);
+            }
+          });
 
-        ${typeof generateEmbedUI === 'function' ? generateEmbedUI.toString() : ''}
-        ${typeof selectTrack === 'function' ? selectTrack.toString() : ''}
-        ${typeof triggerNextTrack === 'function' ? triggerNextTrack.toString() : ''}
-        ${typeof populateStep5EmbedBox === 'function' ? populateStep5EmbedBox.toString() : ''}
-        ${typeof setupPlaybackHandlers === 'function' ? setupPlaybackHandlers.toString() : ''}
-        ${typeof syncMobileCanvasView === 'function' ? syncMobileCanvasView.toString() : ''}
-        ${typeof openShareOptionsModal === 'function' ? openShareOptionsModal.toString() : ''}
-        ${typeof dispatchShare === 'function' ? dispatchShare.toString() : ''}
-        ${typeof openMobilePortraitModal === 'function' ? openMobilePortraitModal.toString() : ''}
-        ${typeof openPaystackCheckoutModal === 'function' ? openPaystackCheckoutModal.toString() : ''}
+          ${typeof generateEmbedUI === 'function' ? generateEmbedUI.toString() : ''}
+          ${typeof selectTrack === 'function' ? selectTrack.toString() : ''}
+          ${typeof triggerNextTrack === 'function' ? triggerNextTrack.toString() : ''}
+          ${typeof populateStep5EmbedBox === 'function' ? populateStep5EmbedBox.toString() : ''}
+          ${typeof setupPlaybackHandlers === 'function' ? setupPlaybackHandlers.toString() : ''}
+          ${typeof syncMobileCanvasView === 'function' ? syncMobileCanvasView.toString() : ''}
+          ${typeof openShareOptionsModal === 'function' ? openShareOptionsModal.toString() : ''}
+          ${typeof dispatchShare === 'function' ? dispatchShare.toString() : ''}
+          ${typeof openMobilePortraitModal === 'function' ? openMobilePortraitModal.toString() : ''}
+          ${typeof openPaystackCheckoutModal === 'function' ? openPaystackCheckoutModal.toString() : ''}
+        })();
       `;
       runtimeScript.appendChild(doc.createTextNode(scriptCode));
       doc.body.appendChild(runtimeScript);
@@ -1795,8 +1797,6 @@
       const htmlContent = '<!DOCTYPE html>\n' + serializer.serializeToString(doc);
 
       const sanitizedName = (manifest.title || 'release').toLowerCase().replace(/[^a-z0-9]/g, '_') + '_master_dashboard.html';
-      
-      // Use browser-native TextEncoder to convert string to bytes cleanly
       const textEncoder = new TextEncoder();
       const fileId = await uploadFileToDrive(sanitizedName, textEncoder.encode(htmlContent), 'text/html');
       
