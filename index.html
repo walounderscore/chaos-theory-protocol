@@ -1725,16 +1725,6 @@
     async function uploadReleaseDashboardHtml(manifest) {
       logMessage(`📦 Generating master 3-column sovereign release dashboard HTML...`);
 
-      // 1. Strip heavy base64 strings so file size stays tiny (~5KB) instead of 28MB
-      const lightManifest = JSON.parse(JSON.stringify(manifest));
-      lightManifest.coverArtData = null;
-      lightManifest.artistImgData = null;
-      if (lightManifest.tracks) {
-        lightManifest.tracks.forEach(t => {
-          t.thumbData = null;
-        });
-      }
-
       const doc = document.implementation.createHTMLDocument(`${manifest.title} - Sovereign Release`);
       
       const metaCharset = doc.createElement('meta');
@@ -1760,24 +1750,24 @@
       doc.head.appendChild(vjsScript);
 
       const styleEl = doc.createElement('style');
-      styleEl.innerText = `
+      styleEl.appendChild(doc.createTextNode(`
         * { box-sizing: border-box; }
         body { font-family: system-ui, -apple-system, sans-serif; background: #0d1117; color: #c9d1d9; margin: 0; padding: 16px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
         #sovereign-player-card-target { width: 100%; max-width: 920px; }
         button { cursor: pointer; }
         .track-select-btn:hover { background: #30363d !important; }
-      `;
+      `));
       doc.head.appendChild(styleEl);
 
       const targetDiv = doc.createElement('div');
       targetDiv.id = 'sovereign-player-card-target';
       doc.body.appendChild(targetDiv);
 
-      // 2. Pass the lightweight manifest and clean inline function declarations
+      // Pass the manifest data cleanly into the runtime script environment using text nodes
       const runtimeScript = doc.createElement('script');
-      runtimeScript.innerText = `
+      const scriptCode = `
         const APPS_SCRIPT_URL = '${APPS_SCRIPT_URL}';
-        const manifest = ${JSON.stringify(lightManifest)};
+        const manifest = ${JSON.stringify(manifest)};
         let currentTrackIndex = 0;
         let isShuffleActive = false;
         let repeatMode = 'off';
@@ -1788,26 +1778,28 @@
           }
         });
 
-        // Embed the actual source functions explicitly without .toString() parsing bugs
-        ${generateEmbedUI.toString()}
-        ${selectTrack.toString()}
-        ${triggerNextTrack.toString()}
-        ${populateStep5EmbedBox.toString()}
-        ${setupPlaybackHandlers.toString()}
-        ${syncMobileCanvasView.toString()}
-        ${openShareOptionsModal.toString()}
-        ${dispatchShare.toString()}
-        ${openMobilePortraitModal.toString()}
-        ${openPaystackCheckoutModal.toString()}
+        ${typeof generateEmbedUI === 'function' ? generateEmbedUI.toString() : ''}
+        ${typeof selectTrack === 'function' ? selectTrack.toString() : ''}
+        ${typeof triggerNextTrack === 'function' ? triggerNextTrack.toString() : ''}
+        ${typeof populateStep5EmbedBox === 'function' ? populateStep5EmbedBox.toString() : ''}
+        ${typeof setupPlaybackHandlers === 'function' ? setupPlaybackHandlers.toString() : ''}
+        ${typeof syncMobileCanvasView === 'function' ? syncMobileCanvasView.toString() : ''}
+        ${typeof openShareOptionsModal === 'function' ? openShareOptionsModal.toString() : ''}
+        ${typeof dispatchShare === 'function' ? dispatchShare.toString() : ''}
+        ${typeof openMobilePortraitModal === 'function' ? openMobilePortraitModal.toString() : ''}
+        ${typeof openPaystackCheckoutModal === 'function' ? openPaystackCheckoutModal.toString() : ''}
       `;
+      runtimeScript.appendChild(doc.createTextNode(scriptCode));
       doc.body.appendChild(runtimeScript);
 
       const serializer = new XMLSerializer();
       const htmlContent = '<!DOCTYPE html>\n' + serializer.serializeToString(doc);
 
-      const textEncoder = new TextEncoder();
       const sanitizedName = (manifest.title || 'release').toLowerCase().replace(/[^a-z0-9]/g, '_') + '_master_dashboard.html';
-      const fileId = await uploadFileToDrive(sanitizedName, textEncoder.encode(htmlContent), 'text/html');
+      
+      // Use native Apps Script blob handling to bypass any engine-specific TextEncoder scoping errors
+      const blob = Utilities.newBlob(htmlContent, 'text/html', sanitizedName);
+      const fileId = await uploadFileToDrive(sanitizedName, blob.getBytes(), 'text/html');
       
       manifest.masterDashboardFileId = fileId;
       return fileId;
