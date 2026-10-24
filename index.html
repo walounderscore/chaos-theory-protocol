@@ -2141,14 +2141,24 @@
             <h2 id="mobile-canvas-title" style="margin: 0; font-size: 20px; color: #f0f6fc;">${activeTrack?.title || 'Select Track'}</h2>
             <p style="margin: 6px 0 0; font-size: 14px; color: #8b949e;">${manifest.artist}</p>
           </div>
+
+          <!-- Playback Timeline Progress Bar -->
+          <div style="width: 100%; max-width: 320px; display: flex; flex-direction: column; gap: 6px;">
+            <input type="range" id="mobile-seek-bar" value="0" min="0" max="100" style="width: 100%; cursor: pointer;">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #8b949e;">
+              <span id="mobile-current-time">0:00</span>
+              <span id="mobile-duration">0:00</span>
+            </div>
+          </div>
         </div>
 
         <div style="display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 400px; margin: 0 auto;">
           <div style="display: flex; justify-content: space-around; align-items: center;">
-            <button onclick="document.getElementById('btn-shuffle').click()" style="background: transparent; border: none; font-size: 20px; color: #8b949e; cursor: pointer;" title="Shuffle">🔀</button>
+            <button id="mobile-shuffle-btn" style="background: transparent; border: none; font-size: 20px; color: ${isShuffleActive ? '#58a6ff' : '#8b949e'}; cursor: pointer;" title="Shuffle">🔀</button>
             <button onclick="document.getElementById('btn-prev-track').click()" style="background: transparent; border: none; font-size: 26px; color: #f0f6fc; cursor: pointer;" title="Previous">⏮️</button>
+            <button id="mobile-play-pause-btn" style="background: #238636; color: #fff; border: none; width: 52px; height: 52px; border-radius: 50%; font-size: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer;" title="Play/Pause">⏸️</button>
             <button onclick="document.getElementById('btn-next-track').click()" style="background: transparent; border: none; font-size: 26px; color: #f0f6fc; cursor: pointer;" title="Next">⏭️</button>
-            <button onclick="document.getElementById('btn-repeat').click()" style="background: transparent; border: none; font-size: 20px; color: #8b949e; cursor: pointer;" title="Repeat">🔁</button>
+            <button id="mobile-repeat-btn" style="background: transparent; border: none; font-size: 20px; color: ${repeatMode !== 'off' ? '#58a6ff' : '#8b949e'}; cursor: pointer;" title="Repeat">🔁</button>
           </div>
           <p style="text-align: center; font-size: 11px; color: #8b949e; margin: 0;">© ${manifest.artist}. All rights reserved.</p>
         </div>
@@ -2162,42 +2172,34 @@
         openPaystackCheckoutModal(manifest);
       };
 
-      // --- Repeat Logic & Desktop Synchronization ---
+      // --- Repeat & Shuffle Sync bindings ---
       const mobileRepeatBtn = document.getElementById('mobile-repeat-btn');
-      
-      function updateMobileRepeatUI() {
-        if (!mobileRepeatBtn) return;
-        if (repeatMode === 'off') {
-          mobileRepeatBtn.innerText = '🔁';
-          mobileRepeatBtn.style.opacity = '0.5';
-          mobileRepeatBtn.title = 'Repeat: Off';
-        } else if (repeatMode === 'all') {
-          mobileRepeatBtn.innerText = '🔁';
-          mobileRepeatBtn.style.opacity = '1.0';
-          mobileRepeatBtn.title = 'Repeat: All Tracks';
-        } else if (repeatMode === 'one') {
-          mobileRepeatBtn.innerText = '🔂';
-          mobileRepeatBtn.style.opacity = '1.0';
-          mobileRepeatBtn.title = 'Repeat: Single Track';
-        }
-      }
+      const mobileShuffleBtn = document.getElementById('mobile-shuffle-btn');
 
-      updateMobileRepeatUI();
-
-      if (mobileRepeatBtn) {
-        mobileRepeatBtn.onclick = () => {
-          if (repeatMode === 'off') repeatMode = 'all';
-          else if (repeatMode === 'all') repeatMode = 'one';
-          else repeatMode = 'off';
-
-          const desktopRepeatBtn = document.getElementById('btn-repeat');
-          if (desktopRepeatBtn) desktopRepeatBtn.click();
-          
-          updateMobileRepeatUI();
+      if (mobileShuffleBtn) {
+        mobileShuffleBtn.onclick = () => {
+          const desktopShuffleBtn = document.getElementById('btn-shuffle');
+          if (desktopShuffleBtn) desktopShuffleBtn.click();
+          mobileShuffleBtn.style.color = isShuffleActive ? '#58a6ff' : '#8b949e';
         };
       }
 
-      // --- Live Player Binding & Time Utilities ---
+      if (mobileRepeatBtn) {
+        mobileRepeatBtn.onclick = () => {
+          const desktopRepeatBtn = document.getElementById('btn-repeat');
+          if (desktopRepeatBtn) desktopRepeatBtn.click();
+          
+          if (repeatMode === 'off') {
+            mobileRepeatBtn.style.color = '#8b949e';
+            mobileRepeatBtn.title = 'Repeat: Off';
+          } else {
+            mobileRepeatBtn.style.color = '#58a6ff';
+            mobileRepeatBtn.title = repeatMode === 'one' ? 'Repeat: One' : 'Repeat: All';
+          }
+        };
+      }
+
+      // --- Live Video.js Player Binding & Time Utilities ---
       function formatTime(seconds) {
         if (isNaN(seconds)) return "0:00";
         const mins = Math.floor(seconds / 60);
