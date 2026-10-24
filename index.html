@@ -1323,7 +1323,7 @@
             trackTitle
           );
           
-          manifest.tracks[i].hlsStreamId = packaged.hlsStreamId;
+          manifest.tracks[i].playlistBase64 = packaged.playlistBase64;
           manifest.tracks[i].widgetFileId = packaged.widgetFileId;
           manifest.tracks[i].status = "packaged";
 
@@ -1541,7 +1541,7 @@
       
       // 3. Return both IDs
       return {
-        hlsStreamId: playlistFileId,
+        playlistBase64: playlistBase64,
         widgetFileId: widgetFileId
       };
     }
@@ -1966,7 +1966,7 @@
        lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
      }
 
-     // 🚀 Instant Local Object URL Playback & Dynamic Poster Sync
+     // 🚀 Instant Local Object URL Playback (Zero Network Requests for Audio)
      if (window.videojs) {
        try {
          let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
@@ -1978,21 +1978,24 @@
          let sourceType = 'audio/mp4';
 
          if (
-          typeof selectedUnifiedFiles !== "undefined" &&
-          selectedUnifiedFiles &&
-          selectedUnifiedFiles[idx]
-        ) {
-          // Local builder mode: use local File object
-          mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
-          sourceType = selectedUnifiedFiles[idx].type || 'audio/mp4';
-        } else if (track.hlsStreamId) {
-          // Drive-hosted dashboard mode: fallback to Apps Script .m3u8 endpoint
-          mediaSourceUrl = `${APPS_SCRIPT_URL}?fileId=${encodeURIComponent(track.hlsStreamId)}`;
-          sourceType = 'application/x-mpegURL';
-        }
+           typeof selectedUnifiedFiles !== "undefined" &&
+           selectedUnifiedFiles &&
+           selectedUnifiedFiles[idx]
+         ) {
+           // Local builder preview mode: use local File object
+           mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
+           sourceType = selectedUnifiedFiles[idx].type || 'audio/mp4';
+         } else if (track.playlistBase64) {
+           // Dashboard / Hosted mode: decode embedded Base64 playlist into a local Blob URL
+           const binString = atob(track.playlistBase64);
+           const bytes = Uint8Array.from(binString, (m) => m.codePointAt(0));
+           const m3u8Text = new TextDecoder().decode(bytes);
+           const blob = new Blob([m3u8Text], { type: 'application/x-mpegURL' });
+           mediaSourceUrl = URL.createObjectURL(blob);
+           sourceType = 'application/x-mpegURL';
+         }
 
          if (localPlayer) {
-           // 🛠️ CRITICAL FIX: Explicitly update Video.js poster for the active track
            if (playerPoster) {
              localPlayer.poster(playerPoster);
            }
@@ -2005,10 +2008,6 @@
            } else {
              localPlayer.reset();
              if (playerPoster) localPlayer.poster(playerPoster);
-             const errorDisplay = localPlayer.errorDisplay;
-             if (errorDisplay) {
-               errorDisplay.fill('Load your tracklist to listen here.');
-             }
            }
 
            // Ensure 'ended' event triggers queue advancement
