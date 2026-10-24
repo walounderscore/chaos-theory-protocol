@@ -1458,6 +1458,11 @@
       const trackData = manifest.tracks[trackIndex] || manifest.tracks[0];
       const trackPoster = trackData?.thumbData || manifest.coverArtData || manifest.artistImgData || '';
 
+      // 🛠️ Define sanitizedName here so it's fully in scope
+      const sanitizedName = (trackTitle || 'track')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '_') + '_widget.html';
+
       const standaloneHtmlContent = 
         "<!DOCTYPE html>\n" +
         "<html lang=\"en\">\n" +
@@ -1525,12 +1530,7 @@
         "</body>\n" +
         "</html>";
 
-      // 1. Upload the actual HLS playlist for Video.js
-      const playlistFileId = await uploadFileToDrive(
-        playlistName,
-        new TextEncoder().encode(cloudM3u8Content),
-        "application/x-mpegURL"
-      );
+      const textEncoder = new TextEncoder();
       
       // 2. Upload the standalone HTML widget separately
       const widgetFileId = await uploadFileToDrive(
