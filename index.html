@@ -1681,27 +1681,28 @@
       wrapper.appendChild(leftPanel);
 
       // --- 3. CENTER PANEL: Stream Player ---
+      // --- 3. CENTER PANEL: Stream Player ---
       const centerPanel = document.createElement('div');
-      centerPanel.style.cssText = `display: flex; flex-direction: column; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; gap: 14px; position: relative; height: 100%; min-height: 380px; box-sizing: border-box;`;
+      centerPanel.style.cssText = `display: flex; flex-direction: column; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; gap: 14px; position: relative; height: 100%; min-height: 380px; box-sizing: border-box; overflow: hidden; min-width: 0;`;
       
       const activeTrack = manifest.tracks[0];
       const nowPlayingTitle = document.createElement('div');
-      nowPlayingTitle.style.cssText = `display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #30363d; padding-bottom: 12px; flex-shrink: 0;`;
+      nowPlayingTitle.style.cssText = `display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #30363d; padding-bottom: 12px; flex-shrink: 0; width: 100%; box-sizing: border-box;`;
       nowPlayingTitle.innerHTML = `
-        <div>
-          <h1 id="active-track-title" style="margin: 0; font-size: 16px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px; line-height: 1.2;">${activeTrack?.title || 'Select Track'}</h1>
-          <p id="active-track-artist" style="margin: 4px 0 0 0; font-size: 14px; color: #8b949e; font-weight: 400;">${manifest.artist || 'walo, the underscore.'}</p>
+        <div style="min-width: 0; overflow: hidden;">
+          <h1 id="active-track-title" style="margin: 0; font-size: 16px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${activeTrack?.title || 'Select Track'}</h1>
+          <p id="active-track-artist" style="margin: 4px 0 0 0; font-size: 14px; color: #8b949e; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${manifest.artist || 'walo, the underscore.'}</p>
         </div>
-        <span id="active-track-num" style="font-size: 13px; color: #58a6ff; font-weight: 700; background: #0d1117; padding: 4px 8px; border-radius: 4px; border: 1px solid #21262d;">${manifest.tracks.length > 0 ? '1 / ' + manifest.tracks.length : '0 / 0'}</span>
+        <span id="active-track-num" style="font-size: 13px; color: #58a6ff; font-weight: 700; background: #0d1117; padding: 4px 8px; border-radius: 4px; border: 1px solid #21262d; flex-shrink: 0;">${manifest.tracks.length > 0 ? '1 / ' + manifest.tracks.length : '0 / 0'}</span>
       `;
-      centerPanel.appendChild(nowPlayingTitle);
+      centerPanel.ampionship = nowPlayingTitle;
 
       const videoEl = document.createElement('video');
       videoEl.id = 'sovereign-local-player';
       videoEl.className = 'video-js vjs-default-skin vjs-big-play-centered';
       videoEl.controls = true;
       videoEl.preload = 'auto';
-      videoEl.style.cssText = 'width: 100%; height: 230px; border-radius: 6px; background: #000; flex-grow: 1;';
+      videoEl.style.cssText = 'width: 100%; height: 230px; border-radius: 6px; background: #000; flex-grow: 1; box-sizing: border-box;';
       const initialPlayerPoster = manifest.coverArtData || manifest.artistImgData || '';
       if (initialPlayerPoster) videoEl.poster = initialPlayerPoster;
       centerPanel.appendChild(videoEl);
