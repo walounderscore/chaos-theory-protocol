@@ -1681,39 +1681,41 @@
       wrapper.appendChild(leftPanel);
 
       // --- 3. CENTER PANEL: Stream Player ---
-      // --- 3. CENTER PANEL: Stream Player ---
       const centerPanel = document.createElement('div');
-      centerPanel.style.cssText = `display: flex; flex-direction: column; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; gap: 14px; position: relative; height: 100%; min-height: 380px; box-sizing: border-box; overflow: hidden; min-width: 0;`;
+      centerPanel.style.cssText = `display: flex; flex-direction: column; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; gap: 12px; position: relative; height: 100%; min-height: 380px; box-sizing: border-box; overflow: hidden; min-width: 0;`;
       
       const activeTrack = manifest.tracks[0];
+      
+      // 🌟 RESTORED: Track Title and Artist Header
       const nowPlayingTitle = document.createElement('div');
-      nowPlayingTitle.style.cssText = `display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #30363d; padding-bottom: 12px; flex-shrink: 0; width: 100%; box-sizing: border-box;`;
+      nowPlayingTitle.style.cssText = `display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #30363d; padding-bottom: 10px; flex-shrink: 0; width: 100%; box-sizing: border-box;`;
       nowPlayingTitle.innerHTML = `
         <div style="min-width: 0; overflow: hidden;">
-          <h1 id="active-track-title" style="margin: 0; font-size: 16px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${activeTrack?.title || 'Select Track'}</h1>
-          <p id="active-track-artist" style="margin: 4px 0 0 0; font-size: 14px; color: #8b949e; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${manifest.artist || 'walo, the underscore.'}</p>
+          <h1 id="active-track-title" style="margin: 0; font-size: 15px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${activeTrack?.title || 'Select Track'}</h1>
+          <p id="active-track-artist" style="margin: 3px 0 0 0; font-size: 13px; color: #8b949e; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${manifest.artist || 'walo, the underscore.'}</p>
         </div>
-        <span id="active-track-num" style="font-size: 13px; color: #58a6ff; font-weight: 700; background: #0d1117; padding: 4px 8px; border-radius: 4px; border: 1px solid #21262d; flex-shrink: 0;">${manifest.tracks.length > 0 ? '1 / ' + manifest.tracks.length : '0 / 0'}</span>
+        <span id="active-track-num" style="font-size: 12px; color: #58a6ff; font-weight: 700; background: #0d1117; padding: 3px 6px; border-radius: 4px; border: 1px solid #21262d; flex-shrink: 0;">${manifest.tracks.length > 0 ? '1 / ' + manifest.tracks.length : '0 / 0'}</span>
       `;
-      centerPanel.ampionship = nowPlayingTitle;
+      centerPanel.appendChild(nowPlayingTitle);
 
       const videoEl = document.createElement('video');
       videoEl.id = 'sovereign-local-player';
       videoEl.className = 'video-js vjs-default-skin vjs-big-play-centered';
       videoEl.controls = true;
       videoEl.preload = 'auto';
-      videoEl.style.cssText = 'width: 100%; height: 230px; border-radius: 6px; background: #000; flex-grow: 1; box-sizing: border-box;';
+      videoEl.style.cssText = 'width: 100%; height: 215px; border-radius: 6px; background: #000; flex-grow: 1; box-sizing: border-box; display: block;';
       const initialPlayerPoster = manifest.coverArtData || manifest.artistImgData || '';
       if (initialPlayerPoster) videoEl.poster = initialPlayerPoster;
       centerPanel.appendChild(videoEl);
 
+      // 🌟 PERFECTLY CENTRALIZED & FLUSH CONTROL BAR
       const controlBar = document.createElement('div');
-      controlBar.style.cssText = `display: flex; justify-content: space-around; align-items: center; background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #21262d; flex-shrink: 0; width: 100%; box-sizing: border-box;`;
+      controlBar.style.cssText = `display: flex; justify-content: space-around; align-items: center; background: #0d1117; padding: 8px 12px; border-radius: 6px; border: 1px solid #21262d; flex-shrink: 0; width: 100%; box-sizing: border-box; margin: 0;`;
       controlBar.innerHTML = `
-        <button id="btn-shuffle" style="background: transparent; color: #8b949e; border: none; font-size: 18px; cursor: pointer;" title="Shuffle Off">🔀</button>
-        <button id="btn-prev-track" style="background: transparent; color: #c9d1d9; border: none; font-size: 20px; cursor: pointer;" title="Previous Track">⏮️</button>
-        <button id="btn-next-track" style="background: transparent; color: #c9d1d9; border: none; font-size: 20px; cursor: pointer;" title="Next Track">⏭️</button>
-        <button id="btn-repeat" style="background: transparent; color: #8b949e; border: none; font-size: 18px; cursor: pointer;" title="Repeat Off">🔁</button>
+        <button id="btn-shuffle" style="background: transparent; color: #8b949e; border: none; font-size: 16px; cursor: pointer; padding: 4px;" title="Shuffle Off">🔀</button>
+        <button id="btn-prev-track" style="background: transparent; color: #c9d1d9; border: none; font-size: 18px; cursor: pointer; padding: 4px;" title="Previous Track">⏮️</button>
+        <button id="btn-next-track" style="background: transparent; color: #c9d1d9; border: none; font-size: 18px; cursor: pointer; padding: 4px;" title="Next Track">⏭️</button>
+        <button id="btn-repeat" style="background: transparent; color: #8b949e; border: none; font-size: 16px; cursor: pointer; padding: 4px;" title="Repeat Off">🔁</button>
       `;
       centerPanel.appendChild(controlBar);
       wrapper.appendChild(centerPanel);
