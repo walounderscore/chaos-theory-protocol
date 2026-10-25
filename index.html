@@ -1577,8 +1577,8 @@
 
       currentManifest = manifest;
 
-      // Ensure resting state uses Artist Portrait first, falling back to Album Cover or Track Thumb
-      const initialArt = manifest.artistImgData || manifest.coverArtData || manifest.tracks[0]?.thumbData || '';
+      // 👤 Artist Portrait strictly first, falling back to Album Cover (NO track thumbs here)
+      const creditsDefaultImage = manifest.artistImgData || manifest.coverArtData || '';
       
       let embedContainer = document.getElementById('sovereign-player-card-target');
       if (!embedContainer) {
@@ -1590,7 +1590,7 @@
       wrapper.id = 'chaos-sovereign-dashboard';
       wrapper.style.cssText = `
         color: #c9d1d9; font-family: system-ui, -apple-system, sans-serif; display: grid; gap: 16px;
-        grid-template-columns: 260px 1fr 300px; grid-template-rows: auto 1fr auto;
+        grid-template-columns: 260px 1fr 300px; grid-template-rows: auto 1fr auto; align-items: stretch;
         width: 100%; margin: 10px 0 0 0; position: relative;
         transition: grid-template-columns 0.3s ease; box-sizing: border-box;
       `;
@@ -1599,6 +1599,19 @@
         const leftCollapsed = document.getElementById('left-panel-content')?.style.display === 'none';
         const rightCollapsed = document.getElementById('right-panel-content')?.style.display === 'none';
         wrapper.style.gridTemplateColumns = `${leftCollapsed ? '42px' : '260px'} 1fr ${rightCollapsed ? '42px' : '300px'}`;
+      }
+
+      // Inject global dark scrollbar style rule dynamically for clean UI matching
+      if (!document.getElementById('chaos-custom-scrollbars-style')) {
+        const scrollbarStyle = document.createElement('style');
+        scrollbarStyle.id = 'chaos-custom-scrollbars-style';
+        scrollbarStyle.innerHTML = `
+          #chaos-sovereign-dashboard *::-webkit-scrollbar { width: 6px !important; height: 6px !important; }
+          #chaos-sovereign-dashboard *::-webkit-scrollbar-track { background: #0d1117 !important; border-radius: 3px !important; }
+          #chaos-sovereign-dashboard *::-webkit-scrollbar-thumb { background: #30363d !important; border-radius: 3px !important; }
+          #chaos-sovereign-dashboard *::-webkit-scrollbar-thumb:hover { background: #484f58 !important; }
+        `;
+        document.head.appendChild(scrollbarStyle);
       }
 
       // --- 1. HEADER ---
@@ -1619,15 +1632,13 @@
 
       // --- 2. LEFT PANEL: Credits ---
       const leftPanel = document.createElement('div');
-      // Using max-height instead of fixed height so it hugs its content neatly without dead space
-      leftPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; max-height: 380px; box-sizing: border-box; min-width: 0;`;
+      leftPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; height: 100%; min-height: 380px; box-sizing: border-box; min-width: 0;`;
       
       const leftHeader = document.createElement('div');
       leftHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 6px; cursor: pointer; flex-shrink: 0;`;
       leftHeader.innerHTML = `<h3 id="left-header-text" style="margin: 0; font-size: 13px; color: #f0f6fc;">📜 Credits</h3><span id="left-collapse-icon" style="color: #58a6ff; font-weight: bold;">◀</span>`;
       leftPanel.appendChild(leftHeader);
 
-      // Define releaseDate and coverArtName safely *before* using them in template strings
       const releaseDate = manifest.date || '2026';
       const coverArtName = manifest.coverArtist || manifest.artist;
       const initialContributors = manifest.tracks[0]?.contributors || manifest.contributors || [];
@@ -1638,10 +1649,10 @@
       const leftContent = document.createElement('div');
       leftContent.id = 'left-panel-content';
       leftContent.style.cssText = `display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex-grow: 1; padding-right: 4px; min-width: 0; box-sizing: border-box;`;
-
-      const coverImgHtml = initialArt 
-        ? `<img id="metadata-cover-art" src="${initialArt}" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 1px solid #30363d; flex-shrink: 0;" alt="Cover Art" />`
-        : `<div id="metadata-cover-art" style="width: 100%; aspect-ratio: 1; background: #21262d; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #8b949e; flex-shrink: 0;">No Cover Art</div>`;
+      
+      const coverImgHtml = creditsDefaultImage 
+        ? `<img id="metadata-cover-art" src="${creditsDefaultImage}" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 1px solid #30363d; flex-shrink: 0;" alt="Artist Portrait" />`
+        : `<div id="metadata-cover-art" style="width: 100%; aspect-ratio: 1; background: #21262d; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #8b949e; flex-shrink: 0;">No Artist Image</div>`;
 
       leftContent.innerHTML = `
         ${coverImgHtml}
@@ -1667,13 +1678,13 @@
       };
       wrapper.appendChild(leftPanel);
 
-      // --- 3. CENTER PANEL: Stream Player (Fixed Autoplay & Resting State Poster) ---
+      // --- 3. CENTER PANEL: Stream Player ---
       const centerPanel = document.createElement('div');
-      centerPanel.style.cssText = `display: flex; flex-direction: column; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; gap: 14px; position: relative;`;
+      centerPanel.style.cssText = `display: flex; flex-direction: column; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; gap: 14px; position: relative; height: 100%; min-height: 380px; box-sizing: border-box;`;
       
       const activeTrack = manifest.tracks[0];
       const nowPlayingTitle = document.createElement('div');
-      nowPlayingTitle.style.cssText = `display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #30363d; padding-bottom: 12px;`;
+      nowPlayingTitle.style.cssText = `display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #30363d; padding-bottom: 12px; flex-shrink: 0;`;
       nowPlayingTitle.innerHTML = `
         <div>
           <h1 id="active-track-title" style="margin: 0; font-size: 16px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px; line-height: 1.2;">${activeTrack?.title || 'Select Track'}</h1>
@@ -1688,12 +1699,13 @@
       videoEl.className = 'video-js vjs-default-skin vjs-big-play-centered';
       videoEl.controls = true;
       videoEl.preload = 'auto';
-      videoEl.style.cssText = 'width: 100%; height: 230px; border-radius: 6px; background: #000;';
-      if (initialArt) videoEl.poster = initialArt; // Proper resting state poster assignment
+      videoEl.style.cssText = 'width: 100%; height: 230px; border-radius: 6px; background: #000; flex-grow: 1;';
+      const initialPlayerPoster = manifest.coverArtData || manifest.artistImgData || '';
+      if (initialPlayerPoster) videoEl.poster = initialPlayerPoster;
       centerPanel.appendChild(videoEl);
 
       const controlBar = document.createElement('div');
-      controlBar.style.cssText = `display: flex; justify-content: space-around; align-items: center; background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #21262d;`;
+      controlBar.style.cssText = `display: flex; justify-content: space-around; align-items: center; background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #21262d; flex-shrink: 0;`;
       controlBar.innerHTML = `
         <button id="btn-shuffle" style="background: transparent; color: #8b949e; border: none; font-size: 18px; cursor: pointer;" title="Shuffle Off">🔀</button>
         <button id="btn-prev-track" style="background: transparent; color: #c9d1d9; border: none; font-size: 20px; cursor: pointer;" title="Previous Track">⏮️</button>
@@ -1705,7 +1717,7 @@
 
       // --- 4. RIGHT PANEL: Queue ---
       const rightPanel = document.createElement('div');
-      rightPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; overflow: hidden; max-height: 380px; box-sizing: border-box;`;
+      rightPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; overflow: hidden; height: 100%; min-height: 380px; box-sizing: border-box;`;
       
       const rightHeader = document.createElement('div');
       rightHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 6px; margin-bottom: 8px; cursor: pointer; flex-shrink: 0;`;
@@ -1993,9 +2005,9 @@
      if (activeArtist) activeArtist.innerText = currentManifest.artist || 'walo, the underscore.';
      if (activeNum) activeNum.innerText = `${idx + 1} / ${currentManifest.tracks.length}`;
 
-     // 🖼️ Dynamic track-specific cover art fallback chain
-     const trackCoverArt = track.thumbData || currentManifest.coverArtData || currentManifest.artistImgData || '';
-     if (metaImg) metaImg.src = trackCoverArt;
+     // 👤 Credits Panel image strictly uses Artist Portrait (fallback to Album Cover)
+     const creditsPanelArt = currentManifest.artistImgData || currentManifest.coverArtData || '';
+     if (metaImg) metaImg.src = creditsPanelArt;
 
      if (lyricsBox) {
        lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
@@ -2022,22 +2034,18 @@
        `;
      }
 
-     // --- ROBUST LOCAL PLAYER SOURCE MANAGEMENT & COVER ART ---
+     // --- ROBUST LOCAL PLAYER SOURCE MANAGEMENT & PLAYER POSTER ---
      if (window.videojs) {
        let player = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
        if (player) {
-         // Update Video.js poster art dynamically per track
-         if (trackCoverArt) {
-           player.poster(trackCoverArt);
-         }
+         // 🎵 Video.js player uses Track Cover Art / Album Cover as its poster
+         const trackPoster = track.thumbData || currentManifest.coverArtData || currentManifest.artistImgData || '';
+         if (trackPoster) player.poster(trackPoster);
 
-         // 1. Priority: Local raw files from file picker
          if (typeof selectedUnifiedFiles !== "undefined" && selectedUnifiedFiles && selectedUnifiedFiles[idx]) {
            const mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
            player.src({ src: mediaSourceUrl, type: selectedUnifiedFiles[idx].type || 'audio/mp4' });
-         } 
-         // 2. Priority: Decoded base64 HLS playlist from session manifest/snapshot
-         else if (track.playlistBase64) {
+         } else if (track.playlistBase64) {
            const binString = atob(track.playlistBase64);
            const bytes = Uint8Array.from(binString, (m) => m.codePointAt(0));
            const m3u8Data = new TextDecoder().decode(bytes);
