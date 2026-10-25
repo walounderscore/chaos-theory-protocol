@@ -1993,17 +1993,7 @@
        contributorsHtml = `<b>Composer / Producer:</b> ${currentManifest.artist}`;
      }
 
-     const creditsTextContainer = document.getElementById('credits-text-body');
-     if (creditsTextContainer) {
-       creditsTextContainer.innerHTML = `
-         <b>Release Date:</b> ${releaseDate}<br>
-         <b>Cover Art Credit:</b> ${coverCredit}<br>
-         <b>Format:</b> HLS Encrypted Stems<br><br>
-         <b>Contributors:</b><br>${contributorsHtml}
-       `;
-     }
-
-     // Target the credits panel text body container (ensure your left panel card has an element with id="credits-text-body" or similar)
+     // Target the credits panel text body container cleanly once
      const creditsTextContainer = document.getElementById('credits-text-body');
      if (creditsTextContainer) {
        creditsTextContainer.innerHTML = `
