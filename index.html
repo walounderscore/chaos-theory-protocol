@@ -1927,62 +1927,46 @@
      if (activeNum) activeNum.innerText = `${idx + 1} / ${currentManifest.tracks.length}`;
 
      const creditsArt = currentManifest.artistImgData || track.thumbData || currentManifest.coverArtData || '';
-     const playerPoster = track.thumbData || currentManifest.coverArtData || currentManifest.artistImgData || '';
-
      if (metaImg) metaImg.src = creditsArt;
      if (lyricsBox) {
        lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
      }
 
-     // 🚀 Standardized Video.js Player Engine (Keeps center panel intact)
-     if (window.videojs) {
-       try {
-         let localPlayer = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
-         if (!localPlayer) {
-           localPlayer = videojs('sovereign-local-player');
-         }
+     // Find Card 4 player box container
+     const centerPanel = document.querySelector('#chaos-sovereign-dashboard > div:nth-child(3)') || document.body;
+     const playerBox = centerPanel.querySelector('.player-box') || centerPanel;
 
-         let mediaSourceUrl = '';
-         let sourceType = 'audio/mp4';
-
-         if (
-           typeof selectedUnifiedFiles !== "undefined" &&
-           selectedUnifiedFiles &&
-           selectedUnifiedFiles[idx]
-         ) {
-           // Local builder preview mode: use local File object
-           mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
-           sourceType = selectedUnifiedFiles[idx].type || 'audio/mp4';
-         } else if (track.widgetFileId) {
-           // Hosted / Published mode: stream via the Apps Script endpoint URL
-           mediaSourceUrl = `${APPS_SCRIPT_URL}?fileId=${encodeURIComponent(track.widgetFileId)}`;
-           sourceType = 'text/html'; // or iframe container management if handling raw HTML widgets
-         }
-
-         if (localPlayer) {
-           if (playerPoster) {
-             localPlayer.poster(playerPoster);
-           }
-
-           if (mediaSourceUrl) {
-             localPlayer.src({ src: mediaSourceUrl, type: sourceType });
-             localPlayer.ready(() => {
-               localPlayer.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
-             });
-           } else {
-             localPlayer.reset();
-             if (playerPoster) localPlayer.poster(playerPoster);
-           }
-
-           // Ensure 'ended' event triggers queue advancement
-           localPlayer.off('ended');
-           localPlayer.on('ended', () => {
-             triggerNextTrack();
-           });
-         }
-       } catch (e) {
-         console.log("Playback error:", e);
+     // 1. Local builder preview mode (uses local files)
+     if (
+       typeof selectedUnifiedFiles !== "undefined" &&
+       selectedUnifiedFiles &&
+       selectedUnifiedFiles[idx]
+     ) {
+       playerBox.innerHTML = `
+         <video
+           id="sovereign-local-player"
+           class="video-js vjs-default-skin vjs-big-play-centered"
+           controls
+           preload="auto"
+           style="width: 100%; height: 268px; border-radius: 8px; background: #000;"
+           data-setup='{}'>
+         </video>
+       `;
+       if (window.videojs) {
+         let localPlayer = videojs('sovereign-local-player');
+         const mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
+         localPlayer.src({ src: mediaSourceUrl, type: selectedUnifiedFiles[idx].type || 'audio/mp4' });
+         localPlayer.ready(() => {
+           localPlayer.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
+         });
+         localPlayer.off('ended');
+         localPlayer.on('ended', () => { triggerNextTrack(); });
        }
+     } 
+     // 2. Published / Hosted mode: Load the standalone track widget via iframe
+     else if (track.widgetFileId) {
+       const widgetUrl = `${APPS_SCRIPT_URL}?fileId=${encodeURIComponent(track.widgetFileId)}`;
+       playerBox.innerHTML = `<iframe src="${widgetUrl}" width="100%" height="268px" style="border:none; border-radius:8px; background:#000;" allow="autoplay"></iframe>`;
      }
 
      populateStep5EmbedBox(currentManifest);
