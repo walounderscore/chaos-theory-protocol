@@ -1511,20 +1511,18 @@
         "  <script src=\"https://vjs.zencdn.net/8.10.0/video.min.js\"><\/script>\n" +
         "  <style>\n" +
         "    * { box-sizing: border-box; }\n" +
-        "    body { font-family: system-ui, -apple-system, sans-serif; background: transparent; color: #c9d1d9; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }\n" +
-        "    .player-box { width: 100%; flex-grow: 1; background: #000; border-radius: 8px; overflow: hidden; position: relative; border: 1px solid #30363d; }\n" +
-        "    .video-js { width: 100%; height: 100%; }\n" +
-        "    /* Custom Dark Scrollbars */\n" +
-        "    ::-webkit-scrollbar { width: 5px; height: 5px; }\n" +
-        "    ::-webkit-scrollbar-track { background: #0d1117; border-radius: 3px; }\n" +
-        "    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }\n" +
-        "    ::-webkit-scrollbar-thumb:hover { background: #484f58; }\n" +
+        "    body, html { background: #161b22; margin: 0; padding: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; overflow: hidden; }\n" +
+        "    .video-js { width: 100%; height: 100%; border-radius: 8px; background: #000; }\n" +
+        "    .vjs-big-play-button { background-color: #238636 !important; border-color: #238636 !important; }\n" +
+        "    /* Dark Slim Scrollbars for URL Player */\n" +
+        "    *::-webkit-scrollbar { width: 6px !important; height: 6px !important; }\n" +
+        "    *::-webkit-scrollbar-track { background: #0d1117 !important; border-radius: 3px !important; }\n" +
+        "    *::-webkit-scrollbar-thumb { background: #30363d !important; border-radius: 3px !important; }\n" +
+        "    *::-webkit-scrollbar-thumb:hover { background: #484f58 !important; }\n" +
         "  </style>\n" +
         "</head>\n" +
         "<body>\n" +
-        "  <div class=\"player-box\">\n" +
-        "    <video id=\"chaos-widget-player\" class=\"video-js vjs-default-skin vjs-big-play-centered\" controls preload=\"auto\" poster=\"" + trackPoster + "\" data-setup='{}'></video>\n" +
-        "  </div>\n" +
+        "  <video id=\"chaos-widget-player\" class=\"video-js vjs-default-skin vjs-big-play-centered\" controls preload=\"auto\" poster=\"" + trackPoster + "\" data-setup='{}'></video>\n" +
         "  <script>\n" +
         "    function decodeBase64Utf8(base64) {\n" +
         "      const binString = atob(base64);\n" +
@@ -1532,24 +1530,26 @@
         "      return new TextDecoder().decode(bytes);\n" +
         "    }\n" +
         "    window.addEventListener('DOMContentLoaded', () => {\n" +
-        "      const m3u8Data = decodeBase64Utf8('" + playlistBase64 + "');\n" +
-        "      const blob = new Blob([m3u8Data], { type: 'application/x-mpegURL' });\n" +
-        "      const blobUrl = URL.createObjectURL(blob);\n" +
-        "      \n" +
-        "      const player = videojs('chaos-widget-player');\n" +
-        "      player.src({ src: blobUrl, type: 'application/x-mpegURL' });\n" +
-        "      player.ready(() => {\n" +
-        "        player.load();\n" +
-        "      });\n" +
-        "      \n" +
-        "      player.on('ended', () => {\n" +
-        "        window.parent.postMessage({ type: 'CHAOS_TRACK_ENDED', trackIndex: " + trackIndex + " }, '*');\n" +
-        "      });\n" +
+        "      try {\n" +
+        "        const m3u8Data = decodeBase64Utf8('" + playlistBase64 + "');\n" +
+        "        const blob = new Blob([m3u8Data], { type: 'application/x-mpegURL' });\n" +
+        "        const blobUrl = URL.createObjectURL(blob);\n" +
+        "        const player = videojs('chaos-widget-player');\n" +
+        "        player.src({ src: blobUrl, type: 'application/x-mpegURL' });\n" +
+        "        player.ready(() => {\n" +
+        "          player.load();\n" +
+        "        });\n" +
+        "        player.on('ended', () => {\n" +
+        "          window.parent.postMessage({ type: 'CHAOS_TRACK_ENDED', trackIndex: " + trackIndex + " }, '*');\n" +
+        "        });\n" +
+        "      } catch(err) {\n" +
+        "        console.error('Widget playback error:', err);\n" +
+        "      }\n" +
         "    });\n" +
         "  <\/script>\n" +
         "</body>\n" +
         "</html>";
-
+      
       const textEncoder = new TextEncoder();
       const widgetFileId = await uploadFileToDrive(
         sanitizedName,
@@ -1619,37 +1619,30 @@
 
       // --- 2. LEFT PANEL: Credits ---
       const leftPanel = document.createElement('div');
-      leftPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; min-width: 0; box-sizing: border-box;`;
+      leftPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; height: 380px; box-sizing: border-box;`;
       
       const leftHeader = document.createElement('div');
-      leftHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 6px; cursor: pointer;`;
+      leftHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 6px; cursor: pointer; flex-shrink: 0;`;
       leftHeader.innerHTML = `<h3 id="left-header-text" style="margin: 0; font-size: 13px; color: #f0f6fc;">📜 Credits</h3><span id="left-collapse-icon" style="color: #58a6ff; font-weight: bold;">◀</span>`;
       leftPanel.appendChild(leftHeader);
 
       const leftContent = document.createElement('div');
       leftContent.id = 'left-panel-content';
-      // Match height to queue panel and enable dark scrollable area
-      leftContent.style.cssText = `display: flex; flex-direction: column; gap: 10px; max-height: 310px; overflow-y: auto; padding-right: 4px;`;
-      
-      const coverImgHtml = initialArt 
-        ? `<img id="metadata-cover-art" src="${initialArt}" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 1px solid #30363d;" alt="Cover Art" />`
-        : `<div id="metadata-cover-art" style="width: 100%; aspect-ratio: 1; background: #21262d; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #8b949e;">No Cover Art</div>`;
+      // 🌟 Unified scrolling container for image + text block together
+      leftContent.style.cssText = `display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex-grow: 1; padding-right: 4px; min-width: 0; box-sizing: border-box;`;
 
-      const releaseDate = manifest.date || '2026';
-      const coverArtName = manifest.coverArtist || manifest.artist;
-      const initialContributors = manifest.tracks[0]?.contributors || manifest.contributors || [];
-      const initialContributorsHtml = initialContributors.length > 0 
-        ? initialContributors.map(c => `<b>${c.customRole || c.role || 'Contributor'}:</b> ${c.name}`).join('<br>')
-        : `<b>Composer / Producer:</b> ${manifest.artist || 'walo, the underscore.'}`;
+      const coverImgHtml = initialArt 
+        ? `<img id="metadata-cover-art" src="${initialArt}" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 1px solid #30363d; flex-shrink: 0;" alt="Cover Art" />`
+        : `<div id="metadata-cover-art" style="width: 100%; aspect-ratio: 1; background: #21262d; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #8b949e; flex-shrink: 0;">No Cover Art</div>`;
 
       leftContent.innerHTML = `
         ${coverImgHtml}
-        <div id="credits-text-body" style="font-size: 12px; line-height: 1.4;">
+        <div id="credits-text-body" style="font-size: 12px; line-height: 1.4; word-break: break-word;">
           <b>Release Date:</b> ${releaseDate}<br>
           <b>Cover Art:</b> ${coverArtName}<br><br>
           ${initialContributorsHtml}
         </div>
-        <div style="margin-top: auto; border-top: 1px solid #30363d; padding-top: 6px;">
+        <div style="margin-top: auto; border-top: 1px solid #30363d; padding-top: 6px; flex-shrink: 0;">
           <p style="margin: 0; color: #8b949e; font-style: italic; font-size: 11px;">
             Streaming under artist license. All rights reserved. © ${manifest.artist || 'walo, the underscore.'}.
           </p>
@@ -1992,8 +1985,10 @@
      if (activeArtist) activeArtist.innerText = currentManifest.artist || 'walo, the underscore.';
      if (activeNum) activeNum.innerText = `${idx + 1} / ${currentManifest.tracks.length}`;
 
-     const creditsArt = currentManifest.artistImgData || track.thumbData || currentManifest.coverArtData || '';
-     if (metaImg) metaImg.src = creditsArt;
+     // 🖼️ Dynamic track-specific cover art fallback chain
+     const trackCoverArt = track.thumbData || currentManifest.coverArtData || currentManifest.artistImgData || '';
+     if (metaImg) metaImg.src = trackCoverArt;
+
      if (lyricsBox) {
        lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
      }
@@ -2019,12 +2014,14 @@
        `;
      }
 
-     // --- ROBUST LOCAL PLAYER SOURCE MANAGEMENT ---
+     // --- ROBUST LOCAL PLAYER SOURCE MANAGEMENT & COVER ART ---
      if (window.videojs) {
        let player = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
        if (player) {
-         // Set poster art
-         if (creditsArt) player.poster(creditsArt);
+         // Update Video.js poster art dynamically per track
+         if (trackCoverArt) {
+           player.poster(trackCoverArt);
+         }
 
          // 1. Priority: Local raw files from file picker
          if (typeof selectedUnifiedFiles !== "undefined" && selectedUnifiedFiles && selectedUnifiedFiles[idx]) {
