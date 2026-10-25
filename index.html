@@ -1590,7 +1590,8 @@
       wrapper.id = 'chaos-sovereign-dashboard';
       wrapper.style.cssText = `
         color: #c9d1d9; font-family: system-ui, -apple-system, sans-serif; display: grid; gap: 16px;
-        grid-template-columns: 260px 1fr 300px; grid-template-rows: auto 1fr auto; align-items: stretch;
+        grid-template-columns: 1fr 1fr 1fr; /* 🌟 Perfectly equal 3-column width layout */
+        grid-template-rows: auto 1fr auto; align-items: stretch;
         width: 100%; margin: 10px 0 0 0; position: relative;
         transition: grid-template-columns 0.3s ease; box-sizing: border-box;
       `;
@@ -1598,7 +1599,8 @@
       function updateGridColumns() {
         const leftCollapsed = document.getElementById('left-panel-content')?.style.display === 'none';
         const rightCollapsed = document.getElementById('right-panel-content')?.style.display === 'none';
-        wrapper.style.gridTemplateColumns = `${leftCollapsed ? '42px' : '260px'} 1fr ${rightCollapsed ? '42px' : '300px'}`;
+        // Keeps collapse behavior functional while maintaining equal fractions when expanded
+        wrapper.style.gridTemplateColumns = `${leftCollapsed ? '42px' : '1fr'} 1fr ${rightCollapsed ? '42px' : '1fr'}`;
       }
 
       // Inject global dark scrollbar style rule dynamically for clean UI matching
@@ -1705,7 +1707,7 @@
       centerPanel.appendChild(videoEl);
 
       const controlBar = document.createElement('div');
-      controlBar.style.cssText = `display: flex; justify-content: space-around; align-items: center; background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #21262d; flex-shrink: 0;`;
+      controlBar.style.cssText = `display: flex; justify-content: space-around; align-items: center; background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #21262d; flex-shrink: 0; width: 100%; box-sizing: border-box;`;
       controlBar.innerHTML = `
         <button id="btn-shuffle" style="background: transparent; color: #8b949e; border: none; font-size: 18px; cursor: pointer;" title="Shuffle Off">🔀</button>
         <button id="btn-prev-track" style="background: transparent; color: #c9d1d9; border: none; font-size: 20px; cursor: pointer;" title="Previous Track">⏮️</button>
