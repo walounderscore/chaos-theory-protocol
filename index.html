@@ -1514,10 +1514,14 @@
         "      const m3u8Data = decodeBase64Utf8('" + playlistBase64 + "');\n" +
         "      const blob = new Blob([m3u8Data], { type: 'application/x-mpegURL' });\n" +
         "      const blobUrl = URL.createObjectURL(blob);\n" +
+        "      \n" +
         "      const player = videojs('chaos-widget-player');\n" +
         "      player.src({ src: blobUrl, type: 'application/x-mpegURL' });\n" +
         "      \n" +
-        "      // Hooked up properly to communicate with parent master dashboard\n" +
+        "      player.ready(() => {\n" +
+        "        player.load();\n" +
+        "      });\n" +
+        "      \n" +
         "      player.on('ended', () => {\n" +
         "        window.parent.postMessage({ type: 'CHAOS_TRACK_ENDED', trackIndex: " + trackIndex + " }, '*');\n" +
         "      });\n" +
