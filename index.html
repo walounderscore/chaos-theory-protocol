@@ -1619,16 +1619,24 @@
 
       // --- 2. LEFT PANEL: Credits ---
       const leftPanel = document.createElement('div');
-      leftPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; height: 380px; box-sizing: border-box;`;
+      // Using max-height instead of fixed height so it hugs its content neatly without dead space
+      leftPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; max-height: 380px; box-sizing: border-box; min-width: 0;`;
       
       const leftHeader = document.createElement('div');
       leftHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 6px; cursor: pointer; flex-shrink: 0;`;
       leftHeader.innerHTML = `<h3 id="left-header-text" style="margin: 0; font-size: 13px; color: #f0f6fc;">📜 Credits</h3><span id="left-collapse-icon" style="color: #58a6ff; font-weight: bold;">◀</span>`;
       leftPanel.appendChild(leftHeader);
 
+      // Define releaseDate and coverArtName safely *before* using them in template strings
+      const releaseDate = manifest.date || '2026';
+      const coverArtName = manifest.coverArtist || manifest.artist;
+      const initialContributors = manifest.tracks[0]?.contributors || manifest.contributors || [];
+      const initialContributorsHtml = initialContributors.length > 0 
+        ? initialContributors.map(c => `<b>${c.customRole || c.role || 'Contributor'}:</b> ${c.name}`).join('<br>')
+        : `<b>Composer / Producer:</b> ${manifest.artist || 'walo, the underscore.'}`;
+
       const leftContent = document.createElement('div');
       leftContent.id = 'left-panel-content';
-      // 🌟 Unified scrolling container for image + text block together
       leftContent.style.cssText = `display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex-grow: 1; padding-right: 4px; min-width: 0; box-sizing: border-box;`;
 
       const coverImgHtml = initialArt 
@@ -1649,7 +1657,7 @@
         </div>
       `;
       leftPanel.appendChild(leftContent);
-     
+
       leftHeader.onclick = () => {
         const isHidden = leftContent.style.display === 'none';
         leftContent.style.display = isHidden ? 'flex' : 'none';
@@ -1697,16 +1705,16 @@
 
       // --- 4. RIGHT PANEL: Queue ---
       const rightPanel = document.createElement('div');
-      rightPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; overflow: hidden;`;
+      rightPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; overflow: hidden; max-height: 380px; box-sizing: border-box;`;
       
       const rightHeader = document.createElement('div');
-      rightHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 6px; margin-bottom: 8px; cursor: pointer;`;
+      rightHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 6px; margin-bottom: 8px; cursor: pointer; flex-shrink: 0;`;
       rightHeader.innerHTML = `<h3 id="right-header-text" style="margin: 0; font-size: 13px; color: #f0f6fc;">🎵 Queue (${manifest.tracks.length})</h3><span id="right-collapse-icon" style="color: #58a6ff; font-weight: bold;">▶</span>`;
       rightPanel.appendChild(rightHeader);
 
       const trackListContainer = document.createElement('div');
       trackListContainer.id = 'right-panel-content';
-      trackListContainer.style.cssText = `overflow-y: auto; flex-grow: 1; display: flex; flex-direction: column; gap: 6px; max-height: 320px;`;
+      trackListContainer.style.cssText = `overflow-y: auto; flex-grow: 1; display: flex; flex-direction: column; gap: 6px;`;
 
       if (manifest.tracks.length === 0) {
         trackListContainer.innerHTML = `<div style="color: #8b949e; font-size: 11px; font-style: italic; padding: 10px; text-align: center;">No tracks processed yet. Build a release above to populate queue.</div>`;
