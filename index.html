@@ -1497,7 +1497,7 @@
         "      <button class=\"mobile-btn\" onclick=\"toggleMobileMode()\">📱 Mobile Mode</button>\n" +
         "    </div>\n" +
         "    <div class=\"player-box\">\n" +
-        "      <video id=\"chaos-widget-player\" class=\"video-js vjs-default-skin vjs-big-play-centered\" controls preload=\"auto\" poster=\"" + trackPoster + "\"></video>\n" +
+        "      <video id=\"chaos-widget-player\" class=\"video-js vjs-default-skin vjs-big-play-centered\" controls preload=\"auto\" poster=\"" + trackPoster + "\" data-setup='{}'></video>\n" +
         "    </div>\n" +
         "    <div class=\"lyrics-container\">\n" +
         "      <h4 style=\"margin: 0; font-size: 13px; color: #f0f6fc;\">📝 Liner Notes & Lyrics</h4>\n" +
@@ -1969,6 +1969,29 @@
      if (metaImg) metaImg.src = creditsArt;
      if (lyricsBox) {
        lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
+     }
+
+     // --- DYNAMIC CREDITS PANEL METADATA ---
+     const releaseDate = currentManifest.releaseDate || track.releaseDate || '2026';
+     const coverCredit = currentManifest.coverCredit || track.coverCredit || currentManifest.artist;
+     
+     let contributorsHtml = '';
+     const contributors = track.contributors || currentManifest.contributors || [];
+     if (contributors.length > 0) {
+       contributorsHtml = contributors.map(c => `<b>${c.role || 'Contributor'}:</b> ${c.name}`).join('<br>');
+     } else {
+       contributorsHtml = `<b>Composer / Producer:</b> ${currentManifest.artist}`;
+     }
+
+     // Target the credits panel text body container (ensure your left panel card has an element with id="credits-text-body" or similar)
+     const creditsTextContainer = document.getElementById('credits-text-body');
+     if (creditsTextContainer) {
+       creditsTextContainer.innerHTML = `
+         <b>Release Date:</b> ${releaseDate}<br>
+         <b>Cover Art Credit:</b> ${coverCredit}<br>
+         <b>Format:</b> HLS Encrypted Stems<br><br>
+         <b>Contributors:</b><br>${contributorsHtml}
+       `;
      }
 
      // Find Card 4 player box container
