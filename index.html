@@ -50,6 +50,40 @@
     ::-webkit-scrollbar-track { background: #161b22; border-radius: 3px; }
     ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+
+    #chaos-sovereign-dashboard, 
+    #chaos-sovereign-dashboard * {
+      box-sizing: border-box;
+    }
+    
+    #chaos-sovereign-dashboard {
+      overflow-x: hidden !important;
+    }
+    
+    #chaos-sovereign-dashboard div {
+      overflow-x: hidden !important;
+      word-break: break-word;
+    }
+    
+    /* Slim Dark Custom Scrollbars for All Dashboard Panels */
+    #chaos-sovereign-dashboard *::-webkit-scrollbar {
+      width: 6px !important;
+      height: 6px !important;
+    }
+    
+    #chaos-sovereign-dashboard *::-webkit-scrollbar-track {
+      background: #0d1117 !important;
+      border-radius: 3px !important;
+    }
+    
+    #chaos-sovereign-dashboard *::-webkit-scrollbar-thumb {
+      background: #30363d !important;
+      border-radius: 3px !important;
+    }
+    
+    #chaos-sovereign-dashboard *::-webkit-scrollbar-thumb:hover {
+      background: #484f58 !important;
+    }
   </style>
 </head>
 <body>
@@ -1585,7 +1619,7 @@
 
       // --- 2. LEFT PANEL: Credits ---
       const leftPanel = document.createElement('div');
-      leftPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; overflow: hidden;`;
+      leftPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; min-width: 0; box-sizing: border-box;`;
       
       const leftHeader = document.createElement('div');
       leftHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 6px; cursor: pointer;`;
@@ -1985,41 +2019,36 @@
        `;
      }
 
-     // Find Card 4 player box container
-     const centerPanel = document.querySelector('#chaos-sovereign-dashboard > div:nth-child(3)') || document.body;
-     const playerBox = centerPanel.querySelector('.player-box') || centerPanel;
+     // --- ROBUST LOCAL PLAYER SOURCE MANAGEMENT ---
+     if (window.videojs) {
+       let player = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
+       if (player) {
+         // Set poster art
+         if (creditsArt) player.poster(creditsArt);
 
-     // 1. Local builder preview mode (uses local files)
-     if (
-       typeof selectedUnifiedFiles !== "undefined" &&
-       selectedUnifiedFiles &&
-       selectedUnifiedFiles[idx]
-     ) {
-       playerBox.innerHTML = `
-         <video
-           id="sovereign-local-player"
-           class="video-js vjs-default-skin vjs-big-play-centered"
-           controls
-           preload="auto"
-           style="width: 100%; height: 268px; border-radius: 8px; background: #000;"
-           data-setup='{}'>
-         </video>
-       `;
-       if (window.videojs) {
-         let localPlayer = videojs('sovereign-local-player');
-         const mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
-         localPlayer.src({ src: mediaSourceUrl, type: selectedUnifiedFiles[idx].type || 'audio/mp4' });
-         localPlayer.ready(() => {
-           localPlayer.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
+         // 1. Priority: Local raw files from file picker
+         if (typeof selectedUnifiedFiles !== "undefined" && selectedUnifiedFiles && selectedUnifiedFiles[idx]) {
+           const mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
+           player.src({ src: mediaSourceUrl, type: selectedUnifiedFiles[idx].type || 'audio/mp4' });
+         } 
+         // 2. Priority: Decoded base64 HLS playlist from session manifest/snapshot
+         else if (track.playlistBase64) {
+           const binString = atob(track.playlistBase64);
+           const bytes = Uint8Array.from(binString, (m) => m.codePointAt(0));
+           const m3u8Data = new TextDecoder().decode(bytes);
+           const blob = new Blob([m3u8Data], { type: 'application/x-mpegURL' });
+           const blobUrl = URL.createObjectURL(blob);
+           player.src({ src: blobUrl, type: 'application/x-mpegURL' });
+         }
+
+         player.ready(() => {
+           player.load();
+           player.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
          });
-         localPlayer.off('ended');
-         localPlayer.on('ended', () => { triggerNextTrack(); });
+
+         player.off('ended');
+         player.on('ended', () => { triggerNextTrack(); });
        }
-     } 
-     // 2. Published / Hosted mode: Load standalone widget via iframe with proper sandbox permissions
-     else if (track.widgetFileId) {
-       const widgetUrl = `${APPS_SCRIPT_URL}?fileId=${encodeURIComponent(track.widgetFileId)}`;
-       playerBox.innerHTML = `<iframe src="${widgetUrl}" width="100%" height="268px" style="border:none; border-radius:8px; background:#000;" allow="autoplay; encrypted-media" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>`;
      }
 
      populateStep5EmbedBox(currentManifest);
