@@ -1843,6 +1843,17 @@
       scriptCode += "  let currentTrackIndex = 0;\n";
       scriptCode += "  let isShuffleActive = false;\n";
       scriptCode += "  let repeatMode = 'off';\n\n";
+      scriptCode += `
+                        window.addEventListener("message", function (event) {
+                          const data = event.data || {};
+                      
+                          if (data.type !== "CHAOS_STATE") return;
+                      
+                          if (data.event === "ended") {
+                            triggerNextTrack();
+                          }
+                        });
+                      `;
 
       scriptCode += "  window.addEventListener('DOMContentLoaded', () => {\n";
       scriptCode += "    try {\n";
@@ -2107,12 +2118,6 @@
       }
       selectTrack(nextIdx);
     }
-
-    window.addEventListener('message', (event) => {
-      if (event.data && event.data.type === 'CHAOS_TRACK_ENDED') {
-        triggerNextTrack();
-      }
-    });
 
     function openShareOptionsModal(manifest) {
       let modal = document.getElementById('chaos-share-modal');
