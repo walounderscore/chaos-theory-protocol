@@ -2303,6 +2303,42 @@
         playerInstance.on('play', () => { if (playPauseBtn) playPauseBtn.innerText = '⏸️'; });
         playerInstance.on('pause', () => { if (playPauseBtn) playPauseBtn.innerText = '▶️'; });
       }
+      // HOSTED MODE: mirror the Drive widget iframe through postMessage
+      if (typeof selectedUnifiedFiles === "undefined") {
+        const hostedFrame = () => document.getElementById('hosted-track-frame');
+        const sendCmd = (cmd, value) => {
+          const f = hostedFrame();
+          if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'CHAOS_CMD', cmd: cmd, value: value }, '*');
+        };
+        let hostedDuration = 0;
+
+        if (playPauseBtn) {
+          playPauseBtn.innerText = '▶️';
+          playPauseBtn.onclick = () => sendCmd(playPauseBtn.innerText === '⏸️' ? 'pause' : 'play');
+        }
+        if (seekBar) {
+          seekBar.oninput = () => {
+            if (hostedDuration > 0) sendCmd('seek', (seekBar.value / 100) * hostedDuration);
+          };
+        }
+
+        const onHostedState = (event) => {
+          if (!document.getElementById('chaos-mobile-modal')) {
+            window.removeEventListener('message', onHostedState);
+            return;
+          }
+          const f = hostedFrame();
+          const d = event.data;
+          if (!f || event.source !== f.contentWindow || !d || d.type !== 'CHAOS_STATE') return;
+
+          hostedDuration = d.duration || 0;
+          if (hostedDuration > 0 && seekBar) seekBar.value = (d.current / hostedDuration) * 100;
+          if (currentTimeEl) currentTimeEl.innerText = formatTime(d.current);
+          if (durationEl) durationEl.innerText = formatTime(hostedDuration);
+          if (playPauseBtn) playPauseBtn.innerText = d.paused ? '▶️' : '⏸️';
+        };
+        window.addEventListener('message', onHostedState);
+      }
     }
 
     function syncMobileCanvasView(track, idx) {
