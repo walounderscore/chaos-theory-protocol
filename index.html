@@ -2083,16 +2083,6 @@
         player.on('ended', () => { triggerNextTrack(); });
       }
     }
-         
-         player.ready(() => {
-           player.load();
-           player.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
-         });
-
-         player.off('ended');
-         player.on('ended', () => { triggerNextTrack(); });
-       }
-     }
 
      populateStep5EmbedBox(currentManifest);
      syncMobileCanvasView(track, idx);
