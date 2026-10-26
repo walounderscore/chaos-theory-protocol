@@ -2072,7 +2072,6 @@
           const blob = new Blob([new TextDecoder().decode(bytes)], { type: 'application/x-mpegURL' });
           player.src({ src: URL.createObjectURL(blob), type: 'application/x-mpegURL' });
         }
-        // ▲▲▲ ...TO HERE ▲▲▲
     
         player.ready(() => {
           player.load();
@@ -2084,10 +2083,10 @@
       }
     }
 
-     populateStep5EmbedBox(currentManifest);
-     syncMobileCanvasView(track, idx);
-   }
-    
+       populateStep5EmbedBox(currentManifest);
+       syncMobileCanvasView(track, idx);
+     }
+      
     function triggerNextTrack() {
       if (!currentManifest || !currentManifest.tracks || currentManifest.tracks.length === 0) return;
 
