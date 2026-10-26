@@ -2404,13 +2404,22 @@
     async function forceRegenerateEmbed() {
       // Re-compile the current manifest from your active workspace inputs
       const manifest = compileCurrentManifest();
-      
-      // Keep the master dashboard file ID if it was already generated
-      if (currentManifest && currentManifest.masterDashboardFileId) {
-        manifest.masterDashboardFileId = currentManifest.masterDashboardFileId;
-      }
 
-      // Re-run the embed code builder function locally
+      if (currentManifest) {
+        manifest.masterDashboardFileId = currentManifest.masterDashboardFileId;
+    
+        // compileCurrentManifest() only reads the form, so re-attach the audio references
+        manifest.tracks.forEach((t, i) => {
+          const old = (currentManifest.tracks || []).find(o => o.fileName === t.fileName)
+                   || (currentManifest.tracks || [])[i];
+          if (old) {
+            t.widgetFileId = old.widgetFileId;
+            t.playlistBase64 = old.playlistBase64;
+            t.status = old.status;
+          }
+        });
+      }
+    
       populateStep5EmbedBox(manifest);
       currentManifest = manifest;
 
