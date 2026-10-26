@@ -255,7 +255,6 @@
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwpBGkMTxlJh6hC3tlj2W_j1tmga-KwDmHcYDQ2a8BipWHosVkfn_ZPQdjBCwOCJjLUwQ/exec';
     const SHEET_ID = '1UjT3R0QXXoLxkekS7-9MnpsdPP72oAPWYg4OUOlJaTA';
     const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
-    const IS_HOSTED = false;
 
     let accessToken = null;
     let driveFolderId = null;
@@ -1537,12 +1536,6 @@
         "        const blobUrl = URL.createObjectURL(blob);\n" +
         "        const player = videojs('chaos-widget-player');\n" +
         "        player.src({ src: blobUrl, type: 'application/x-mpegURL' });\n" +
-        "        const note = document.createElement('div');\n" +
-        "        note.style.cssText='position:absolute;left:8px;bottom:8px;color:#7ee787;font:11px monospace;z-index:9999';\n" +
-        "        document.body.appendChild(note);\n" +
-        "        note.textContent='playlist ' + Math.round(m3u8Data.length/1024) + ' KB loaded';\n" +
-        "        player.on('error', () => { const e = player.error(); note.style.color='#f85149'; note.textContent='ERR ' + (e ? e.code + ': ' + e.message : 'unknown'); });\n" +
-        "        player.on('loadedmetadata', () => { note.textContent='ready'; });\n" +
         "        player.ready(() => {\n" +
         "          player.load();\n" +
         "        });\n" +
@@ -1839,7 +1832,6 @@
       scriptCode += "  });\n\n";
 
       scriptCode += "  const APPS_SCRIPT_URL = " + JSON.stringify(APPS_SCRIPT_URL) + ";\n";
-      scriptCode += "  const IS_HOSTED = true;\n"
       scriptCode += "  const manifest = " + JSON.stringify(dashboardManifest) + ";\n";
       scriptCode += "  let currentTrackIndex = 0;\n";
       scriptCode += "  let isShuffleActive = false;\n";
@@ -2038,25 +2030,24 @@
      }
 
      // --- ROBUST LOCAL PLAYER SOURCE MANAGEMENT & PLAYER POSTER ---
-    if (window.videojs) {
-      let player = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
-      if (player) {
-        // 🎵 Video.js player uses Track Cover Art / Album Cover as its poster
-        const trackPoster = track.thumbData || currentManifest.coverArtData || currentManifest.artistImgData || '';
-        if (trackPoster) player.poster(trackPoster);
-    
-        // ▼▼▼ REPLACE FROM HERE ▼▼▼
+     if (window.videojs) {
+       let player = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
+       if (player) {
+         // 🎵 Video.js player uses Track Cover Art / Album Cover as its poster
+         const trackPoster = track.thumbData || currentManifest.coverArtData || currentManifest.artistImgData || '';
+         if (trackPoster) player.poster(trackPoster);
+
+         // remove any previous hosted frame, restore the local player
         const oldFrame = document.getElementById('hosted-track-frame');
         if (oldFrame) oldFrame.remove();
         player.el().style.display = '';
-    
-        if (!IS_HOSTED && typeof selectedUnifiedFiles !== "undefined" && selectedUnifiedFiles && selectedUnifiedFiles[idx]) {
-          // ARTIST SIDE: local file
+        
+        if (typeof selectedUnifiedFiles !== "undefined" && selectedUnifiedFiles && selectedUnifiedFiles[idx]) {
+          // local file (artist side)
           const mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
           player.src({ src: mediaSourceUrl, type: selectedUnifiedFiles[idx].type || 'audio/mp4' });
-    
-        } else if (IS_HOSTED && track.widgetFileId) {
-          // HOSTED SIDE: stream this track's widget from Drive via Apps Script
+        } else if (track.widgetFileId) {
+          // uploaded track: point to its widget on Drive
           player.pause();
           player.el().style.display = 'none';
           const f = document.createElement('iframe');
@@ -2065,28 +2056,27 @@
           f.allow = 'autoplay; encrypted-media';
           f.style.cssText = 'width:100%;height:268px;border:none;border-radius:8px;background:#161b22;';
           player.el().parentNode.insertBefore(f, player.el().nextSibling);
-    
-        } else if (!IS_HOSTED && track.playlistBase64) {
-          // ARTIST SIDE fallback: restored session snapshot
+        } else if (track.playlistBase64) {
+          // fallback: inline playlist (older sessions)
           const bytes = Uint8Array.from(atob(track.playlistBase64), m => m.codePointAt(0));
           const blob = new Blob([new TextDecoder().decode(bytes)], { type: 'application/x-mpegURL' });
           player.src({ src: URL.createObjectURL(blob), type: 'application/x-mpegURL' });
         }
-    
-        player.ready(() => {
-          player.load();
-          player.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
-        });
-    
-        player.off('ended');
-        player.on('ended', () => { triggerNextTrack(); });
-      }
-    }
+         
+         player.ready(() => {
+           player.load();
+           player.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
+         });
 
-      populateStep5EmbedBox(currentManifest);
-      syncMobileCanvasView(track, idx);
-    }
-      
+         player.off('ended');
+         player.on('ended', () => { triggerNextTrack(); });
+       }
+     }
+
+     populateStep5EmbedBox(currentManifest);
+     syncMobileCanvasView(track, idx);
+   }
+    
     function triggerNextTrack() {
       if (!currentManifest || !currentManifest.tracks || currentManifest.tracks.length === 0) return;
 
@@ -2404,22 +2394,13 @@
     async function forceRegenerateEmbed() {
       // Re-compile the current manifest from your active workspace inputs
       const manifest = compileCurrentManifest();
-
-      if (currentManifest) {
+      
+      // Keep the master dashboard file ID if it was already generated
+      if (currentManifest && currentManifest.masterDashboardFileId) {
         manifest.masterDashboardFileId = currentManifest.masterDashboardFileId;
-    
-        // compileCurrentManifest() only reads the form, so re-attach the audio references
-        manifest.tracks.forEach((t, i) => {
-          const old = (currentManifest.tracks || []).find(o => o.fileName === t.fileName)
-                   || (currentManifest.tracks || [])[i];
-          if (old) {
-            t.widgetFileId = old.widgetFileId;
-            t.playlistBase64 = old.playlistBase64;
-            t.status = old.status;
-          }
-        });
       }
-    
+
+      // Re-run the embed code builder function locally
       populateStep5EmbedBox(manifest);
       currentManifest = manifest;
 
