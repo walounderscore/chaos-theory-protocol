@@ -2047,7 +2047,7 @@
           // local file (artist side)
           const mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
           player.src({ src: mediaSourceUrl, type: selectedUnifiedFiles[idx].type || 'audio/mp4' });
-        } else if (track.widgetFileId) {
+        } else if (typeof selectedUnifiedFiles === "undefined" && track.widgetFileId) {
           // uploaded track: point to its widget on Drive
           player.pause();
           player.el().style.display = 'none';
