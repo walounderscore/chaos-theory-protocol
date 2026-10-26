@@ -1,4 +1,4 @@
-# chaos theory protocol:
+Yes# chaos theory protocol:
 
 self-hosting for artists who love the music most.
 
@@ -16,7 +16,7 @@ They're streamlined. While your priority adapts to your environment, self-hostin
 
 It's for artists with little to lose from full independence. No interruptions allowed.
 
-The **chaos theory protocol** provides a **plug & play foundation** to build your own decentralised distribution pipeline to each goal using open-source and low-risk infrastructure.
+The **chaos theory protocol** provides a **plug & play foundation** to build your own decentralised distribution pipeline to each goal using open-source tools and low-risk infrastructure.
 
 Your music lives on your domain, marketed and maintained by you (as any worker does with their craft and tools), to earn a **reputation worth sharing** and establish **value worth trading for**.
 
@@ -31,4 +31,4 @@ Your music lives on your domain, marketed and maintained by you (as any worker d
 7. **you don't want to keep paying after all the work to release music.**
 8. **you own your professional website to embed this tool.**
 9. **you have no interest in industry politics.**
-10. **you want to increase your fans' stakes in your hard work.**
+10. **you’ll reward your biggest fans with a tangible outlet for their emotions: download licenses they can buy for master files, and commissions on the downloads and sync deals they bring in.**
