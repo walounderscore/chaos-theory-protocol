@@ -1,4 +1,4 @@
-Yes# chaos theory protocol:
+# chaos theory protocol:
 
 self-hosting for artists who love the music most.
 
