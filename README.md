@@ -30,3 +30,4 @@ Your music lives on your domain, marketed and maintained by you (as any worker d
 6. **you'll sell licenses to small creators and larger budgets.**
 7. **you don't want to keep paying after all the work to release music.**
 8. **you own your professional website to embed this tool.**
+9. **you have no interest in industry politics.**
