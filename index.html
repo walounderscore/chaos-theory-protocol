@@ -1243,6 +1243,7 @@
         artistImgData: currentArtistImgBase64 || null,
         bundlePrice: cards.length > 1 ? bundlePrice : null,
         coverArtData: currentAlbumArtBase64 || null,
+        masterDashboardFileId: (currentManifest && currentManifest.masterDashboardFileId) || null,
         tracks: []
       };
 
@@ -1281,7 +1282,8 @@
           aspectRatio: aspectRatio,
           displayMode: displayMode,
           thumbData: thumbData,
-          contributors: contributors
+          contributors: contributors,
+          widgetFileId: ((currentManifest && currentManifest.tracks) || []).find(o => o.fileName === fileName)?.widgetFileId || null
         });
       });
 
@@ -1362,7 +1364,6 @@
             trackTitle
           );
           
-          manifest.tracks[i].playlistBase64 = packaged.playlistBase64;
           manifest.tracks[i].widgetFileId = packaged.widgetFileId;
           manifest.tracks[i].status = "packaged";
 
