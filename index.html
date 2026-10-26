@@ -1539,6 +1539,7 @@
         "        player.src({ src: blobUrl, type: 'application/x-mpegURL' });\n" +
         "        player.ready(() => {\n" +
         "          player.load();\n" +
+        "          const p = player.play(); if (p && p.catch) p.catch(() => {});\n" +
         "        });\n" +
         "        player.on('ended', () => {\n" +
         "          window.parent.postMessage({ type: 'CHAOS_TRACK_ENDED', trackIndex: " + trackIndex + " }, '*');\n" +
