@@ -1834,11 +1834,75 @@
       scriptCode += "  });\n\n";
 
       scriptCode += "  const APPS_SCRIPT_URL = " + JSON.stringify(APPS_SCRIPT_URL) + ";\n";
-      scriptCode += "  const manifest = " + JSON.stringify(dashboardManifest) + ";\n";
+      const safeManifest = JSON.stringify(dashboardManifest)
+        .replace(/</g, "\\u003c")
+        .replace(/>/g, "\\u003e")
+        .replace(/&/g, "\\u0026");
+      
+      scriptCode += "  const manifest = " + safeManifest + ";\n";
       scriptCode += "  let currentTrackIndex = 0;\n";
       scriptCode += "  let isShuffleActive = false;\n";
       scriptCode += "  let repeatMode = 'off';\n\n";
 
+      scriptCode += `
+        window.addEventListener("message", function (event) {
+          const data = event.data || {};
+      
+          if (data.type !== "CHAOS_STATE") return;
+      
+          if (data.event === "ended") {
+            triggerNextTrack();
+          }
+        });
+      
+        function triggerNextTrack() {
+          if (!manifest.tracks || manifest.tracks.length === 0) return;
+      
+          let nextIndex = currentTrackIndex + 1;
+      
+          if (nextIndex >= manifest.tracks.length) {
+            if (repeatMode === "all") {
+              nextIndex = 0;
+            } else {
+              return;
+            }
+          }
+      
+          loadTrackWidget(nextIndex);
+        }
+      
+        function loadTrackWidget(index) {
+          currentTrackIndex = index;
+      
+          const track = manifest.tracks[index];
+          if (!track || !track.widgetFileId) return;
+      
+          const container = document.getElementById("sovereign-player-card-target");
+      
+          if (!container) {
+            console.warn("Master dashboard player container is missing.");
+            return;
+          }
+      
+          container.innerHTML = "";
+      
+          const iframe = document.createElement("iframe");
+      
+          iframe.src =
+            APPS_SCRIPT_URL +
+            "?fileId=" + encodeURIComponent(track.widgetFileId) +
+            "&autoplay=1";
+      
+          iframe.width = "100%";
+          iframe.height = "280";
+          iframe.style.border = "none";
+          iframe.style.borderRadius = "8px";
+          iframe.allow = "autoplay";
+          iframe.loading = "lazy";
+      
+          container.appendChild(iframe);
+        }
+      `;
       scriptCode += "  window.addEventListener('DOMContentLoaded', () => {\n";
       scriptCode += "    try {\n";
       scriptCode += "      if (typeof generateEmbedUI === 'function') {\n";
@@ -1846,6 +1910,7 @@
       scriptCode += "      } else {\n";
       scriptCode += "        document.body.innerHTML = '<div style=\"color:#f85149;padding:20px;\">generateEmbedUI function is missing from execution context.</div>';\n";
       scriptCode += "      }\n";
+      scriptCode += "      loadTrackWidget(0);\n";
       scriptCode += "    } catch (err) {\n";
       scriptCode += "      document.body.innerHTML = '<pre style=\"color:red;padding:20px;white-space:pre-wrap\">' + err.stack + '</pre>';\n";
       scriptCode += "    }\n";
@@ -1853,8 +1918,6 @@
 
       const funcs = [
         typeof generateEmbedUI === 'function' ? generateEmbedUI : null,
-        typeof selectTrack === 'function' ? selectTrack : null,
-        typeof triggerNextTrack === 'function' ? triggerNextTrack : null,
         typeof populateStep5EmbedBox === 'function' ? populateStep5EmbedBox : null,
         typeof setupPlaybackHandlers === 'function' ? setupPlaybackHandlers : null,
         typeof syncMobileCanvasView === 'function' ? syncMobileCanvasView : null,
@@ -1953,7 +2016,7 @@
           if (!manifest.tracks || manifest.tracks.length === 0) return;
           let prevIdx = currentTrackIndex - 1;
           if (prevIdx < 0) prevIdx = manifest.tracks.length - 1;
-          selectTrack(prevIdx);
+          loadTrackWidget(prevIdx);
         };
       }
 
