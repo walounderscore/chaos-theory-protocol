@@ -1877,6 +1877,26 @@
                             triggerNextTrack();
                           }
                         });
+                        function triggerNextTrack() {
+                          if (!manifest.tracks || manifest.tracks.length === 0) return;
+
+                          if (repeatMode === "one") {
+                            selectTrack(currentTrackIndex);
+                            return;
+                          }
+                      
+                          let nextIndex = currentTrackIndex + 1;
+                      
+                          if (nextIndex >= manifest.tracks.length) {
+                            if (repeatMode === "all") {
+                              nextIndex = 0;
+                            } else {
+                              return;
+                            }
+                          }
+                      
+                          selectTrack(nextIndex);
+                        }
                       `;
 
       scriptCode += "  window.addEventListener('DOMContentLoaded', () => {\n";
