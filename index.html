@@ -186,10 +186,6 @@
             <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Album Cover Credit:</label>
             <input type="text" id="global-cover-artist" placeholder="e.g., Art by the Underscore" style="width: 100%;">
           </div>
-          <div>
-            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Album Cover Asset:</label>
-            <input type="file" id="album-cover-file" accept="image/*,video/*" onchange="previewLocalAlbumCover(this)" style="font-size: 0.75rem; width: 100%;">
-          </div>
         </div>
 
         <div style="display: flex; gap: 10px; align-items: center; margin-top: 5px;">
@@ -1842,71 +1838,12 @@
       scriptCode += "  const manifest = " + safeManifest + ";\n";
       scriptCode += "  let currentTrackIndex = 0;\n";
       scriptCode += "  let isShuffleActive = false;\n";
-      scriptCode += "  let repeatMode = 'off';\n\n";
-      
-      scriptCode += "  function selectTrack(index) {\n";
-      scriptCode += "    if (!manifest.tracks || !manifest.tracks[index]) return;\n";
-      scriptCode += "\n";
-      scriptCode += "    currentTrackIndex = index;\n";
-      scriptCode += "    const track = manifest.tracks[index];\n";
-      scriptCode += "\n";
-      scriptCode += "    const player = videojs('chaos-player');\n";
-      scriptCode += "    const oldFrame = document.getElementById('hosted-track-frame');\n";
-      scriptCode += "    if (oldFrame) oldFrame.remove();\n";
-      scriptCode += "\n";
-      scriptCode += "    player.pause();\n";
-      scriptCode += "    player.el().style.display = 'none';\n";
-      scriptCode += "\n";
-      scriptCode += "    const f = document.createElement('iframe');\n";
-      scriptCode += "    f.id = 'hosted-track-frame';\n";
-      scriptCode += "    f.style.cssText = 'width:100%;height:100%;border:0;display:block;';\n";
-      scriptCode += "    f.allow = 'autoplay; encrypted-media; fullscreen';\n";
-      scriptCode += "    f.src = APPS_SCRIPT_URL + '?fileId=' + encodeURIComponent(track.widgetFileId);\n";
-      scriptCode += "\n";
-      scriptCode += "    const container = document.getElementById('track-widget-container');\n";
-      scriptCode += "    container.appendChild(f);\n";
-      scriptCode += "  }\n\n";
-      
-      scriptCode += `
-                        window.addEventListener("message", function (event) {
-                          const data = event.data || {};
-                      
-                          if (data.type !== "CHAOS_STATE") return;
-                      
-                          if (data.event === "ended") {
-                            triggerNextTrack();
-                          }
-                        });
-                        function triggerNextTrack() {
-                          if (!manifest.tracks || manifest.tracks.length === 0) return;
-
-                          if (repeatMode === "one") {
-                            selectTrack(currentTrackIndex);
-                            return;
-                          }
-                      
-                          let nextIndex = currentTrackIndex + 1;
-                      
-                          if (nextIndex >= manifest.tracks.length) {
-                            if (repeatMode === "all") {
-                              nextIndex = 0;
-                            } else {
-                              return;
-                            }
-                          }
-                      
-                          selectTrack(nextIndex);
-                        }
-                      `;
+      scriptCode += "  let repeatMode = 'off';\n";
+      scriptCode += "  let currentManifest = manifest;\n\n";
 
       scriptCode += "  window.addEventListener('DOMContentLoaded', () => {\n";
       scriptCode += "    try {\n";
-      scriptCode += "      if (typeof generateEmbedUI === 'function') {\n";
-      scriptCode += "        generateEmbedUI(manifest);\n";
-      scriptCode += "      } else {\n";
-      scriptCode += "        document.body.innerHTML = '<div style=\"color:#f85149;padding:20px;\">generateEmbedUI function is missing from execution context.</div>';\n";
-      scriptCode += "      }\n";
-      scriptCode += "      selectTrack(0);\n";
+      scriptCode += "      generateEmbedUI(manifest);\n";
       scriptCode += "    } catch (err) {\n";
       scriptCode += "      document.body.innerHTML = '<pre style=\"color:red;padding:20px;white-space:pre-wrap\">' + err.stack + '</pre>';\n";
       scriptCode += "    }\n";
@@ -1915,6 +1852,7 @@
       const funcs = [
         typeof generateEmbedUI === 'function' ? generateEmbedUI : null,
         typeof selectTrack === 'function' ? selectTrack : null,
+        typeof triggerNextTrack === 'function' ? triggerNextTrack : null,
         typeof populateStep5EmbedBox === 'function' ? populateStep5EmbedBox : null,
         typeof setupPlaybackHandlers === 'function' ? setupPlaybackHandlers : null,
         typeof syncMobileCanvasView === 'function' ? syncMobileCanvasView : null,
@@ -2099,39 +2037,42 @@
          const trackPoster = track.thumbData || currentManifest.coverArtData || currentManifest.artistImgData || '';
          if (trackPoster) player.poster(trackPoster);
 
-         // remove any previous hosted frame, restore the local player
         const oldFrame = document.getElementById('hosted-track-frame');
         if (oldFrame) oldFrame.remove();
         player.el().style.display = '';
-        
-        if (typeof selectedUnifiedFiles !== "undefined" && selectedUnifiedFiles && selectedUnifiedFiles[idx]) {
-          // local file (artist side)
+        player.off('ended');
+        player.on('ended', () => { triggerNextTrack(); });
+
+        const isHosted = typeof selectedUnifiedFiles === "undefined";
+
+        if (!isHosted && selectedUnifiedFiles && selectedUnifiedFiles[idx]) {
+          // artist side: local file
           const mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
           player.src({ src: mediaSourceUrl, type: selectedUnifiedFiles[idx].type || 'audio/mp4' });
-        } else if (typeof selectedUnifiedFiles === "undefined" && track.widgetFileId) {
-          // uploaded track: point to its widget on Drive
-          player.pause();
-          player.el().style.display = 'none';
-          const f = document.createElement('iframe');
-          f.id = 'hosted-track-frame';
-          f.src = `${APPS_SCRIPT_URL}?fileId=${track.widgetFileId}`;
-          f.allow = 'autoplay; encrypted-media';
-          f.style.cssText = 'width:100%;height:268px;border:none;border-radius:8px;background:#161b22;';
-          player.el().parentNode.insertBefore(f, player.el().nextSibling);
-        } else if (track.playlistBase64) {
-          // fallback: inline playlist (older sessions)
-          const bytes = Uint8Array.from(atob(track.playlistBase64), m => m.codePointAt(0));
-          const blob = new Blob([new TextDecoder().decode(bytes)], { type: 'application/x-mpegURL' });
-          player.src({ src: URL.createObjectURL(blob), type: 'application/x-mpegURL' });
-        }
-         
-         player.ready(() => {
-           player.load();
-           player.play().catch(err => console.log("Autoplay waiting for user gesture:", err));
-         });
+          player.ready(() => { player.load(); player.play().catch(() => {}); });
 
-         player.off('ended');
-         player.on('ended', () => { triggerNextTrack(); });
+        } else if (isHosted && track.widgetFileId) {
+          // hosted: pull this track's playlist from Drive into the same player
+          const cache = (window.__chaosPl = window.__chaosPl || {});
+          const fetchPl = (id) => cache[id] || (cache[id] = fetch(`${APPS_SCRIPT_URL}?fileId=${id}&mode=playlist`)
+            .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+            .catch(e => { delete cache[id]; throw e; }));
+          const reqId = (window.__chaosReq = (window.__chaosReq || 0) + 1);
+
+          player.pause();
+          fetchPl(track.widgetFileId).then(b64 => {
+            if (reqId !== window.__chaosReq) return; // a newer track was chosen
+            const bytes = Uint8Array.from(atob(b64), m => m.codePointAt(0));
+            const blob = new Blob([new TextDecoder().decode(bytes)], { type: 'application/x-mpegURL' });
+            player.src({ src: URL.createObjectURL(blob), type: 'application/x-mpegURL' });
+            player.play().catch(() => {});
+
+            // prefetch the next track so advancing is instant; drop older entries
+            const next = currentManifest.tracks[idx + 1];
+            Object.keys(cache).forEach(k => { if (k !== track.widgetFileId && !(next && k === next.widgetFileId)) delete cache[k]; });
+            if (next && next.widgetFileId) fetchPl(next.widgetFileId).catch(() => {});
+          }).catch(err => console.error('Track load failed:', err));
+        }
        }
      }
 
@@ -2356,42 +2297,6 @@
 
         playerInstance.on('play', () => { if (playPauseBtn) playPauseBtn.innerText = '⏸️'; });
         playerInstance.on('pause', () => { if (playPauseBtn) playPauseBtn.innerText = '▶️'; });
-      }
-      // HOSTED MODE: mirror the Drive widget iframe through postMessage
-      if (typeof selectedUnifiedFiles === "undefined") {
-        const hostedFrame = () => document.getElementById('hosted-track-frame');
-        const sendCmd = (cmd, value) => {
-          const f = hostedFrame();
-          if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'CHAOS_CMD', cmd: cmd, value: value }, '*');
-        };
-        let hostedDuration = 0;
-
-        if (playPauseBtn) {
-          playPauseBtn.innerText = '▶️';
-          playPauseBtn.onclick = () => sendCmd(playPauseBtn.innerText === '⏸️' ? 'pause' : 'play');
-        }
-        if (seekBar) {
-          seekBar.oninput = () => {
-            if (hostedDuration > 0) sendCmd('seek', (seekBar.value / 100) * hostedDuration);
-          };
-        }
-
-        const onHostedState = (event) => {
-          if (!document.getElementById('chaos-mobile-modal')) {
-            window.removeEventListener('message', onHostedState);
-            return;
-          }
-          const f = hostedFrame();
-          const d = event.data;
-          if (!f || event.source !== f.contentWindow || !d || d.type !== 'CHAOS_STATE') return;
-
-          hostedDuration = d.duration || 0;
-          if (hostedDuration > 0 && seekBar) seekBar.value = (d.current / hostedDuration) * 100;
-          if (currentTimeEl) currentTimeEl.innerText = formatTime(d.current);
-          if (durationEl) durationEl.innerText = formatTime(hostedDuration);
-          if (playPauseBtn) playPauseBtn.innerText = d.paused ? '▶️' : '⏸️';
-        };
-        window.addEventListener('message', onHostedState);
       }
     }
 
