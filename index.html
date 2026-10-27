@@ -245,6 +245,15 @@
       </div>
     </div>
 
+    <div class="card" id="storefront-card">
+      <h3>6. Download & Licensing Links</h3>
+      <p>Paste your Paystack payment page link (with a product per track plus a full release) and the email licensing requests should go to.</p>
+      <label style="font-size:0.75rem;color:#8b949e;display:block;margin-bottom:3px;">Paystack payment page link:</label>
+      <input type="url" id="release-payment-url" placeholder="https://paystack.shop/pay/..." style="width:100%;margin-bottom:10px;">
+      <label style="font-size:0.75rem;color:#8b949e;display:block;margin-bottom:3px;">Licensing email:</label>
+      <input type="email" id="licensing-email" placeholder="you@yourdomain.com" style="width:100%;">
+    </div>
+
   </div>
 
   <script>
@@ -652,6 +661,11 @@
       document.getElementById('global-album-artist').value = manifest.artist || '';
       document.getElementById('global-cover-artist').value = manifest.coverArtist || '';
       if (manifest.bundlePrice) document.getElementById('builder-bundle-price').value = manifest.bundlePrice;
+
+      const payUrlEl = document.getElementById('release-payment-url');
+      if (payUrlEl) payUrlEl.value = manifest.paymentPageUrl || '';
+      const licEmailEl = document.getElementById('licensing-email');
+      if (licEmailEl) licEmailEl.value = manifest.licensingEmail || '';
 
       // Restore Album Cover Art
       if (manifest.coverArtData) {
@@ -1240,6 +1254,8 @@
         bundlePrice: cards.length > 1 ? bundlePrice : null,
         coverArtData: currentAlbumArtBase64 || null,
         masterDashboardFileId: (currentManifest && currentManifest.masterDashboardFileId) || null,
+        paymentPageUrl: (document.getElementById('release-payment-url')?.value || '').trim() || null,
+        licensingEmail: (document.getElementById('licensing-email')?.value || '').trim() || null,
         tracks: []
       };
 
@@ -1621,7 +1637,7 @@
         <div style="display: flex; align-items: center; gap: 10px;">
           <button id="btn-share-release" style="background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">🔗 Share</button>
           <button id="btn-mobile-canvas" style="background: #238636; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">📱 Mobile Mode</button>
-          <button id="btn-checkout-license" style="background: #1f6feb; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">⬇️ Download / License</button>
+          <button id="btn-checkout-license" style="background: #1f6feb; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">⬇️ Download</button>
         </div>
       `;
       wrapper.appendChild(header);
@@ -1769,6 +1785,19 @@
       wrapper.appendChild(basePanel);
 
       embedContainer.appendChild(wrapper);
+            const rs = document.createElement('style');
+            rs.textContent = `@media (max-width:720px){
+              #chaos-sovereign-dashboard{grid-template-columns:1fr !important;grid-template-rows:auto !important;}
+              #chaos-sovereign-dashboard>div{height:auto !important;}
+              #right-panel-content{max-height:220px;} #left-panel-content{max-height:240px;}
+            }`;
+            document.head.appendChild(rs);
+      
+            if (typeof selectedUnifiedFiles === 'undefined' && window.ResizeObserver) {
+              const ping = () => { try { window.top.postMessage({ type: 'chaos-resize', height: Math.ceil(wrapper.getBoundingClientRect().height) + 40 }, '*'); } catch (e) {} };
+              new ResizeObserver(ping).observe(wrapper);
+              ping();
+            }
 
       populateStep5EmbedBox(manifest);
       setupPlaybackHandlers(manifest);
@@ -1903,7 +1932,18 @@
         if (manifest.masterDashboardFileId) {
           const masterViewerUrl = `${APPS_SCRIPT_URL}?fileId=${manifest.masterDashboardFileId}`;
           // Fluid height adjustment without fixed 720px limit
-          const embedHtml = `<iframe src="${masterViewerUrl}" width="100%" style="width:100%; min-height:540px; border:none; border-radius:12px; background:#0d1117;" allow="autoplay; encrypted-media" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>`;
+          const embedHtml = `<iframe id="chaos-embed" src="${masterViewerUrl}" style="width:100%;height:560px;border:none;border-radius:12px;background:#0d1117;" allow="autoplay; encrypted-media; fullscreen"></iframe>
+          <script>
+          window.addEventListener('message',function(e){
+            var d=e.data||{},f=document.getElementById('chaos-embed');
+            if(!f||!d.type||String(d.type).indexOf('chaos-')!==0)return;
+            if(d.type==='chaos-resize'&&!f.dataset.full)f.style.height=d.height+'px';
+            if(d.type==='chaos-fullscreen'){
+              if(d.on){f.dataset.full='1';f.dataset.css=f.style.cssText;f.style.cssText='position:fixed;inset:0;width:100vw;height:100dvh;z-index:2147483647;border:0;border-radius:0;';}
+              else if(f.dataset.full){delete f.dataset.full;f.style.cssText=f.dataset.css;}
+            }
+          });
+          <\/script>`;
           embedBox.value = embedHtml;
         } else {
           embedBox.value = '';
@@ -2221,8 +2261,14 @@
 
       document.body.appendChild(modal);
 
-      document.getElementById('close-mobile-modal').onclick = () => modal.remove();
+      try { window.top.postMessage({ type: 'chaos-fullscreen', on: true }, '*'); } catch (e) {}
+
+      document.getElementById('close-mobile-modal').onclick = () => {
+        try { window.top.postMessage({ type: 'chaos-fullscreen', on: false }, '*'); } catch (e) {}
+        modal.remove();
+      };
       document.getElementById('mobile-checkout-btn').onclick = () => {
+        try { window.top.postMessage({ type: 'chaos-fullscreen', on: false }, '*'); } catch (e) {}
         modal.remove();
         openPaystackCheckoutModal(manifest);
       };
@@ -2325,43 +2371,47 @@
         z-index: 999999; display: flex; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;
       `;
 
+      const track = (manifest.tracks && (manifest.tracks[currentTrackIndex] || manifest.tracks[0])) || {};
+      const payUrl = manifest.paymentPageUrl || '';
+      const email = manifest.licensingEmail || '';
+      const subject = encodeURIComponent('Licensing: "' + (track.title || manifest.title) + '" by ' + manifest.artist);
+      const body = encodeURIComponent('Hi,\n\nProject name and type:\nBudget range:\nTrack(s) and where they will appear:\nRelease or distribution date:\nYour name / company:\n');
+      const mailto = email ? 'mailto:' + email + '?subject=' + subject + '&body=' + body : '';
+
+      const card = 'background:#0d1117;border:1px solid #30363d;padding:14px;border-radius:8px;';
+      const btn = 'display:block;text-align:center;text-decoration:none;color:#fff;padding:10px;border-radius:6px;font-weight:bold;font-size:14px;margin-top:10px;';
+
       modal.innerHTML = `
-        <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px; max-width: 460px; width: 100%; color: #c9d1d9; font-family: system-ui, sans-serif;">
-          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 12px;">
-            <h3 style="margin: 0; font-size: 18px; color: #f0f6fc;">🛒 Acquire License / FLAC Vault</h3>
-            <button id="close-paystack-modal" style="background: transparent; color: #8b949e; border: none; font-size: 20px; cursor: pointer;">✕</button>
+        <div style="background:#161b22;border:1px solid #30363d;border-radius:12px;padding:24px;max-width:460px;width:100%;color:#c9d1d9;font-family:system-ui,sans-serif;max-height:90vh;overflow-y:auto;">
+          <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #30363d;padding-bottom:12px;">
+            <h3 style="margin:0;font-size:18px;color:#f0f6fc;">⬇️ Download</h3>
+            <button id="close-paystack-modal" style="background:transparent;color:#8b949e;border:none;font-size:20px;cursor:pointer;">✕</button>
           </div>
-          <div style="margin: 16px 0; display: flex; flex-direction: column; gap: 12px;">
-            <label style="background: #0d1117; border: 1px solid #30363d; padding: 12px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
-              <div>
-                <strong style="color: #f0f6fc; display: block; font-size: 14px;">High-Fidelity FLAC Download</strong>
-                <span style="font-size: 12px; color: #8b949e;">Personal collection, uncompressed master audio.</span>
-              </div>
-              <span style="color: #58a6ff; font-weight: bold;">$5.00</span>
-            </label>
-            <label style="background: #0d1117; border: 1px solid #30363d; padding: 12px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
-              <div>
-                <strong style="color: #f0f6fc; display: block; font-size: 14px;">Commercial Sync License</strong>
-                <span style="font-size: 12px; color: #8b949e;">Film, media, advertising & indie games usage.</span>
-              </div>
-              <span style="color: #58a6ff; font-weight: bold;">$150.00</span>
-            </label>
+          <p style="font-size:12px;color:#8b949e;margin:12px 0;">Get it on your Spotify and other players as local files, and use the music for your projects.</p>
+
+          <div style="${card}">
+            <strong style="color:#f0f6fc;font-size:14px;">Get the files</strong>
+            <div style="font-size:12px;color:#8b949e;margin-top:4px;">Pick your tracks or the full release, pay, and download your copy.</div>
+            ${payUrl
+              ? `<a href="${payUrl}" target="_blank" rel="noopener" style="${btn}background:#238636;">Choose tracks &amp; pay</a>`
+              : `<div style="font-size:12px;color:#8b949e;margin-top:10px;font-style:italic;">Downloads aren't available yet.</div>`}
           </div>
-          <button id="btn-trigger-paystack" style="width: 100%; background: #238636; color: #fff; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px;">
-            💳 Proceed to Checkout (Paystack)
-          </button>
+
+          <div style="${card}margin-top:12px;">
+            <strong style="color:#f0f6fc;font-size:14px;">Use it in a project</strong>
+            <div style="font-size:12px;color:#8b949e;margin-top:4px;">Creators of every size: tell me about your project and I'll send signed licensing documentation.</div>
+            ${email
+              ? `<a href="${mailto}" style="${btn}background:#1f6feb;">Email your project</a>
+                 <div style="font-size:11px;color:#8b949e;margin-top:8px;text-align:center;">Or write to <span style="color:#c9d1d9;user-select:all;">${email}</span></div>`
+              : `<div style="font-size:12px;color:#8b949e;margin-top:10px;font-style:italic;">Licensing contact not set yet.</div>`}
+          </div>
         </div>
       `;
 
       document.body.appendChild(modal);
-
       document.getElementById('close-paystack-modal').onclick = () => modal.remove();
-      document.getElementById('btn-trigger-paystack').onclick = () => {
-        alert(`Initializing direct Paystack transaction for "${manifest.title}"... License tokens will sync to your email.`);
-        modal.remove();
-      };
     }
-
+    
     function createEmbedContainer() {
       const container = document.createElement('div');
       container.id = 'embed-output-container';
