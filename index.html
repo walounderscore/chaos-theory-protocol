@@ -1311,7 +1311,10 @@
           const trackNum = card.querySelector('.t-num').value || (i + 1);
           const trackTitle = card.querySelector('.t-title').value || `Track ${trackNum}`;
           
-          const file = selectedUnifiedFiles[i] || selectedUnifiedFiles[0];
+          const cardFileName = card.querySelector('.track-file-name')?.innerText.trim();
+          const file = selectedUnifiedFiles.find(f => f.name === cardFileName)
+                    || selectedUnifiedFiles[i]
+                    || selectedUnifiedFiles[0];
           logMessage(`⚡ [${i + 1}/${cards.length}] Processing Track ${trackNum}: "${trackTitle}" (${(file.size / (1024*1024)).toFixed(1)} MB)...`);
 
           if (globalFFmpegInstance) {
@@ -2045,10 +2048,14 @@
 
         const isHosted = typeof selectedUnifiedFiles === "undefined";
 
-        if (!isHosted && selectedUnifiedFiles && selectedUnifiedFiles[idx]) {
+        const localFile = (!isHosted && selectedUnifiedFiles)
+          ? (selectedUnifiedFiles.find(f => f.name === track.fileName) || selectedUnifiedFiles[idx])
+          : null;
+        
+        if (localFile) {
           // artist side: local file
-          const mediaSourceUrl = URL.createObjectURL(selectedUnifiedFiles[idx]);
-          player.src({ src: mediaSourceUrl, type: selectedUnifiedFiles[idx].type || 'audio/mp4' });
+          const mediaSourceUrl = URL.createObjectURL(localFile);
+          player.src({ src: mediaSourceUrl, type: localFile.type || 'audio/mp4' });
           player.ready(() => { player.load(); player.play().catch(() => {}); });
 
         } else if (isHosted && track.widgetFileId) {
