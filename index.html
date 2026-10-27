@@ -1862,7 +1862,7 @@
       scriptCode += "      } else {\n";
       scriptCode += "        document.body.innerHTML = '<div style=\"color:#f85149;padding:20px;\">generateEmbedUI function is missing from execution context.</div>';\n";
       scriptCode += "      }\n";
-      scriptCode += "      loadTrackWidget(0);\n";
+      scriptCode += "      selectTrack(0);\n";
       scriptCode += "    } catch (err) {\n";
       scriptCode += "      document.body.innerHTML = '<pre style=\"color:red;padding:20px;white-space:pre-wrap\">' + err.stack + '</pre>';\n";
       scriptCode += "    }\n";
@@ -1969,7 +1969,7 @@
           if (!manifest.tracks || manifest.tracks.length === 0) return;
           let prevIdx = currentTrackIndex - 1;
           if (prevIdx < 0) prevIdx = manifest.tracks.length - 1;
-          loadTrackWidget(prevIdx);
+          selectTrack(prevIdx);
         };
       }
 
