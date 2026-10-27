@@ -1843,6 +1843,30 @@
       scriptCode += "  let currentTrackIndex = 0;\n";
       scriptCode += "  let isShuffleActive = false;\n";
       scriptCode += "  let repeatMode = 'off';\n\n";
+      
+      scriptCode += "  function selectTrack(index) {\n";
+      scriptCode += "    if (!manifest.tracks || !manifest.tracks[index]) return;\n";
+      scriptCode += "\n";
+      scriptCode += "    currentTrackIndex = index;\n";
+      scriptCode += "    const track = manifest.tracks[index];\n";
+      scriptCode += "\n";
+      scriptCode += "    const player = videojs('chaos-player');\n";
+      scriptCode += "    const oldFrame = document.getElementById('hosted-track-frame');\n";
+      scriptCode += "    if (oldFrame) oldFrame.remove();\n";
+      scriptCode += "\n";
+      scriptCode += "    player.pause();\n";
+      scriptCode += "    player.el().style.display = 'none';\n";
+      scriptCode += "\n";
+      scriptCode += "    const f = document.createElement('iframe');\n";
+      scriptCode += "    f.id = 'hosted-track-frame';\n";
+      scriptCode += "    f.style.cssText = 'width:100%;height:100%;border:0;display:block;';\n";
+      scriptCode += "    f.allow = 'autoplay; encrypted-media; fullscreen';\n";
+      scriptCode += "    f.src = APPS_SCRIPT_URL + '?fileId=' + encodeURIComponent(track.widgetFileId);\n";
+      scriptCode += "\n";
+      scriptCode += "    const container = document.getElementById('track-widget-container');\n";
+      scriptCode += "    container.appendChild(f);\n";
+      scriptCode += "  }\n\n";
+      
       scriptCode += `
                         window.addEventListener("message", function (event) {
                           const data = event.data || {};
