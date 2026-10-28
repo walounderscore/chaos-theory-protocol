@@ -231,6 +231,8 @@
       <input type="url" id="release-payment-url" placeholder="https://paystack.shop/pay/..." style="width:100%;margin-bottom:10px;">
       <label style="font-size:0.75rem;color:#8b949e;display:block;margin-bottom:3px;">Licensing email:</label>
       <input type="email" id="licensing-email" placeholder="you@yourdomain.com" style="width:100%;">
+      <label style="font-size:0.75rem;color:#8b949e;display:block;margin:10px 0 3px;">Google Analytics Measurement ID (optional):</label>
+      <input type="text" id="ga-measurement-id" placeholder="G-XXXXXXXXXX" style="width:100%;">
     </div>
 
     <!-- System Logs -->
@@ -671,6 +673,8 @@
       if (payUrlEl) payUrlEl.value = manifest.paymentPageUrl || '';
       const licEmailEl = document.getElementById('licensing-email');
       if (licEmailEl) licEmailEl.value = manifest.licensingEmail || '';
+      const gaEl = document.getElementById('ga-measurement-id');
+      if (gaEl) gaEl.value = manifest.gaMeasurementId || '';
 
       // Restore Album Cover Art
       if (manifest.coverArtData) {
@@ -1262,6 +1266,7 @@
         paymentPageUrl: (document.getElementById('release-payment-url')?.value || '').trim() || null,
         upc: (document.getElementById('global-upc')?.value || '').trim() || null,
         licensingEmail: (document.getElementById('licensing-email')?.value || '').trim() || null,
+        gaMeasurementId: (document.getElementById('ga-measurement-id')?.value || '').trim() || null,
         tracks: []
       };
 
@@ -1868,6 +1873,16 @@
       scriptCode += "  });\n\n";
 
       scriptCode += "  const APPS_SCRIPT_URL = " + JSON.stringify(APPS_SCRIPT_URL) + ";\n";
+      const gaId = /^G-[A-Z0-9]{4,}$/.test(dashboardManifest.gaMeasurementId || '') ? dashboardManifest.gaMeasurementId : null;
+      if (gaId) {
+        scriptCode += "  (function(){\n";
+        scriptCode += "    window.dataLayer = window.dataLayer || [];\n";
+        scriptCode += "    window.gtag = function(){ dataLayer.push(arguments); };\n";
+        scriptCode += "    var s = document.createElement('script'); s.async = true; s.src = 'https://www.googletagmanager.com/gtag/js?id=" + gaId + "'; document.head.appendChild(s);\n";
+        scriptCode += "    gtag('js', new Date());\n";
+        scriptCode += "    gtag('config', '" + gaId + "', { send_page_view: false });\n";
+        scriptCode += "  })();\n\n";
+      }
       const safeManifest = JSON.stringify(dashboardManifest)
         .replace(/</g, "\\u003c")
         .replace(/>/g, "\\u003e")
@@ -2095,6 +2110,19 @@
         player.on('ended', () => { triggerNextTrack(); });
 
         const isHosted = typeof selectedUnifiedFiles === "undefined";
+        if (isHosted && window.gtag) {
+          const meta = { track_title: track.title, track_number: idx + 1, release: currentManifest.title };
+          let started = false, thirty = false;
+          if (window.__chaosOnPlay) player.off('play', window.__chaosOnPlay);
+          if (window.__chaosOnTime) player.off('timeupdate', window.__chaosOnTime);
+          if (window.__chaosOnEnd) player.off('ended', window.__chaosOnEnd);
+          window.__chaosOnPlay = () => { if (!started) { started = true; window.gtag('event', 'track_play', meta); } };
+          window.__chaosOnTime = () => { if (!thirty && player.currentTime() >= 30) { thirty = true; window.gtag('event', 'listen_30s', meta); } };
+          window.__chaosOnEnd = () => window.gtag('event', 'track_complete', meta);
+          player.on('play', window.__chaosOnPlay);
+          player.on('timeupdate', window.__chaosOnTime);
+          player.on('ended', window.__chaosOnEnd);
+        }
 
         const localFile = (!isHosted && selectedUnifiedFiles)
           ? (selectedUnifiedFiles.find(f => f.name === track.fileName) || selectedUnifiedFiles[idx])
@@ -2235,7 +2263,7 @@
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <button id="close-mobile-modal" style="background: transparent; color: #c9d1d9; border: none; font-size: 24px; cursor: pointer;">✕</button>
           <span style="font-size: 12px; color: #8b949e; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;">NOW PLAYING</span>
-          <button id="mobile-checkout-btn" style="background: #1f6feb; color: #fff; border: none; padding: 6px 12px; border-radius: 16px; font-size: 11px; font-weight: 600;">Buy / License</button>
+          <button id="mobile-checkout-btn" style="background: #fadf00; color: #fff; border: none; padding: 6px 12px; border-radius: 16px; font-size: 11px; font-weight: 600;">⬇️</button>
         </div>
 
         <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; margin: auto 0;">
