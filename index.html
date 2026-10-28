@@ -2403,12 +2403,11 @@
             <h3 style="margin:0;font-size:18px;color:#f0f6fc;">⬇️ Download</h3>
             <button id="close-paystack-modal" style="background:transparent;color:#8b949e;border:none;font-size:20px;cursor:pointer;">✕</button>
           </div>
-          <p style="font-size:16px;color:#8b949e;margin:12px 0;">Get it on your Spotify and other players as local MP3 files, lossless FLAC for the best sound, and use the music for your projects.</p>
-          <div style="font-size:12px;color:#8b949e;margin-top:4px;">Streaming here is free.</div>
+          <p style="font-size:16px;color:#8b949e;margin:12px 0;">Streaming here is free, forever.</p>
 
           <div style="${card}">
-            <strong style="color:#f0f6fc;font-size:14px;">Get the files</strong>
-            <div style="font-size:12px;color:#8b949e;margin-top:4px;">Pick your tracks or the full release, pay, and download your copy.</div>
+            <strong style="color:#f0f6fc;font-size:14px;">Get the files for Spotify and other players</strong>
+            <div style="font-size:12px;color:#8b949e;margin-top:4px;">Pick your tracks or the full release, pay, and download your personal copy.</div>
             ${priceLine ? `<div style="font-size:13px;color:#58a6ff;font-weight:bold;margin-top:8px;">${priceLine}</div>` : ''}
             ${payUrl
               ? `<a href="${payUrl}" target="_blank" rel="noopener" style="${btn}background:#238636;">Choose tracks &amp; pay</a>`
@@ -2416,13 +2415,15 @@
           </div>
 
           <div style="${card}margin-top:12px;">
-            <strong style="color:#f0f6fc;font-size:14px;">Use it in a project</strong>
-            <div style="font-size:12px;color:#8b949e;margin-top:4px;">For all creators: tell me about your project and I'll send signed licensing documentation.</div>
+            <strong style="color:#f0f6fc;font-size:14px;">Use it in your project</strong>
+            <div style="font-size:12px;color:#8b949e;margin-top:4px;">Tell me about your project and I'll send signed licensing documentation.</div>
             ${email
               ? `<a href="${mailto}" style="${btn}background:#1f6feb;">Email your project</a>
                  <div style="font-size:11px;color:#8b949e;margin-top:8px;text-align:center;">Or write to <span style="color:#c9d1d9;user-select:all;">${email}</span></div>`
               : `<div style="font-size:12px;color:#8b949e;margin-top:10px;font-style:italic;">Licensing contact not set yet.</div>`}
           </div>
+          <p style="font-size:14px;color:#8b949e;margin:12px 0;">Email to become a <strong>Commissioner:</strong> receive 30% per download or sync licensing payment you bring.</p>
+          <p style="font-size:12px;color:#8b949e;margin:12px 0;">Simple authentication, next-business-day payout, access to Paystack dashboard.</p>
         </div>
       `;
 
