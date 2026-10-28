@@ -186,6 +186,10 @@
             <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">Album Cover Credit:</label>
             <input type="text" id="global-cover-artist" placeholder="e.g., Art by the Underscore" style="width: 100%;">
           </div>
+          <div>
+            <label style="font-size: 0.75rem; color: #8b949e; display: block; margin-bottom: 3px;">UPC / Barcode (optional):</label>
+            <input type="text" id="global-upc" placeholder="e.g., 012345678905" style="width: 100%;">
+          </div>
         </div>
 
         <div style="display: flex; gap: 10px; align-items: center; margin-top: 5px;">
@@ -220,33 +224,8 @@
       </div>
     </div>
 
-    <!-- System Logs -->
-    <div class="card">
-      <h3>System Logs</h3>
-      <div id="log">Awaiting workflow initialization...</div>
-    </div>
-
-    <!-- Step 4: Sovereign Release Dashboard Target -->
-    <div class="card" id="step-4-card">
-      <h3>4. Sovereign HLS Release Dashboard</h3>
-      <p>Stream your encrypted release directly from your authorized Google Drive vault.</p>
-      <div id="sovereign-player-card-target"></div>
-    </div>
-
-    <!-- Step 5: Distribution Embed Snippet -->
-    <div class="card" id="embed-card">
-      <h3>5. Release Embed & Direct Stream Code</h3>
-      <p>Copy the HTML iframe snippet to embed your sovereign player on external sites, or grab the direct stream link.</p>
-      <textarea id="embed-output-box" class="embed-box" readonly placeholder="Awaiting audio processing and Drive sync to generate embed code..."></textarea>
-      <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
-        <button class="copy-btn" onclick="copyEmbedCode()">📋 Copy Embed Code</button>
-        <button class="copy-btn" style="background: #238636;" onclick="copyPlayerDirectLink()">🔗 Copy Player Link</button>
-        <button class="copy-btn" style="background: #21262d; border: 1px solid #30363d;" onclick="forceRegenerateEmbed()">♻️ Update Release Info (Same Audio)</button>
-      </div>
-    </div>
-
     <div class="card" id="storefront-card">
-      <h3>6. Download & Licensing Links</h3>
+      <h3>4. Download & Licensing Links</h3>
       <p>Paste your Paystack payment page link (with a product per track plus a full release) and the email licensing requests should go to.</p>
       <label style="font-size:0.75rem;color:#8b949e;display:block;margin-bottom:3px;">Paystack payment page link:</label>
       <input type="url" id="release-payment-url" placeholder="https://paystack.shop/pay/..." style="width:100%;margin-bottom:10px;">
@@ -254,6 +233,32 @@
       <input type="email" id="licensing-email" placeholder="you@yourdomain.com" style="width:100%;">
     </div>
 
+    <!-- System Logs -->
+    <div class="card">
+      <h3>System Logs</h3>
+      <div id="log">Awaiting workflow initialization...</div>
+    </div>
+
+    <!-- Step 5: Sovereign Release Dashboard Target -->
+    <div class="card" id="step-4-card">
+      <h3>5. Sovereign HLS Release Dashboard</h3>
+      <p>Stream your encrypted release directly from your authorized Google Drive vault.</p>
+      <div id="sovereign-player-card-target"></div>
+    </div>
+
+    <!-- Step 6: Distribution Embed Snippet -->
+    <div class="card" id="embed-card">
+      <h3>6. Release Embed & Direct Stream Code</h3>
+      <p>Copy the HTML iframe snippet to embed your sovereign player on external sites, or grab the direct stream link.</p>
+      <textarea id="embed-output-box" class="embed-box" readonly placeholder="Awaiting audio processing and Drive sync to generate embed code..."></textarea>
+      <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+        <button class="copy-btn" onclick="copyEmbedCode()">📋 Copy Embed Code</button>
+        <button class="copy-btn" style="background: #238636;" onclick="copyPlayerDirectLink()">🔗 Copy Player Link</button>
+        <button class="copy-btn" style="background: #21262d; border: 1px solid #30363d;" onclick="forceRegenerateEmbed()">♻️ Update Release Info (Same Audio)</button>
+        <button type="button" class="copy-btn" onclick="generateSeoSnippet()" style="margin-top:12px;">🔎 Generate search-friendly metadata</button>
+        <textarea id="seo-snippet-box" class="embed-box" style="height:140px;" readonly placeholder="Paste this on the page that hosts your embed, next to the player."></textarea>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -1255,6 +1260,7 @@
         coverArtData: currentAlbumArtBase64 || null,
         masterDashboardFileId: (currentManifest && currentManifest.masterDashboardFileId) || null,
         paymentPageUrl: (document.getElementById('release-payment-url')?.value || '').trim() || null,
+        upc: (document.getElementById('global-upc')?.value || '').trim() || null,
         licensingEmail: (document.getElementById('licensing-email')?.value || '').trim() || null,
         tracks: []
       };
@@ -2069,6 +2075,8 @@
          <b>Release Date:</b> ${releaseDate}<br>
          <b>Cover Art:</b> ${coverArtName}<br><br>
          ${contributorsHtml}
+         ${track.isrc ? '<br><br><b>ISRC:</b> ' + track.isrc : ''}
+         ${currentManifest.upc ? '<br><b>UPC:</b> ' + currentManifest.upc : ''}
        `;
      }
 
@@ -2479,6 +2487,41 @@
         logMessage(`❌ Failed to push updated master dashboard: ${err.message}`);
         alert("Dashboard updated locally, but Drive upload failed: " + err.message);
       }
+    }
+
+        function buildSeoSnippet(manifest) {
+      const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const tracks = (manifest.tracks || []).map((t, i) => ({
+        "@type": "MusicRecording",
+        "name": t.title,
+        "position": t.trackNumber || i + 1,
+        ...(t.isrc ? { "isrcCode": t.isrc } : {}),
+        "byArtist": { "@type": "MusicGroup", "name": manifest.artist }
+      }));
+      const data = {
+        "@context": "https://schema.org",
+        "@type": "MusicAlbum",
+        "name": manifest.title,
+        "byArtist": { "@type": "MusicGroup", "name": manifest.artist },
+        ...(manifest.date ? { "datePublished": manifest.date } : {}),
+        ...(manifest.genre ? { "genre": manifest.genre } : {}),
+        ...(manifest.upc ? { "identifier": { "@type": "PropertyValue", "propertyID": "UPC", "value": manifest.upc } } : {}),
+        "numTracks": tracks.length,
+        "track": tracks
+      };
+      const list = (manifest.tracks || []).map(t => '<li>' + esc(t.title) + (t.isrc ? ' — ISRC ' + esc(t.isrc) : '') + '</li>').join('\n');
+      return '<script type="application/ld+json">\n' + JSON.stringify(data, null, 2).replace(/</g, '\\u003c') + '\n<\/script>\n' +
+        '<h2>' + esc(manifest.title) + ' — ' + esc(manifest.artist) + '</h2>\n' +
+        (manifest.upc ? '<p>UPC: ' + esc(manifest.upc) + '</p>\n' : '') +
+        '<ol>\n' + list + '\n</ol>';
+    }
+
+    function generateSeoSnippet() {
+      const box = document.getElementById('seo-snippet-box');
+      box.value = buildSeoSnippet(compileCurrentManifest());
+      box.select();
+      navigator.clipboard.writeText(box.value);
+      logMessage('🔎 Search-friendly metadata copied. Paste it on the page that hosts your embed.');
     }
   </script>
 </body>
