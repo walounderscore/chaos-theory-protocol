@@ -1,7 +1,18 @@
-# chaos theory protocol:
+<a href="https://lh3.googleusercontent.com/pw/AP1GczMpShvibAkbcCZ_GbkLzVxuZXOHHDW85z5o4ZdGDxZCj94V0hZmOGlIetJjtqhTKNDc03Too7kNag4C2CPNzpLSfVpkN6ifmHwV6F1wv6rF5AjEbVSZ=w2400?source=screenshot.guru" 
+   style="display: block; width: 100%;">
+  
+  <img src="https://lh3.googleusercontent.com/pw/AP1GczMpShvibAkbcCZ_GbkLzVxuZXOHHDW85z5o4ZdGDxZCj94V0hZmOGlIetJjtqhTKNDc03Too7kNag4C2CPNzpLSfVpkN6ifmHwV6F1wv6rF5AjEbVSZ=w600-h315-p-k" 
+       style="width: 100%; height: auto; display: block;" 
+       alt="Embedded media" />
+
+</a>
+
+# chaos theory protocol.
 
 self-distribution for artists who love the music most.
-
+<div></div>
+<div></div>
+<br>
 <u>Music is emotions stored in code.</u>
 
 What's your goal when your music is shared?
@@ -11,10 +22,11 @@ Depending on your motivation, the route is different.
 * **emotions**→connecting. (how do they receive the emotions?)
 * **connections**→influence. (where do they send the emotions?)
 * **transactions**→business. (why do they keep the emotions?)
-
-They're streamlined. While your priority adapts to your environment, self-hosting is for artists willing to hedge their music against industrial fluctuations.
-
-It's for artists with little to lose from full independence. No interruptions allowed.
+<br>
+They're streamlined. While your priority adapts to your environment, self-distribution is for artists willing to hedge their music against industrial fluctuations.<br>
+<br>
+It's for artists with little to lose from full independence. No interruptions allowed.<br>
+<br>
 
 The **chaos theory protocol** provides a **plug & play foundation** to build your own decentralised distribution pipeline to each goal using open-source tools and low-risk infrastructure.
 
@@ -31,4 +43,4 @@ Your music lives on your domain, marketed and maintained by you (as any worker d
 7. **you don't want to keep paying after all the work to release music.**
 8. **you own your professional website to embed this tool.**
 9. **you have no interest in industry politics.**
-10. **you’ll reward your biggest fans with a tangible outlet for their emotions: download licenses they can buy for master files, and commissions on the downloads and sync deals they bring in.**
+10. **you’ll reward your biggest fans with a tangible outlet for their emotions:** download licenses they can buy for master files, and commissions on the downloads and sync deals they bring in.
