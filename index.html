@@ -1601,6 +1601,7 @@
       }
 
       currentManifest = manifest;
+      if (typeof selectedUnifiedFiles === 'undefined') document.documentElement.classList.add('chaos-hosted');
       const creditsDefaultImage = manifest.artistImgData || manifest.coverArtData || '';
       
       let embedContainer = document.getElementById('sovereign-player-card-target');
@@ -1648,16 +1649,33 @@
         <div style="display: flex; align-items: center; gap: 10px;">
           <button id="btn-share-release" style="background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">🔗 Share</button>
           <button id="btn-mobile-canvas" style="background: #238636; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">📱 Mobile Mode</button>
+          ${(typeof selectedUnifiedFiles === 'undefined' && manifest.masterDashboardFileId) ? '<button id="btn-open-full" style="background:#21262d;border:1px solid #30363d;color:#c9d1d9;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">⛶ Open</button>' : ''}
           <button id="btn-checkout-license" style="background: #1f6feb; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">⬇️ Download</button>
         </div>
       `;
       wrapper.appendChild(header);
+      const tabs = document.createElement('div');
+      tabs.id = 'chaos-tabs';
+      [['player','▶ Player'],['queue','🎵 Queue'],['credits','📜 Credits'],['lyrics','📝 Lyrics']].forEach(([k, label]) => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        if (k === 'player') b.classList.add('on');
+        b.onclick = () => {
+          wrapper.dataset.tab = k;
+          tabs.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+        };
+        tabs.appendChild(b);
+      });
+      wrapper.dataset.tab = 'player';
+      wrapper.appendChild(tabs);
 
       // --- 2. LEFT PANEL: Credits ---
       const leftPanel = document.createElement('div');
+      leftPanel.className = 'chaos-p chaos-p-credits';
       leftPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; height: 100%; box-sizing: border-box; min-width: 0;`;
       
       const leftHeader = document.createElement('div');
+      leftHeader.className = 'chaos-ph';
       leftHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 6px; cursor: pointer; flex-shrink: 0;`;
       leftHeader.innerHTML = `<h3 id="left-header-text" style="margin: 0; font-size: 13px; color: #f0f6fc;">📜 Credits</h3><span id="left-collapse-icon" style="color: #58a6ff; font-weight: bold;">◀</span>`;
       leftPanel.appendChild(leftHeader);
@@ -1703,6 +1721,7 @@
 
       // --- 3. CENTER PANEL: Stream Player (Restored Ideal Rectangular Proportions) ---
       const centerPanel = document.createElement('div');
+      centerPanel.className = 'chaos-p chaos-p-player';
       centerPanel.style.cssText = `display: flex; flex-direction: column; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; gap: 14px; position: relative; height: 100%; box-sizing: border-box; overflow: hidden; min-width: 0;`;
       
       const activeTrack = manifest.tracks[0];
@@ -1723,7 +1742,7 @@
       videoEl.className = 'video-js vjs-default-skin vjs-big-play-centered';
       videoEl.controls = true;
       videoEl.preload = 'auto';
-      videoEl.style.cssText = 'width: 100%; height: 235px; border-radius: 6px; background: #000; flex-grow: 1; box-sizing: border-box; display: block; object-fit: cover;';
+      videoEl.style.cssText = 'width: 100%;
       const initialPlayerPoster = manifest.coverArtData || manifest.artistImgData || '';
       if (initialPlayerPoster) videoEl.poster = initialPlayerPoster;
       centerPanel.appendChild(videoEl);
@@ -1741,9 +1760,11 @@
 
       // --- 4. RIGHT PANEL: Queue ---
       const rightPanel = document.createElement('div');
+      rightPanel.className = 'chaos-p chaos-p-queue';
       rightPanel.style.cssText = `background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; overflow: hidden; height: 100%; box-sizing: border-box;`;
       
       const rightHeader = document.createElement('div');
+      rightHeader.className = 'chaos-ph';
       rightHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 6px; margin-bottom: 8px; cursor: pointer; flex-shrink: 0;`;
       rightHeader.innerHTML = `<h3 id="right-header-text" style="margin: 0; font-size: 13px; color: #f0f6fc;">🎵 Queue (${manifest.tracks.length})</h3><span id="right-collapse-icon" style="color: #58a6ff; font-weight: bold;">▶</span>`;
       rightPanel.appendChild(rightHeader);
@@ -1786,6 +1807,7 @@
 
       // --- 5. BASE PANEL: Lyrics ---
       const basePanel = document.createElement('div');
+      basePanel.className = 'chaos-p chaos-p-lyrics';
       basePanel.style.cssText = `grid-column: 1 / -1; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px;`;
       basePanel.innerHTML = `
         <h3 style="margin-top: 0; font-size: 13px; color: #f0f6fc; border-bottom: 1px solid #30363d; padding-bottom: 6px;">📝 Lyrics & Notes</h3>
@@ -1797,19 +1819,44 @@
 
       embedContainer.appendChild(wrapper);
             const rs = document.createElement('style');
-            rs.textContent = `@media (max-width:720px){
-              #chaos-sovereign-dashboard{grid-template-columns:1fr !important;grid-template-rows:auto !important;}
-              #chaos-sovereign-dashboard>div{height:auto !important;}
-              #right-panel-content{max-height:220px;} #left-panel-content{max-height:240px;}
-            }`;
+            rs.textContent = `
+              #chaos-tabs{display:none;grid-column:1/-1;gap:6px;}
+              #chaos-tabs button{flex:1;background:#21262d;color:#c9d1d9;border:1px solid #30363d;padding:8px 4px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;}
+              #chaos-tabs button.on{background:#1f6feb;color:#fff;border-color:#1f6feb;}
+              #sovereign-local-player{flex:1 1 0 !important;height:auto !important;min-height:120px;width:100% !important;}
+              #sovereign-local-player .vjs-tech,#sovereign-local-player .vjs-poster{width:100% !important;height:100% !important;}
+              .chaos-hosted body{min-height:0 !important;height:100vh !important;padding:8px !important;align-items:stretch !important;}
+              .chaos-hosted #sovereign-player-card-target{height:100%;max-width:920px;}
+              .chaos-hosted #chaos-sovereign-dashboard{height:100% !important;margin:0 !important;grid-template-rows:auto minmax(0,1fr) auto !important;}
+              .chaos-hosted #chaos-sovereign-dashboard>.chaos-p{min-height:0;}
+              @media (max-height:560px) and (min-width:721px){
+                .chaos-hosted .chaos-p-lyrics{display:none !important;}
+                .chaos-hosted #chaos-sovereign-dashboard{grid-template-rows:auto minmax(0,1fr) !important;}
+              }
+              @media (max-width:720px){
+                #chaos-tabs{display:flex;}
+                #chaos-sovereign-dashboard{grid-template-columns:minmax(0,1fr) !important;}
+                .chaos-hosted #chaos-sovereign-dashboard{grid-template-rows:auto auto minmax(0,1fr) !important;}
+                #chaos-sovereign-dashboard>.chaos-p{display:none !important;}
+                #chaos-sovereign-dashboard[data-tab="player"]>.chaos-p-player,
+                #chaos-sovereign-dashboard[data-tab="queue"]>.chaos-p-queue,
+                #chaos-sovereign-dashboard[data-tab="credits"]>.chaos-p-credits,
+                #chaos-sovereign-dashboard[data-tab="lyrics"]>.chaos-p-lyrics{display:flex !important;flex-direction:column;}
+                .chaos-p-player{padding:10px !important;gap:8px !important;}
+                .chaos-ph{pointer-events:none;}
+                .chaos-ph span{display:none;}
+                ]
+              @media (max-height:340px){
+                #chaos-tabs{display:none !important;}
+                #chaos-sovereign-dashboard[data-tab]>.chaos-p:not(.chaos-p-player){display:none !important;}
+                #chaos-sovereign-dashboard[data-tab]>.chaos-p-player{display:flex !important;flex-direction:column;padding:8px !important;gap:6px !important;}
+                #chaos-sovereign-dashboard>div:first-child p{display:none;}
+                #chaos-sovereign-dashboard>div:first-child h2{font-size:15px !important;}
+                #btn-share-release,#btn-mobile-canvas{display:none !important;}
+                .chaos-hosted #chaos-sovereign-dashboard{grid-template-rows:auto minmax(0,1fr) !important;gap:8px !important;}
+              }`;
             document.head.appendChild(rs);
-      
-            if (typeof selectedUnifiedFiles === 'undefined' && window.ResizeObserver) {
-              const ping = () => { try { window.top.postMessage({ type: 'chaos-resize', height: Math.ceil(wrapper.getBoundingClientRect().height) + 40 }, '*'); } catch (e) {} };
-              new ResizeObserver(ping).observe(wrapper);
-              ping();
-            }
-
+     
       populateStep5EmbedBox(manifest);
       setupPlaybackHandlers(manifest);
 
@@ -1980,6 +2027,8 @@
       const btnMobile = document.getElementById('btn-mobile-canvas');
       const btnShare = document.getElementById('btn-share-release');
       const btnCheckout = document.getElementById('btn-checkout-license');
+      const btnFull = document.getElementById('btn-open-full');
+      if (btnFull) btnFull.onclick = () => window.open(APPS_SCRIPT_URL + '?fileId=' + manifest.masterDashboardFileId, '_blank');
 
       if (btnShuffle) {
         btnShuffle.onclick = () => {
@@ -2098,6 +2147,14 @@
      // --- ROBUST LOCAL PLAYER SOURCE MANAGEMENT & PLAYER POSTER ---
      if (window.videojs) {
        let player = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
+       if (!window.__chaosRz) {
+         window.__chaosRz = true;
+         window.addEventListener('resize', () => {
+           const p = videojs.getPlayer('sovereign-local-player');
+           if (p && p.audioOnlyMode) p.audioOnlyMode(window.innerHeight < 340);
+         });
+       }
+       if (player.audioOnlyMode) player.audioOnlyMode(window.innerHeight < 340);
        if (player) {
          // 🎵 Video.js player uses Track Cover Art / Album Cover as its poster
          const trackPoster = track.thumbData || currentManifest.coverArtData || currentManifest.artistImgData || '';
