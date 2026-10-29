@@ -2576,7 +2576,7 @@
       }
     }
 
-        function buildSeoSnippet(manifest) {
+    function buildSeoSnippet(manifest) {
       const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const tracks = (manifest.tracks || []).map((t, i) => ({
         "@type": "MusicRecording",
