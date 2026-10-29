@@ -10,10 +10,9 @@
 # chaos theory protocol.
 
 self-distribution for artists who love the music most.
-<div></div>
-<div></div>
-<br>
-<u>Music is emotions stored in code.</u>
+<br></br>
+
+### Music is emotions stored in code.
 
 What's your goal when your music is shared?
 ## **connecting. influence. business.**
