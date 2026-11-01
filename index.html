@@ -860,7 +860,7 @@
       if (file && file.type.startsWith('image/')) {
         const reader = new FileReader();
         reader.onload = async function(e) {
-          const small = await shrinkImage(e.target.result, 800, 0.82);
+          const small = await shrinkImage(e.target.result, 1600, 0.85);
           previewImg.src = small;
           currentAlbumArtBase64 = small;
         };
@@ -1109,7 +1109,7 @@
             for (let i = 0; i < data.length; i++) base64String += String.fromCharCode(data[i]);
             const rawThumb = `data:${format};base64,${window.btoa(base64String)}`;
             const thumbUrl = await shrinkImage(rawThumb, 96, 0.7);
-            const fullUrl = await shrinkImage(rawThumb, 800, 0.82);
+            const fullUrl = await shrinkImage(rawThumb, 1600, 0.85);
             const thumbImg = trackCard.querySelector('.t-thumb-preview');
             const setArtBtn = trackCard.querySelector('.set-album-art-btn');
             if (thumbImg) { thumbImg.src = thumbUrl; thumbImg.dataset.full = fullUrl; thumbImg.style.display = 'block'; }
@@ -1841,7 +1841,7 @@
               #sovereign-local-player .vjs-tech,#sovereign-local-player .vjs-poster{width:100% !important;height:100% !important;}
               .chaos-hosted body{min-height:0 !important;height:100vh !important;padding:8px !important;align-items:stretch !important;}
               .chaos-hosted #sovereign-player-card-target{height:100%;max-width:920px;}
-              .chaos-hosted #chaos-sovereign-dashboard{height:100% !important;margin:0 !important;grid-template-rows:auto minmax(0,1fr) auto !important;}
+              .chaos-hosted #chaos-sovereign-dashboard{height:100% !important;margin:0 !important;grid-template-rows:auto minmax(0,460px) auto !important;}
               .chaos-hosted #chaos-sovereign-dashboard>.chaos-p{min-height:0;}
               @media (max-height:560px) and (min-width:721px){
                 .chaos-hosted .chaos-p-lyrics{display:none !important;}
@@ -1850,7 +1850,7 @@
               @media (max-width:720px){
                 #chaos-tabs{display:flex;}
                 #chaos-sovereign-dashboard{grid-template-columns:minmax(0,1fr) !important;}
-                .chaos-hosted #chaos-sovereign-dashboard{grid-template-rows:auto auto minmax(0,1fr) !important;}
+                .chaos-hosted #chaos-sovereign-dashboard{grid-template-rows:auto auto minmax(0,560px) !important;}
                 #chaos-sovereign-dashboard>.chaos-p{display:none !important;}
                 #chaos-sovereign-dashboard[data-tab="player"]>.chaos-p-player,
                 #chaos-sovereign-dashboard[data-tab="queue"]>.chaos-p-queue,
@@ -1859,7 +1859,7 @@
                 .chaos-p-player{padding:10px !important;gap:8px !important;}
                 .chaos-ph{pointer-events:none;}
                 .chaos-ph span{display:none;}
-                ]
+                }
               @media (max-height:340px){
                 #chaos-tabs{display:none !important;}
                 #chaos-sovereign-dashboard[data-tab]>.chaos-p:not(.chaos-p-player){display:none !important;}
@@ -2033,9 +2033,21 @@
             if(!f||!d.type||String(d.type).indexOf('chaos-')!==0)return;
             if(d.type==='chaos-resize'&&!f.dataset.full)f.style.height=d.height+'px';
             if(d.type==='chaos-fullscreen'){
-              if(d.on){f.dataset.full='1';f.dataset.css=f.style.cssText;f.style.cssText='position:fixed;inset:0;width:100vw;height:100dvh;z-index:2147483647;border:0;border-radius:0;';}
-              else if(f.dataset.full){delete f.dataset.full;f.style.cssText=f.dataset.css;}
+              if(d.on){
+                f.dataset.full='1';
+                var pin=function(){f.dataset.css=f.style.cssText;f.style.cssText='position:fixed;inset:0;width:100vw;height:100dvh;z-index:2147483647;border:0;border-radius:0;';};
+                var p=f.requestFullscreen?f.requestFullscreen():null;
+                if(p&&p.catch)p.catch(pin);else pin();
+              }else if(f.dataset.full){
+                delete f.dataset.full;
+                if(document.fullscreenElement&&document.exitFullscreen)document.exitFullscreen();
+                if(f.dataset.css!==undefined){f.style.cssText=f.dataset.css;delete f.dataset.css;}
+              }
             }
+          });
+          document.addEventListener('fullscreenchange',function(){
+            var f=document.getElementById('chaos-embed');
+            if(f&&!document.fullscreenElement&&f.dataset.full&&f.dataset.css===undefined)delete f.dataset.full;
           });
           <\/script>`;
           embedBox.value = embedHtml;
@@ -2220,17 +2232,35 @@
         } else if (isHosted && track.widgetFileId) {
           // hosted: pull this track's playlist from Drive into the same player
           const cache = (window.__chaosPl = window.__chaosPl || {});
-          const fetchPl = (id) => cache[id] || (cache[id] = fetch(`${APPS_SCRIPT_URL}?fileId=${id}&mode=playlist`)
-            .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
-            .catch(e => { delete cache[id]; throw e; }));
+          const okPl = t => typeof t === 'string' && t.length > 2000 && /^[A-Za-z0-9+\/=\s]+$/.test(t);
+          const fetchPl = (id, tries = 2) => cache[id] || (cache[id] = (async () => {
+            for (let i = 0; i <= tries; i++) {
+              try {
+                const r = await fetch(`${APPS_SCRIPT_URL}?fileId=${id}&mode=playlist`);
+                const t = r.ok ? (await r.text()).trim() : '';
+                if (okPl(t)) return t;
+              } catch (e) {}
+              await new Promise(res => setTimeout(res, 800 * (i + 1)));
+            }
+            delete cache[id];
+            throw new Error('playlist fetch failed');
+          })());
+          const loadPl = id => fetchPl(id).then(t => okPl(t) ? t : (delete cache[id], fetchPl(id)));
           const reqId = (window.__chaosReq = (window.__chaosReq || 0) + 1);
 
           player.pause();
-          fetchPl(track.widgetFileId).then(b64 => {
+          loadPl(track.widgetFileId).then(b64 => {
             if (reqId !== window.__chaosReq) return; // a newer track was chosen
             const bytes = Uint8Array.from(atob(b64), m => m.codePointAt(0));
             const blob = new Blob([new TextDecoder().decode(bytes)], { type: 'application/x-mpegURL' });
             player.src({ src: URL.createObjectURL(blob), type: 'application/x-mpegURL' });
+            player.one('loadedmetadata', () => { window.__chaosRetry = null; });
+            player.one('error', () => {
+              if (window.__chaosRetry === track.widgetFileId) return;
+              window.__chaosRetry = track.widgetFileId;
+              delete cache[track.widgetFileId];
+              selectTrack(idx);
+            });
             player.play().catch(() => {});
 
             // prefetch the next track so advancing is instant; drop older entries
@@ -2578,7 +2608,7 @@
     async function forceRegenerateEmbed() {
       // Re-compile the current manifest from your active workspace inputs
       const manifest = compileCurrentManifest();
-      if (manifest.coverArtData) manifest.coverArtData = await shrinkImage(manifest.coverArtData, 800, 0.82);
+      if (manifest.coverArtData) manifest.coverArtData = await shrinkImage(manifest.coverArtData, 1600, 0.85);
       if (manifest.artistImgData) manifest.artistImgData = await shrinkImage(manifest.artistImgData, 800, 0.82);
       for (const t of manifest.tracks) if (t.thumbData) t.thumbData = await shrinkImage(t.thumbData, 400, 0.75);
       
