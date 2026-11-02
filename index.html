@@ -45,8 +45,6 @@
     .album-live-badge { display: flex; align-items: center; gap: 15px; background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #21262d; margin-bottom: 12px; }
     .badge-details h3 { margin: 0; font-size: 1.1rem; color: #58a6ff; font-weight: bold; }
     .badge-details p { margin: 2px 0 0 0; font-size: 0.8rem; color: #8b949e; }
-    /* Custom Dark Scrollbars for Queue and Credits Panels */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #161b22; border-radius: 3px; }
     ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: #484f58; }
@@ -1534,7 +1532,7 @@
       const playlistBase64 = btoa(unescape(encodeURIComponent(cloudM3u8Content)));
       const manifest = compileCurrentManifest();
       const trackData = manifest.tracks[trackIndex] || manifest.tracks[0];
-      const trackPoster = trackData?.thumbData || manifest.coverArtData || manifest.artistImgData || '';
+      const trackPoster = manifest.coverArtData ? await shrinkImage(manifest.coverArtData, 400, 0.7) : (trackData?.thumbData || manifest.artistImgData || '');
 
       const sanitizedName = (trackTitle || 'track')
         .toLowerCase()
@@ -1653,34 +1651,37 @@
 
       // --- 1. HEADER ---
       const header = document.createElement('div');
-      header.style.cssText = `grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 14px; flex-wrap: wrap; gap: 12px;`;
+      header.className = 'chaos-hd';
+      header.style.cssText = 'grid-column: 1 / -1;';
       header.innerHTML = `
-        <div>
-          <h2 style="margin: 0; font-size: 22px; color: #f0f6fc; font-weight: 700;">${manifest.title || 'Chaos Theory Protocol'}</h2>
-          <p style="margin: 4px 0 0; font-size: 14px; color: #8b949e;">${manifest.artist || 'walo, the underscore.'} • ${manifest.date ? manifest.date.split('-')[0] : '2026'} • ${manifest.genre || 'Sovereign Audio Vault'}</p>
+        <div class="chaos-ht">
+          <h2>${manifest.title || 'Chaos Theory Protocol'}</h2>
+          <p>${manifest.artist || 'walo, the underscore.'} • ${manifest.date ? manifest.date.split('-')[0] : '2026'} • ${manifest.genre || 'Sovereign Audio Vault'}</p>
         </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <button id="btn-share-release" style="background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">🔗 Share</button>
-          <button id="btn-mobile-canvas" style="background: #238636; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">📱 Mobile Mode</button>
-          ${(typeof selectedUnifiedFiles === 'undefined' && manifest.masterDashboardFileId) ? '<button id="btn-open-full" style="background:#21262d;border:1px solid #30363d;color:#c9d1d9;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">⛶ Open</button>' : ''}
-          <button id="btn-checkout-license" style="background: #1f6feb; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">⬇️ Download</button>
+        <div class="chaos-hbs">
+          <button id="btn-share-release" class="chaos-hb" title="Share" style="background:#21262d;border:1px solid #30363d;color:#c9d1d9;">🔗<span class="lbl"> Share</span></button>
+          <button id="btn-mobile-canvas" class="chaos-hb" title="Mobile Mode" style="background:#238636;color:#fff;border:none;">📱<span class="lbl"> Mobile Mode</span></button>
+          ${(typeof selectedUnifiedFiles === 'undefined' && manifest.masterDashboardFileId) ? '<button id="btn-open-full" class="chaos-hb" title="Open in a new tab" style="background:#21262d;border:1px solid #30363d;color:#c9d1d9;">⛶<span class="lbl"> Open</span></button>' : ''}
+          <button id="btn-checkout-license" class="chaos-hb" title="Download" style="background:#1f6feb;color:#fff;border:none;">⬇️<span class="lbl"> Download</span></button>
+          <button id="btn-menu" class="chaos-hb" title="Menu" style="background:#21262d;border:1px solid #30363d;color:#c9d1d9;display:none;">☰</button>
         </div>
       `;
       wrapper.appendChild(header);
-      const tabs = document.createElement('div');
-      tabs.id = 'chaos-tabs';
-      [['player','▶ Player'],['queue','🎵 Queue'],['credits','📜 Credits'],['lyrics','📝 Lyrics']].forEach(([k, label]) => {
-        const b = document.createElement('button');
-        b.textContent = label;
-        if (k === 'player') b.classList.add('on');
-        b.onclick = () => {
-          wrapper.dataset.tab = k;
-          tabs.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
-        };
-        tabs.appendChild(b);
+
+      const menu = document.createElement('div');
+      menu.id = 'chaos-menu';
+      menu.style.cssText = 'display:none;position:absolute;right:8px;top:44px;z-index:50;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:6px;min-width:170px;box-shadow:0 8px 24px rgba(0,0,0,0.6);';
+      [['btn-mobile-canvas','📱 Mobile Mode'],['btn-checkout-license','⬇️ Download'],['btn-share-release','🔗 Share'],['btn-open-full','⛶ Open']].forEach(([id, label]) => {
+        if (!header.querySelector('#' + id)) return;
+        const item = document.createElement('button');
+        item.textContent = label;
+        item.style.cssText = 'display:block;width:100%;text-align:left;background:transparent;color:#c9d1d9;border:none;padding:9px 10px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;';
+        item.onclick = () => { menu.style.display = 'none'; const real = wrapper.querySelector('#' + id); if (real) real.click(); };
+        menu.appendChild(item);
       });
-      wrapper.dataset.tab = 'player';
-      wrapper.appendChild(tabs);
+      wrapper.appendChild(menu);
+      header.querySelector('#btn-menu').onclick = () => { menu.style.display = menu.style.display === 'none' ? 'block' : 'none'; };
+      wrapper.addEventListener('click', e => { if (e.target.id !== 'btn-menu' && !menu.contains(e.target)) menu.style.display = 'none'; });
 
       // --- 2. LEFT PANEL: Credits ---
       const leftPanel = document.createElement('div');
@@ -1786,28 +1787,6 @@
       trackListContainer.id = 'right-panel-content';
       trackListContainer.style.cssText = `overflow-y: auto; flex-grow: 1; display: flex; flex-direction: column; gap: 6px;`;
 
-      if (manifest.tracks.length === 0) {
-        trackListContainer.innerHTML = `<div style="color: #8b949e; font-size: 11px; font-style: italic; padding: 10px; text-align: center;">No tracks processed yet. Build a release above to populate queue.</div>`;
-      } else {
-        const firstThumb = (manifest.tracks.find(t => t.thumbData) || {}).thumbData || manifest.coverArtData || '';
-        manifest.tracks.forEach((track, idx) => {
-          const trackBtn = document.createElement('button');
-          trackBtn.className = 'track-select-btn';
-          trackBtn.dataset.index = idx;
-          trackBtn.style.cssText = `
-            background: ${idx === 0 ? '#1f6feb' : '#21262d'}; color: #c9d1d9; border: 1px solid #30363d;
-            padding: 8px 10px; border-radius: 6px; text-align: left; cursor: pointer; font-size: 12px;
-            display: flex; align-items: center; gap: 8px; transition: background 0.2s; flex-shrink: 0;
-          `;
-          const trackThumb = (track.thumbData || firstThumb) 
-            ? `<img src="${(track.thumbData || firstThumb)}" style="width: 24px; height: 24px; border-radius: 3px; object-fit: cover;" />`
-            : `<div style="width: 24px; height: 24px; background: #30363d; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600;">${idx + 1}</div>`;
-
-          trackBtn.innerHTML = `${trackThumb} <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1;">${track.trackNumber || idx + 1}. ${track.title}</span>`;
-          trackBtn.onclick = () => selectTrack(idx);
-          trackListContainer.appendChild(trackBtn);
-        });
-      }
       rightPanel.appendChild(trackListContainer);
 
       rightHeader.onclick = () => {
@@ -1830,8 +1809,23 @@
         </div>
       `;
       wrapper.appendChild(basePanel);
+     const tabs = document.createElement('div');
+      tabs.id = 'chaos-tabs';
+      [['player','▶ Player'],['queue','🎵 Queue'],['credits','📜 Credits'],['lyrics','📝 Lyrics']].forEach(([k, label]) => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        if (k === 'player') b.classList.add('on');
+        b.onclick = () => {
+          wrapper.dataset.tab = k;
+          tabs.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+        };
+        tabs.appendChild(b);
+      });
+      wrapper.dataset.tab = 'player';
+      wrapper.appendChild(tabs);
 
       embedContainer.appendChild(wrapper);
+            renderQueue();
             const rs = document.createElement('style');
             rs.textContent = `
               #chaos-tabs{display:none;grid-column:1/-1;gap:6px;}
@@ -1841,8 +1835,16 @@
               #sovereign-local-player .vjs-tech,#sovereign-local-player .vjs-poster{width:100% !important;height:100% !important;}
               .chaos-hosted body{min-height:0 !important;height:100vh !important;padding:8px !important;align-items:stretch !important;}
               .chaos-hosted #sovereign-player-card-target{height:100%;max-width:920px;}
-              .chaos-hosted #chaos-sovereign-dashboard{height:100% !important;margin:0 !important;grid-template-rows:auto minmax(0,460px) auto !important;}
+              .chaos-hosted #chaos-sovereign-dashboard{height:100% !important;margin:0 !important;align-content:start;grid-template-rows:auto minmax(0,460px) auto !important;}
               .chaos-hosted #chaos-sovereign-dashboard>.chaos-p{min-height:0;}
+              
+              .chaos-hd{display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid #30363d;padding-bottom:14px;min-width:0;}
+              .chaos-ht{min-width:0;flex:1 1 auto;}
+              .chaos-ht h2{margin:0;font-size:22px;color:#f0f6fc;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+              .chaos-ht p{margin:4px 0 0;font-size:14px;color:#8b949e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+              .chaos-hbs{display:flex;align-items:center;gap:10px;flex:none;}
+              .chaos-hb{padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;}
+              .chaos-hosted body{overflow-x:hidden !important;}
               @media (max-height:560px) and (min-width:721px){
                 .chaos-hosted .chaos-p-lyrics{display:none !important;}
                 .chaos-hosted #chaos-sovereign-dashboard{grid-template-rows:auto minmax(0,1fr) !important;}
@@ -1850,7 +1852,13 @@
               @media (max-width:720px){
                 #chaos-tabs{display:flex;}
                 #chaos-sovereign-dashboard{grid-template-columns:minmax(0,1fr) !important;}
-                .chaos-hosted #chaos-sovereign-dashboard{grid-template-rows:auto auto minmax(0,560px) !important;}
+                .chaos-hosted #chaos-sovereign-dashboard{grid-template-rows:auto minmax(0,1fr) auto !important;}
+                .chaos-hd{padding-bottom:8px;gap:8px;}
+                .chaos-ht h2{font-size:15px;}
+                .chaos-ht p{display:none;}
+                .chaos-hbs .chaos-hb:not(#btn-menu){display:none !important;}
+                #btn-menu{display:inline-block !important;padding:5px 10px;font-size:14px;}
+                .chaos-hosted body{padding:6px !important;}
                 #chaos-sovereign-dashboard>.chaos-p{display:none !important;}
                 #chaos-sovereign-dashboard[data-tab="player"]>.chaos-p-player,
                 #chaos-sovereign-dashboard[data-tab="queue"]>.chaos-p-queue,
@@ -1860,14 +1868,18 @@
                 .chaos-ph{pointer-events:none;}
                 .chaos-ph span{display:none;}
                 }
-              @media (max-height:340px){
+                @media (max-height:420px){
+                #active-track-artist{display:none;}
+                .chaos-p-player>div:first-child{padding-bottom:6px !important;}
+                .chaos-p-player>div:last-child{padding:4px 8px !important;}
+                #chaos-tabs button{padding:5px 4px;}
+              }
+              @media (max-height:300px){
                 #chaos-tabs{display:none !important;}
                 #chaos-sovereign-dashboard[data-tab]>.chaos-p:not(.chaos-p-player){display:none !important;}
-                #chaos-sovereign-dashboard[data-tab]>.chaos-p-player{display:flex !important;flex-direction:column;padding:8px !important;gap:6px !important;}
-                #chaos-sovereign-dashboard>div:first-child p{display:none;}
-                #chaos-sovereign-dashboard>div:first-child h2{font-size:15px !important;}
+                #chaos-sovereign-dashboard[data-tab]>.chaos-p-player{display:flex !important;flex-direction:column;padding:6px !important;gap:4px !important;}
                 #btn-share-release,#btn-mobile-canvas{display:none !important;}
-                .chaos-hosted #chaos-sovereign-dashboard{grid-template-rows:auto minmax(0,1fr) !important;gap:8px !important;}
+                .chaos-hosted #chaos-sovereign-dashboard{grid-template-rows:auto minmax(0,1fr) !important;gap:6px !important;}
               }`;
             document.head.appendChild(rs);
      
@@ -1985,7 +1997,9 @@
         typeof openShareOptionsModal === 'function' ? openShareOptionsModal : null,
         typeof dispatchShare === 'function' ? dispatchShare : null,
         typeof openMobilePortraitModal === 'function' ? openMobilePortraitModal : null,
-        typeof openPaystackCheckoutModal === 'function' ? openPaystackCheckoutModal : null
+        typeof openPaystackCheckoutModal === 'function' ? openPaystackCheckoutModal : null,
+        typeof renderQueue === 'function' ? renderQueue : null,
+        typeof moveTrack === 'function' ? moveTrack : null
       ];
 
       funcs.forEach(f => {
@@ -2026,30 +2040,7 @@
         if (manifest.masterDashboardFileId) {
           const masterViewerUrl = `${APPS_SCRIPT_URL}?fileId=${manifest.masterDashboardFileId}`;
           // Fluid height adjustment without fixed 720px limit
-          const embedHtml = `<iframe id="chaos-embed" src="${masterViewerUrl}" style="width:100%;height:560px;border:none;border-radius:12px;background:#0d1117;" allow="autoplay; encrypted-media; fullscreen"></iframe>
-          <script>
-          window.addEventListener('message',function(e){
-            var d=e.data||{},f=document.getElementById('chaos-embed');
-            if(!f||!d.type||String(d.type).indexOf('chaos-')!==0)return;
-            if(d.type==='chaos-resize'&&!f.dataset.full)f.style.height=d.height+'px';
-            if(d.type==='chaos-fullscreen'){
-              if(d.on){
-                f.dataset.full='1';
-                var pin=function(){f.dataset.css=f.style.cssText;f.style.cssText='position:fixed;inset:0;width:100vw;height:100dvh;z-index:2147483647;border:0;border-radius:0;';};
-                var p=f.requestFullscreen?f.requestFullscreen():null;
-                if(p&&p.catch)p.catch(pin);else pin();
-              }else if(f.dataset.full){
-                delete f.dataset.full;
-                if(document.fullscreenElement&&document.exitFullscreen)document.exitFullscreen();
-                if(f.dataset.css!==undefined){f.style.cssText=f.dataset.css;delete f.dataset.css;}
-              }
-            }
-          });
-          document.addEventListener('fullscreenchange',function(){
-            var f=document.getElementById('chaos-embed');
-            if(f&&!document.fullscreenElement&&f.dataset.full&&f.dataset.css===undefined)delete f.dataset.full;
-          });
-          <\/script>`;
+          const embedHtml = `<iframe src="${masterViewerUrl}" width="100%" style="width:100%;height:100%;min-height:480px;border:none;border-radius:12px;background:#0d1117;" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>`;
           embedBox.value = embedHtml;
         } else {
           embedBox.value = '';
@@ -2195,7 +2186,7 @@
        if (player.audioOnlyMode) player.audioOnlyMode(window.innerHeight < 340);
        if (player) {
          // 🎵 Video.js player uses Track Cover Art / Album Cover as its poster
-         const trackPoster = track.thumbData || currentManifest.coverArtData || currentManifest.artistImgData || '';
+         const trackPoster = currentManifest.coverArtData || track.thumbData || currentManifest.artistImgData || '';
          if (trackPoster) player.poster(trackPoster);
 
         const oldFrame = document.getElementById('hosted-track-frame');
@@ -2245,7 +2236,7 @@
             delete cache[id];
             throw new Error('playlist fetch failed');
           })());
-          const loadPl = id => fetchPl(id).then(t => okPl(t) ? t : (delete cache[id], fetchPl(id)));
+          const loadPl = id => fetchPl(id).then(t => okPl(t) ? t : (delete cache[id], fetchPl(id))).catch(() => { delete cache[id]; return fetchPl(id); });
           const reqId = (window.__chaosReq = (window.__chaosReq || 0) + 1);
 
           player.pause();
@@ -2299,6 +2290,99 @@
       }
       selectTrack(nextIdx);
     }
+    
+    function moveTrack(from, to) {
+      if (from === to || !currentManifest || !currentManifest.tracks) return;
+      const tracks = currentManifest.tracks;
+      const playing = tracks[currentTrackIndex];
+      const moved = tracks.splice(from, 1)[0];
+      tracks.splice(to, 0, moved);
+      currentTrackIndex = Math.max(0, tracks.indexOf(playing));
+      renderQueue();
+      const num = document.getElementById('active-track-num');
+      if (num) num.innerText = (currentTrackIndex + 1) + ' / ' + tracks.length;
+    }
+
+    function renderQueue() {
+      const list = document.getElementById('right-panel-content');
+      if (!list || !currentManifest) return;
+      const tracks = currentManifest.tracks || [];
+      const canReorder = typeof selectedUnifiedFiles === 'undefined';
+      const firstThumb = (tracks.find(t => t.thumbData) || {}).thumbData || currentManifest.coverArtData || '';
+      list.innerHTML = '';
+
+      if (tracks.length === 0) {
+        list.innerHTML = '<div style="color:#8b949e;font-size:11px;font-style:italic;padding:10px;text-align:center;">No tracks processed yet. Build a release above to populate queue.</div>';
+        return;
+      }
+
+      tracks.forEach((track, idx) => {
+        const row = document.createElement('div');
+        row.className = 'track-select-btn';
+        row.dataset.index = idx;
+        row.style.cssText = 'background:' + (idx === currentTrackIndex ? '#1f6feb' : '#21262d') + ';color:#c9d1d9;border:1px solid #30363d;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:8px;flex-shrink:0;transition:background 0.2s;';
+
+        const handle = document.createElement('span');
+        handle.textContent = '⋮⋮';
+        handle.title = 'Drag to reorder';
+        handle.style.cssText = 'cursor:grab;touch-action:none;color:#8b949e;font-size:14px;padding:2px 4px;margin-left:-4px;flex-shrink:0;user-select:none;';
+        handle.onclick = ev => ev.stopPropagation();
+        if (canReorder) row.appendChild(handle);
+
+        const thumbSrc = track.thumbData || firstThumb;
+        row.insertAdjacentHTML('beforeend', thumbSrc
+          ? '<img src="' + thumbSrc + '" style="width:24px;height:24px;border-radius:3px;object-fit:cover;flex-shrink:0;" />'
+          : '<div style="width:24px;height:24px;background:#30363d;border-radius:3px;flex-shrink:0;"></div>');
+
+        const label = document.createElement('span');
+        label.style.cssText = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-grow:1;';
+        label.textContent = (idx + 1) + '. ' + track.title;
+        row.appendChild(label);
+
+        row.onclick = () => selectTrack(idx);
+
+        if (canReorder) {
+          handle.addEventListener('pointerdown', ev => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            const rows = Array.from(list.children);
+            const from = idx;
+            let to = from;
+            handle.setPointerCapture(ev.pointerId);
+            row.style.opacity = '0.5';
+
+            const move = mv => {
+              const y = mv.clientY;
+              const lr = list.getBoundingClientRect();
+              if (y < lr.top + 24) list.scrollTop -= 8;
+              else if (y > lr.bottom - 24) list.scrollTop += 8;
+              let t = rows.length - 1;
+              for (let i = 0; i < rows.length; i++) {
+                if (y < rows[i].getBoundingClientRect().bottom) { t = i; break; }
+              }
+              rows.forEach(r => { r.style.boxShadow = ''; });
+              to = t;
+              if (to !== from) rows[to].style.boxShadow = (to > from ? '0 3px 0 0' : '0 -3px 0 0') + ' #58a6ff';
+            };
+            const finish = commit => {
+              handle.removeEventListener('pointermove', move);
+              handle.removeEventListener('pointerup', onUp);
+              handle.removeEventListener('pointercancel', onCancel);
+              rows.forEach(r => { r.style.boxShadow = ''; });
+              row.style.opacity = '';
+              if (commit) moveTrack(from, to);
+            };
+            const onUp = () => finish(true);
+            const onCancel = () => finish(false);
+            handle.addEventListener('pointermove', move);
+            handle.addEventListener('pointerup', onUp);
+            handle.addEventListener('pointercancel', onCancel);
+          });
+        }
+
+        list.appendChild(row);
+      });
+    }    
 
     function openShareOptionsModal(manifest) {
       let modal = document.getElementById('chaos-share-modal');
@@ -2376,11 +2460,11 @@
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <button id="close-mobile-modal" style="background: transparent; color: #c9d1d9; border: none; font-size: 24px; cursor: pointer;">✕</button>
           <span style="font-size: 12px; color: #8b949e; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;">NOW PLAYING</span>
-          <button id="mobile-checkout-btn" style="background: #1f6feb; color: #fff; border: none; padding: 6px 12px; border-radius: 16px; font-size: 11px; font-weight: 600;">⬇ ️Download</button>
+          <button id="mobile-checkout-btn" style="background: #1f6feb; color: #fff; border: none; padding: 6px 12px; border-radius: 16px; font-size: 11px; font-weight: 600;">⬇️ Download</button>
         </div>
 
         <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; margin: auto 0;">
-          <img id="mobile-canvas-art" src="${activeTrack?.thumbData || manifest.coverArtData || ''}" style="width: 240px; height: 240px; border-radius: 16px; object-fit: cover; box-shadow: 0 12px 32px rgba(0,0,0,0.8);" />
+          <img id="mobile-canvas-art" src="${manifest.coverArtData || activeTrack?.thumbData || ''}" style="width: 240px; height: 240px; border-radius: 16px; object-fit: cover; box-shadow: 0 12px 32px rgba(0,0,0,0.8);" />
           <div style="text-align: center; width: 100%;">
             <h2 id="mobile-canvas-title" style="margin: 0; font-size: 20px; color: #f0f6fc;">${activeTrack?.title || 'Select Track'}</h2>
             <p style="margin: 6px 0 0; font-size: 14px; color: #8b949e;">${manifest.artist}</p>
@@ -2411,14 +2495,15 @@
       document.body.appendChild(modal);
 
       try { window.top.postMessage({ type: 'chaos-fullscreen', on: true }, '*'); } catch (e) {}
+      try { const el = document.documentElement; if (el.requestFullscreen && !document.fullscreenElement) el.requestFullscreen().catch(() => {}); } catch (e) {}
 
       document.getElementById('close-mobile-modal').onclick = () => {
         try { window.top.postMessage({ type: 'chaos-fullscreen', on: false }, '*'); } catch (e) {}
-        modal.remove();
+        modal.remove(); if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
       };
       document.getElementById('mobile-checkout-btn').onclick = () => {
         try { window.top.postMessage({ type: 'chaos-fullscreen', on: false }, '*'); } catch (e) {}
-        modal.remove();
+        modal.remove(); if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
         openPaystackCheckoutModal(manifest);
       };
 
@@ -2505,7 +2590,7 @@
     function syncMobileCanvasView(track, idx) {
       const mobileArt = document.getElementById('mobile-canvas-art');
       const mobileTitle = document.getElementById('mobile-canvas-title');
-      if (mobileArt && track.thumbData) mobileArt.src = track.thumbData;
+      if (mobileArt && currentManifest && currentManifest.coverArtData) mobileArt.src = currentManifest.coverArtData;
       if (mobileTitle) mobileTitle.innerText = track.title;
     }
 
@@ -2557,7 +2642,7 @@
 
           <div style="${card}margin-top:12px;">
             <strong style="color:#f0f6fc;font-size:14px;">Use it in your project</strong>
-            <div style="font-size:12px;color:#8b949e;margin-top:4px;">Tell me about what you're creating and I'll a send signed license to use my music.</div>
+            <div style="font-size:12px;color:#8b949e;margin-top:4px;">Tell me about what you're creating and I'll send you a signed license to use my music.</div>
             ${email
               ? `<a href="${mailto}" style="${btn}background:#1f6feb;">Email your project</a>
                  <div style="font-size:11px;color:#8b949e;margin-top:8px;text-align:center;">Or write to <span style="color:#c9d1d9;user-select:all;">${email}</span></div>`
@@ -2610,7 +2695,7 @@
       const manifest = compileCurrentManifest();
       if (manifest.coverArtData) manifest.coverArtData = await shrinkImage(manifest.coverArtData, 1600, 0.85);
       if (manifest.artistImgData) manifest.artistImgData = await shrinkImage(manifest.artistImgData, 800, 0.82);
-      for (const t of manifest.tracks) if (t.thumbData) t.thumbData = await shrinkImage(t.thumbData, 400, 0.75);
+      for (const t of manifest.tracks) if (t.thumbData) t.thumbData = await shrinkImage(t.thumbData, 96, 0.7);
       
       // Keep the master dashboard file ID if it was already generated
       if (currentManifest && currentManifest.masterDashboardFileId) {
