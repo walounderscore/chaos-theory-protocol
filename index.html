@@ -674,6 +674,8 @@
       if (licEmailEl) licEmailEl.value = manifest.licensingEmail || '';
       const gaEl = document.getElementById('ga-measurement-id');
       if (gaEl) gaEl.value = manifest.gaMeasurementId || '';
+      const upcEl = document.getElementById('global-upc');
+      if (upcEl) upcEl.value = manifest.upc || '';
 
       // Restore Album Cover Art
       if (manifest.coverArtData) {
@@ -2727,6 +2729,7 @@
       try {
         logMessage(`📦 Uploading updated lightweight master dashboard to Drive...`);
         const fileId = await uploadReleaseDashboardHtml(manifest);
+        await uploadManifestToDrive(manifest);
         logMessage(`✅ Master dashboard successfully re-uploaded! ID: ${fileId}`);
         alert("Embed regenerated and master dashboard updated on Google Drive!");
       } catch (err) {
