@@ -1993,16 +1993,6 @@
       scriptCode += "      document.body.innerHTML = '<pre style=\"color:red;padding:20px;white-space:pre-wrap\">' + err.stack + '</pre>';\n";
       scriptCode += "    }\n";
       scriptCode += "  });\n\n";
-      
-      scriptCode += "  function sendHeight() {\n";
-      scriptCode += "    const height = document.body.scrollHeight;\n";
-      scriptCode += "    window.parent.postMessage({ type: 'CHAOS_RESIZE', height: height }, '*');\n";
-      scriptCode += "  }\n";
-      scriptCode += "  window.addEventListener('resize', sendHeight);\n";
-      scriptCode += "  window.addEventListener('DOMContentLoaded', () => {\n";
-      scriptCode += "    setTimeout(sendHeight, 300);\n";
-      scriptCode += "    setTimeout(sendHeight, 800);\n";
-      scriptCode += "  });\n\n";
 
       const funcs = [
         typeof generateEmbedUI === 'function' ? generateEmbedUI : null,
