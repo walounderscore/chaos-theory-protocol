@@ -2145,7 +2145,7 @@
 
       if (btnCheckout) {
         btnCheckout.onclick = () => {
-          openPaystackCheckoutModal(manifest);
+          openPaystackCheckoutModal(manifest, 'header');
         };
       }
     }
@@ -2251,6 +2251,7 @@
         } else if (isHosted && track.widgetFileId) {
           // hosted: pull this track's playlist from Drive into the same player
           const cache = (window.__chaosPl = window.__chaosPl || {});
+          const urls = (window.__chaosUrls = window.__chaosUrls || {});
           const okPl = t => typeof t === 'string' && t.length > 2000 && /^[A-Za-z0-9+\/=\s]+$/.test(t);
           const fetchPl = (id, tries = 2) => cache[id] || (cache[id] = (async () => {
             for (let i = 0; i <= tries; i++) {
@@ -2265,30 +2266,48 @@
             throw new Error('playlist fetch failed');
           })());
           const loadPl = id => fetchPl(id).then(t => okPl(t) ? t : (delete cache[id], fetchPl(id))).catch(() => { delete cache[id]; return fetchPl(id); });
+
+          // download AND decode in the background, so changing tracks only hands over a ready blob URL
+          const prepare = id => urls[id] || (urls[id] = loadPl(id).then(async b64 => {
+            const clean = b64.replace(/\s/g, '');
+            let blob;
+            try {
+              blob = await (await fetch('data:application/x-mpegURL;base64,' + clean)).blob();
+            } catch (e) {
+              const bin = atob(clean);
+              const bytes = new Uint8Array(bin.length);
+              for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+              blob = new Blob([bytes], { type: 'application/x-mpegURL' });
+            }
+            return URL.createObjectURL(blob);
+          }).catch(e => { delete urls[id]; throw e; }));
+
           const reqId = (window.__chaosReq = (window.__chaosReq || 0) + 1);
-          player.addClass('vjs-waiting');
-          player.one('loadedmetadata', () => player.removeClass('vjs-waiting'));
-          player.one('error', () => player.removeClass('vjs-waiting'));
 
           player.pause();
-          loadPl(track.widgetFileId).then(b64 => {
+          prepare(track.widgetFileId).then(src => {
             if (reqId !== window.__chaosReq) return; // a newer track was chosen
-            const bytes = Uint8Array.from(atob(b64), m => m.codePointAt(0));
-            const blob = new Blob([new TextDecoder().decode(bytes)], { type: 'application/x-mpegURL' });
-            player.src({ src: URL.createObjectURL(blob), type: 'application/x-mpegURL' });
+            player.src({ src: src, type: 'application/x-mpegURL' });
             player.one('loadedmetadata', () => { window.__chaosRetry = null; });
             player.one('error', () => {
               if (window.__chaosRetry === track.widgetFileId) return;
               window.__chaosRetry = track.widgetFileId;
               delete cache[track.widgetFileId];
+              delete urls[track.widgetFileId];
               selectTrack(idx);
             });
             player.play().catch(() => {});
 
-            // prefetch the next track so advancing is instant; drop older entries
+            // prefetch + pre-decode the next track; release everything older
             const next = currentManifest.tracks[idx + 1];
+            Object.keys(urls).forEach(k => {
+              if (k !== track.widgetFileId && !(next && k === next.widgetFileId)) {
+                urls[k].then(u => URL.revokeObjectURL(u)).catch(() => {});
+                delete urls[k];
+              }
+            });
             Object.keys(cache).forEach(k => { if (k !== track.widgetFileId && !(next && k === next.widgetFileId)) delete cache[k]; });
-            if (next && next.widgetFileId) fetchPl(next.widgetFileId).catch(() => {});
+            if (next && next.widgetFileId) prepare(next.widgetFileId).catch(() => {});
           }).catch(err => console.error('Track load failed:', err));
         }
        }
@@ -2535,7 +2554,7 @@
       document.getElementById('mobile-checkout-btn').onclick = () => {
         try { window.top.postMessage({ type: 'chaos-fullscreen', on: false }, '*'); } catch (e) {}
         modal.remove(); if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
-        openPaystackCheckoutModal(manifest);
+        openPaystackCheckoutModal(manifest, 'mobile_mode');
       };
 
       // --- Repeat & Shuffle Sync bindings ---
@@ -2625,7 +2644,7 @@
       if (mobileTitle) mobileTitle.innerText = track.title;
     }
 
-    function openPaystackCheckoutModal(manifest) {
+    function openPaystackCheckoutModal(manifest, source) {
       let modal = document.getElementById('chaos-paystack-modal');
       if (modal) modal.remove();
 
@@ -2637,6 +2656,8 @@
       `;
 
       const track = (manifest.tracks && (manifest.tracks[currentTrackIndex] || manifest.tracks[0])) || {};
+      const ga = (name, extra) => { try { if (window.gtag) window.gtag('event', name, Object.assign({ track_title: track.title || '', release: manifest.title || '', source: source || 'unknown' }, extra || {})); } catch (e) {} };
+      ga('download_click');
       const payUrl = manifest.paymentPageUrl || '';
       const email = manifest.licensingEmail || '';
       const subject = encodeURIComponent('Licensing: "' + (track.title || manifest.title) + '" by ' + manifest.artist);
@@ -2667,7 +2688,7 @@
             <div style="font-size:12px;color:#8b949e;margin-top:4px;">Pick tracks or the full release, pay, and download your personal copy.</div>
             ${priceLine ? `<div style="font-size:13px;color:#58a6ff;font-weight:bold;margin-top:8px;">${priceLine}</div>` : ''}
             ${payUrl
-              ? `<a href="${payUrl}" target="_blank" rel="noopener" style="${btn}background:#238636;">Choose tracks &amp; pay</a>`
+              ? `<a href="${payUrl}" data-chaos="pay" target="_blank" rel="noopener" style="${btn}background:#238636;">Choose tracks &amp; pay</a>`
               : `<div style="font-size:12px;color:#8b949e;margin-top:10px;font-style:italic;">Downloads aren't available yet.</div>`}
           </div>
 
@@ -2675,7 +2696,7 @@
             <strong style="color:#f0f6fc;font-size:14px;">Use it in your project</strong>
             <div style="font-size:12px;color:#8b949e;margin-top:4px;">Tell me about what you're creating and I'll send you a signed license to use my music.</div>
             ${email
-              ? `<a href="${mailto}" style="${btn}background:#1f6feb;">Email your project</a>
+              ? `<a href="${mailto}" data-chaos="license" style="${btn}background:#1f6feb;">Email your project</a>
                  <div style="font-size:11px;color:#8b949e;margin-top:8px;text-align:center;">Or write to <span style="color:#c9d1d9;user-select:all;">${email}</span></div>`
               : `<div style="font-size:12px;color:#8b949e;margin-top:10px;font-style:italic;">Licensing contact not set yet.</div>`}
           </div>
@@ -2685,6 +2706,10 @@
       `;
 
       document.body.appendChild(modal);
+      const payLink = modal.querySelector('[data-chaos="pay"]');
+      if (payLink) payLink.addEventListener('click', () => ga('pay_click'));
+      const licLink = modal.querySelector('[data-chaos="license"]');
+      if (licLink) licLink.addEventListener('click', () => ga('license_click'));
       document.getElementById('close-paystack-modal').onclick = () => modal.remove();
     }
     
