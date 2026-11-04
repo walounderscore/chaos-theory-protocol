@@ -1924,6 +1924,26 @@
       titleEl.innerText = `${dashboardManifest.title} - Sovereign Release`;
       doc.head.appendChild(titleEl);
 
+      [['https://script.google.com', true], ['https://script.googleusercontent.com', true], ['https://vjs.zencdn.net', false]].forEach(([href, cors]) => {
+        const l = doc.createElement('link');
+        l.setAttribute('rel', 'preconnect');
+        l.setAttribute('href', href);
+        if (cors) l.setAttribute('crossorigin', '');
+        doc.head.appendChild(l);
+      });
+
+      const firstId = dashboardManifest.tracks && dashboardManifest.tracks[0] && dashboardManifest.tracks[0].widgetFileId;
+      if (firstId) {
+        const early = doc.createElement('script');
+        early.appendChild(doc.createTextNode(
+          "window.__chaosPl = window.__chaosPl || {};" +
+          "window.__chaosPl[" + JSON.stringify(firstId) + "] = fetch(" +
+          JSON.stringify(APPS_SCRIPT_URL + '?fileId=' + firstId + '&mode=playlist') +
+          ").then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); });"
+        ));
+        doc.head.appendChild(early);
+      }
+
       const vjsCss = doc.createElement('link');
       vjsCss.setAttribute('href', 'https://vjs.zencdn.net/8.10.0/video-js.css');
       vjsCss.setAttribute('rel', 'stylesheet');
@@ -1942,18 +1962,6 @@
         .track-select-btn:hover { background: #30363d !important; }
       `));
       doc.head.appendChild(styleEl);
-
-      const firstId = dashboardManifest.tracks && dashboardManifest.tracks[0] && dashboardManifest.tracks[0].widgetFileId;
-      if (firstId) {
-        const early = doc.createElement('script');
-        early.appendChild(doc.createTextNode(
-          "window.__chaosPl = window.__chaosPl || {};" +
-          "window.__chaosPl[" + JSON.stringify(firstId) + "] = fetch(" +
-          JSON.stringify(APPS_SCRIPT_URL + '?fileId=' + firstId + '&mode=playlist') +
-          ").then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); });"
-        ));
-        doc.head.appendChild(early);
-      }
 
       const targetDiv = doc.createElement('div');
       targetDiv.id = 'sovereign-player-card-target';
@@ -2047,7 +2055,9 @@
         if (manifest.masterDashboardFileId) {
           const masterViewerUrl = `${APPS_SCRIPT_URL}?fileId=${manifest.masterDashboardFileId}`;
           // Fluid height adjustment without fixed 720px limit
-          const embedHtml = `<style>
+          const embedHtml = `<link rel="preconnect" href="https://script.google.com">
+<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+<style>
   .sovereign-embed-container { width: 100%; height: 480px; max-height: 85vh; }
   @media (max-aspect-ratio: 1/1) {
     .sovereign-embed-container { height: 720px; max-height: 90vh; max-height: 90dvh; }
@@ -2256,6 +2266,9 @@
           })());
           const loadPl = id => fetchPl(id).then(t => okPl(t) ? t : (delete cache[id], fetchPl(id))).catch(() => { delete cache[id]; return fetchPl(id); });
           const reqId = (window.__chaosReq = (window.__chaosReq || 0) + 1);
+          player.addClass('vjs-waiting');
+          player.one('loadedmetadata', () => player.removeClass('vjs-waiting'));
+          player.one('error', () => player.removeClass('vjs-waiting'));
 
           player.pause();
           loadPl(track.widgetFileId).then(b64 => {
