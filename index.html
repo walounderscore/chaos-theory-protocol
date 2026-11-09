@@ -284,6 +284,7 @@
     let isShuffleActive = false;
     let repeatMode = 'off';
     let currentManifest = null;
+    let currentReleaseId = null;    
     let localTrackBlobMap = {};
 
     const CONTRIBUTOR_ROLES = [
@@ -665,6 +666,7 @@
 
     function loadSessionIntoUI(manifest) {
       if (!manifest) return;
+      currentReleaseId = manifest.releaseId || null;      
 
       document.getElementById('builder-release-title').value = manifest.title || '';
       document.getElementById('builder-release-date').value = manifest.date || '';
@@ -1279,6 +1281,8 @@
         bundlePrice: cards.length > 1 ? bundlePrice : null,
         coverArtData: currentAlbumArtBase64 || null,
         masterDashboardFileId: (currentManifest && currentManifest.masterDashboardFileId) || null,
+        releaseId: (currentManifest && currentManifest.releaseId) || currentReleaseId || (currentReleaseId = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
+        catalogFileId: (currentManifest && currentManifest.catalogFileId) || null,
         paymentPageUrl: (document.getElementById('release-payment-url')?.value || '').trim() || null,
         upc: (document.getElementById('global-upc')?.value || '').trim() || null,
         albumNotes: (document.getElementById('global-album-notes')?.value || '').trim() || null,
@@ -1420,6 +1424,7 @@
 
         // 1. First, generate and upload the full master dashboard HTML to Drive
         logMessage(`📦 Uploading master 3-column release dashboard to Drive...`);
+        manifest.catalogFileId = (await registerInCatalog(manifest)) || manifest.catalogFileId;        
         const masterDashboardFileId = await uploadReleaseDashboardHtml(manifest);
         manifest.masterDashboardFileId = masterDashboardFileId;
 
@@ -1521,6 +1526,78 @@
       logMessage(`☁️ Cloud snapshot synced to Drive: "${fileName}"`);
     }
 
+    function releaseTypeFor(n) { return n <= 1 ? 'Single' : (n <= 6 ? 'EP' : 'Album'); }
+
+    async function buildCatalogEntry(manifest) {
+      let cover = null, thumb = null;
+      const art = manifest.coverArtData || manifest.artistImgData || null;
+      if (art) {
+        cover = await shrinkImage(art, 480, 0.7);
+        thumb = await shrinkImage(art, 96, 0.7);
+      }
+      const tracks = (manifest.tracks || [])
+        .filter(t => t.widgetFileId)
+        .map((t, i) => ({
+          n: t.trackNumber || i + 1,
+          title: t.title,
+          widgetFileId: t.widgetFileId,
+          isrc: t.isrc || '',
+          caption: t.caption || '',
+          contributors: t.contributors || []
+        }));
+      return {
+        id: manifest.releaseId,
+        title: manifest.title,
+        artist: manifest.artist,
+        date: manifest.date || '',
+        genre: manifest.genre || '',
+        type: releaseTypeFor(tracks.length),
+        upc: manifest.upc || '',
+        coverCredit: manifest.coverArtist || '',
+        cover: cover,
+        thumb: thumb,
+        tracks: tracks
+      };
+    }
+
+    async function registerInCatalog(manifest) {
+      if (!accessToken || !driveFolderId || !manifest.releaseId) return null;
+      const name = 'chaos_catalog.json';
+      const auth = { 'Authorization': 'Bearer ' + accessToken };
+      let catalog = { version: 1, releases: [] };
+      try {
+        const q = encodeURIComponent(`name = '${name}' and '${driveFolderId}' in parents and trashed = false`);
+        const sr = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}`, { headers: auth });
+        const sd = await sr.json();
+        if (!sr.ok) throw new Error(sd.error ? sd.error.message : sr.statusText);
+        if (sd.files && sd.files.length > 0) {
+          const existingId = sd.files[0].id;
+          const cr = await fetch(`https://www.googleapis.com/drive/v3/files/${existingId}?alt=media`, { headers: auth });
+          const parsed = cr.ok ? await cr.json().catch(() => null) : null;
+          if (!parsed || !Array.isArray(parsed.releases)) {
+            logMessage('⚠️ Could not read your existing catalog, so it was left unchanged.');
+            return existingId;
+          }
+          catalog = parsed;
+        }
+      } catch (err) {
+        handleDriveError(err);
+        logMessage('⚠️ Catalog lookup failed: ' + err.message);
+        return null;
+      }
+
+      const entry = await buildCatalogEntry(manifest);
+      if (entry.tracks.length === 0) return null;
+
+      const i = catalog.releases.findIndex(r => r.id === entry.id);
+      if (i >= 0) catalog.releases[i] = entry; else catalog.releases.push(entry);
+      catalog.updated = new Date().toISOString();
+
+      const id = await uploadFileToDrive(name, new TextEncoder().encode(JSON.stringify(catalog)), 'application/json');
+      logMessage(`📀 "${manifest.title}" registered in your catalog (${catalog.releases.length} release(s)).`);
+      return id;
+    }    
+    
     async function packageSingleTrackWidget(trackIndex, playlistName, trackTitle) {
       const files = globalFFmpegInstance.FS('readdir', '/');
       const segmentFiles = files.filter(f => f.startsWith(`segment_${trackIndex}_`) && f.endsWith('.ts')).sort();
@@ -1790,9 +1867,12 @@
       
       const rightHeader = document.createElement('div');
       rightHeader.className = 'chaos-ph';
-      rightHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 6px; margin-bottom: 8px; cursor: pointer; flex-shrink: 0;`;
-      rightHeader.innerHTML = `<h3 id="right-header-text" style="margin: 0; font-size: 13px; color: #f0f6fc;">🎵 Queue (${manifest.tracks.length})</h3><span id="right-collapse-icon" style="color: #58a6ff; font-weight: bold;">▶</span>`;
+      rightHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; gap: 8px; border-bottom: 1px solid #30363d; padding-bottom: 6px; margin-bottom: 8px; cursor: pointer; flex-shrink: 0;`;
+      const canDisc = typeof selectedUnifiedFiles === 'undefined' && !!manifest.catalogFileId;
+      rightHeader.innerHTML = `<h3 id="right-header-text" style="margin: 0; font-size: 13px; color: #f0f6fc; flex: 1;">🎵 Queue (${manifest.tracks.length})</h3>${canDisc ? '<button id="btn-disc" title="Browse discography" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:2px 9px;font-size:13px;font-weight:700;cursor:pointer;">＋</button>' : ''}<span id="right-collapse-icon" style="color: #58a6ff; font-weight: bold;">▶</span>`;     
       rightPanel.appendChild(rightHeader);
+      const btnDisc = rightHeader.querySelector('#btn-disc');
+      if (btnDisc) btnDisc.onclick = e => { e.stopPropagation(); if (window.__chaosDiscOpen) closeDiscography(); else openDiscography(); };     
 
       const trackListContainer = document.createElement('div');
       trackListContainer.id = 'right-panel-content';
@@ -1801,6 +1881,7 @@
       rightPanel.appendChild(trackListContainer);
 
       rightHeader.onclick = () => {
+        if (window.__chaosDiscOpen) { closeDiscography(); return; }        
         const isHidden = trackListContainer.style.display === 'none';
         trackListContainer.style.display = isHidden ? 'flex' : 'none';
         document.getElementById('right-header-text').style.display = isHidden ? 'block' : 'none';
@@ -1897,6 +1978,7 @@
                 .chaos-p-player{padding:10px !important;gap:8px !important;}
                 .chaos-ph{pointer-events:none;}
                 .chaos-ph span{display:none;}
+                .chaos-ph #btn-disc{pointer-events:auto;}                
                 }
                 @media (max-height:420px){
                 #active-track-artist{display:none;}
@@ -2038,6 +2120,16 @@
         typeof openPaystackCheckoutModal === 'function' ? openPaystackCheckoutModal : null,
         typeof renderQueue === 'function' ? renderQueue : null,
         typeof moveTrack === 'function' ? moveTrack : null
+        typeof updateQueueHeader === 'function' ? updateQueueHeader : null,
+        typeof openDiscography === 'function' ? openDiscography : null,
+        typeof closeDiscography === 'function' ? closeDiscography : null,
+        typeof discReleases === 'function' ? discReleases : null,
+        typeof discBuild === 'function' ? discBuild : null,
+        typeof discCollect === 'function' ? discCollect : null,
+        typeof discNote === 'function' ? discNote : null,
+        typeof discPlay === 'function' ? discPlay : null,
+        typeof discAdd === 'function' ? discAdd : null,
+        typeof renderDiscography === 'function' ? renderDiscography : null,
       ];
 
       funcs.forEach(f => {
@@ -2190,7 +2282,7 @@
      const lyricsBox = document.getElementById('release-lyrics-box');
 
      if (activeTitle) activeTitle.innerText = track.title;
-     if (activeArtist) activeArtist.innerText = currentManifest.artist || 'walo, the underscore.';
+     if (activeArtist) activeArtist.innerText = track.artist || currentManifest.artist || 'walo, the underscore.';
      if (activeNum) activeNum.innerText = `${idx + 1} / ${currentManifest.tracks.length}`;
 
      // 👤 Credits Panel image strictly uses Artist Portrait (fallback to Album Cover)
@@ -2200,10 +2292,12 @@
      if (lyricsBox) {
        lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
      }
-
+     const notesBox = document.getElementById('release-notes-box');
+     if (notesBox) notesBox.style.display = track.foreign ? 'none' : '';
+     
      // --- DYNAMIC CREDITS PANEL METADATA ---
-     const releaseDate = currentManifest.date || track.releaseDate || '2026';
-     const coverArtName = currentManifest.coverArtist || track.coverCredit || currentManifest.artist;
+     const releaseDate = track.releaseDate || currentManifest.date || '2026';
+     const coverArtName = track.coverCredit || currentManifest.coverArtist || track.artist || currentManifest.artist;
      
      let contributorsHtml = '';
      const contributors = track.contributors || currentManifest.contributors || [];
@@ -2220,7 +2314,7 @@
          <b>Cover Art:</b> ${coverArtName}<br><br>
          ${contributorsHtml}
          ${track.isrc ? '<br><br><b>ISRC:</b> ' + track.isrc : ''}
-         ${currentManifest.upc ? '<br><b>UPC:</b> ' + currentManifest.upc : ''}
+         ${(track.foreign ? track.upc : currentManifest.upc) ? '<br><b>UPC:</b> ' + (track.foreign ? track.upc : currentManifest.upc) : ''}
        `;
      }
 
@@ -2237,7 +2331,7 @@
        if (player.audioOnlyMode) player.audioOnlyMode(window.innerHeight < 340);
        if (player) {
          // 🎵 Video.js player uses Track Cover Art / Album Cover as its poster
-         const trackPoster = currentManifest.coverArtData || track.thumbData || currentManifest.artistImgData || '';
+         const trackPoster = track.cover || currentManifest.coverArtData || track.thumbData || currentManifest.artistImgData || '';
          if (trackPoster) player.poster(trackPoster);
 
         const oldFrame = document.getElementById('hosted-track-frame');
@@ -2248,7 +2342,7 @@
 
         const isHosted = typeof selectedUnifiedFiles === "undefined";
         if (isHosted && window.gtag) {
-          const meta = { track_title: track.title, track_number: idx + 1, release: currentManifest.title };
+          const meta = { track_title: track.title, track_number: idx + 1, release: track.releaseTitle || currentManifest.title };
           let started = false, thirty = false;
           if (window.__chaosOnPlay) player.off('play', window.__chaosOnPlay);
           if (window.__chaosOnTime) player.off('timeupdate', window.__chaosOnTime);
@@ -2380,6 +2474,7 @@
       const list = document.getElementById('right-panel-content');
       if (!list || !currentManifest) return;
       const tracks = currentManifest.tracks || [];
+      updateQueueHeader();      
       const canReorder = typeof selectedUnifiedFiles === 'undefined';
       const firstThumb = (tracks.find(t => t.thumbData) || {}).thumbData || currentManifest.coverArtData || '';
       list.innerHTML = '';
@@ -2410,6 +2505,12 @@
         const label = document.createElement('span');
         label.style.cssText = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-grow:1;';
         label.textContent = (idx + 1) + '. ' + track.title;
+        if (track.foreign && track.releaseTitle) {
+          const sub = document.createElement('span');
+          sub.textContent = '  ' + track.releaseTitle;
+          sub.style.cssText = 'color:#8b949e;font-size:10px;';
+          label.appendChild(sub);
+        }
         row.appendChild(label);
 
         row.onclick = () => selectTrack(idx);
@@ -2537,7 +2638,7 @@
         </div>
 
         <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; margin: auto 0;">
-          <img id="mobile-canvas-art" src="${manifest.coverArtData || activeTrack?.thumbData || ''}" style="width: 240px; height: 240px; border-radius: 16px; object-fit: cover; box-shadow: 0 12px 32px rgba(0,0,0,0.8);" />
+          <img id="mobile-canvas-art" src="${activeTrack?.cover || manifest.coverArtData || activeTrack?.thumbData || ''}" style="width: 240px; height: 240px; border-radius: 16px; object-fit: cover; box-shadow: 0 12px 32px rgba(0,0,0,0.8);" />
           <div style="text-align: center; width: 100%;">
             <h2 id="mobile-canvas-title" style="margin:0;font-size:16px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;line-height:1.2;">${activeTrack?.title || 'Select Track'}</h2>
             <p style="margin:4px 0 0;font-size:14px;color:#8b949e;font-weight:400;">${manifest.artist}</p>
@@ -2663,7 +2764,7 @@
     function syncMobileCanvasView(track, idx) {
       const mobileArt = document.getElementById('mobile-canvas-art');
       const mobileTitle = document.getElementById('mobile-canvas-title');
-      if (mobileArt && currentManifest && currentManifest.coverArtData) mobileArt.src = currentManifest.coverArtData;
+      if (mobileArt) { const a = track.cover || (currentManifest && currentManifest.coverArtData); if (a) mobileArt.src = a; }
       if (mobileTitle) mobileTitle.innerText = track.title;
     }
 
@@ -2789,6 +2890,7 @@
 
       // 🚀 Automatically push the fresh, lightweight HTML dashboard to Google Drive
       try {
+        manifest.catalogFileId = (await registerInCatalog(manifest)) || manifest.catalogFileId;        
         logMessage(`📦 Uploading updated lightweight master dashboard to Drive...`);
         const fileId = await uploadReleaseDashboardHtml(manifest);
         await uploadManifestToDrive(manifest);
@@ -2823,9 +2925,11 @@
       };
       const list = (manifest.tracks || []).map(t => '<li>' + esc(t.title) + (t.isrc ? ' — ISRC ' + esc(t.isrc) : '') + '</li>').join('\n');
       return '<script type="application/ld+json">\n' + JSON.stringify(data, null, 2).replace(/</g, '\\u003c') + '\n<\/script>\n' +
+        '<details>\n<summary>Track listing &amp; credits</summary>\n' +
         '<h2>' + esc(manifest.title) + ' — ' + esc(manifest.artist) + '</h2>\n' +
         (manifest.upc ? '<p>UPC: ' + esc(manifest.upc) + '</p>\n' : '') +
-        '<ol>\n' + list + '\n</ol>';
+        (manifest.albumNotes ? '<p style="white-space:pre-wrap">' + esc(manifest.albumNotes) + '</p>\n' : '') +
+        '<ol>\n' + list + '\n</ol>\n</details>';
     }
 
     function generateSeoSnippet() {
@@ -2851,6 +2955,244 @@
         img.src = src;
       });
     }
+
+    function updateQueueHeader() {
+      const h = document.getElementById('right-header-text');
+      if (!h || !currentManifest) return;
+      h.textContent = window.__chaosDiscOpen ? '📀 Discography' : '🎵 Queue (' + (currentManifest.tracks || []).length + ')';
+      const b = document.getElementById('btn-disc');
+      if (b) {
+        b.textContent = window.__chaosDiscOpen ? '←' : '＋';
+        b.title = window.__chaosDiscOpen ? 'Back to queue' : 'Browse discography';
+      }
+    }
+
+    function openDiscography() {
+      const list = document.getElementById('right-panel-content');
+      if (!list || !currentManifest) return;
+      let view = document.getElementById('chaos-disc');
+      if (!view) {
+        view = document.createElement('div');
+        view.id = 'chaos-disc';
+        view.style.cssText = 'display:none;flex-direction:column;gap:6px;overflow-y:auto;flex-grow:1;min-height:0;';
+        list.parentNode.appendChild(view);
+      }
+      window.__chaosDiscOpen = true;
+      list.style.display = 'none';
+      view.style.display = 'flex';
+      updateQueueHeader();
+      if (window.__chaosCat) { renderDiscography(); return; }
+
+      view.innerHTML = '<div style="color:#8b949e;font-size:11px;font-style:italic;padding:10px;text-align:center;">Loading discography…</div>';
+      fetch(APPS_SCRIPT_URL + '?fileId=' + encodeURIComponent(currentManifest.catalogFileId) + '&mode=catalog')
+        .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(c => {
+          if (!c || !Array.isArray(c.releases)) throw new Error('bad catalog');
+          window.__chaosCat = c;
+          renderDiscography();
+        })
+        .catch(() => {
+          view.innerHTML = '';
+          const msg = document.createElement('div');
+          msg.style.cssText = 'color:#8b949e;font-size:11px;padding:10px;text-align:center;';
+          msg.textContent = 'Could not load the discography.';
+          const retry = document.createElement('button');
+          retry.textContent = 'Try again';
+          retry.style.cssText = 'display:block;margin:8px auto 0;background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;';
+          retry.onclick = () => openDiscography();
+          msg.appendChild(retry);
+          view.appendChild(msg);
+        });
+    }
+
+    function closeDiscography() {
+      window.__chaosDiscOpen = false;
+      const view = document.getElementById('chaos-disc');
+      const list = document.getElementById('right-panel-content');
+      if (view) view.style.display = 'none';
+      if (list) list.style.display = 'flex';
+      renderQueue();
+    }
+
+    function discReleases() {
+      const cat = window.__chaosCat;
+      return ((cat && cat.releases) || [])
+        .filter(r => r.tracks && r.tracks.length)
+        .slice()
+        .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    }
+
+    function discBuild(rel, i) {
+      const t = rel.tracks[i];
+      const base = {
+        title: t.title,
+        widgetFileId: t.widgetFileId,
+        isrc: t.isrc || '',
+        caption: t.caption || '',
+        contributors: t.contributors || [],
+        trackNumber: t.n || (i + 1),
+        thumbData: rel.thumb || null
+      };
+      if (currentManifest.releaseId && rel.id === currentManifest.releaseId) return base;
+      return Object.assign(base, {
+        foreign: true,
+        cover: rel.cover || null,
+        releaseId: rel.id,
+        releaseTitle: rel.title,
+        artist: rel.artist,
+        releaseDate: rel.date,
+        coverCredit: rel.coverCredit,
+        upc: rel.upc || ''
+      });
+    }
+
+    function discCollect(selectedOnly, rel) {
+      const sel = window.__chaosSel || new Set();
+      const out = [];
+      (rel ? [rel] : discReleases()).forEach(r => r.tracks.forEach((t, i) => {
+        if (!selectedOnly || sel.has(r.id + '|' + i)) out.push(discBuild(r, i));
+      }));
+      return out;
+    }
+
+    function discNote(msg) {
+      const n = document.getElementById('disc-msg');
+      if (!n) return;
+      n.textContent = msg;
+      clearTimeout(window.__chaosNoteT);
+      window.__chaosNoteT = setTimeout(() => { const m = document.getElementById('disc-msg'); if (m) m.textContent = ''; }, 2500);
+    }
+
+    function discPlay(list) {
+      if (!list.length) return;
+      currentManifest.tracks = list;
+      currentTrackIndex = 0;
+      try { if (window.gtag) window.gtag('event', 'release_play', { source: 'discography', tracks: list.length }); } catch (e) {}
+      closeDiscography();
+      selectTrack(0);
+    }
+
+    function discAdd(list) {
+      if (!list.length) return;
+      const have = new Set(currentManifest.tracks.map(t => t.widgetFileId));
+      const fresh = list.filter(t => !have.has(t.widgetFileId));
+      currentManifest.tracks = currentManifest.tracks.concat(fresh);
+      renderQueue();
+      try { if (window.gtag && fresh.length) window.gtag('event', 'queue_add', { source: 'discography', tracks: fresh.length }); } catch (e) {}
+      const skipped = list.length - fresh.length;
+      discNote(fresh.length ? ('Added ' + fresh.length + (skipped ? ' · ' + skipped + ' already queued' : '')) : 'Already in your queue');
+    }
+
+    function renderDiscography() {
+      const view = document.getElementById('chaos-disc');
+      if (!view) return;
+      const sel = (window.__chaosSel = window.__chaosSel || new Set());
+      const opened = (window.__chaosExp = window.__chaosExp || {});
+      const releases = discReleases();
+      const keepScroll = view.scrollTop;
+      view.innerHTML = '';
+
+      const el = (tag, css, text) => {
+        const e = document.createElement(tag);
+        if (css) e.style.cssText = css;
+        if (text != null) e.textContent = text;
+        return e;
+      };
+
+      if (releases.length === 0) {
+        view.appendChild(el('div', 'color:#8b949e;font-size:11px;font-style:italic;padding:10px;text-align:center;', 'No releases in the catalog yet.'));
+        return;
+      }
+
+      const total = releases.reduce((n, r) => n + r.tracks.length, 0);
+
+      const bar = el('div', 'position:sticky;top:0;z-index:2;background:#161b22;padding-bottom:6px;display:flex;flex-direction:column;gap:6px;flex-shrink:0;');
+      const top = el('label', 'display:flex;align-items:center;gap:8px;font-size:12px;color:#c9d1d9;cursor:pointer;');
+      const all = document.createElement('input');
+      all.type = 'checkbox';
+      all.checked = total > 0 && sel.size === total;
+      all.indeterminate = sel.size > 0 && sel.size < total;
+      all.onchange = () => {
+        sel.clear();
+        if (all.checked) releases.forEach(r => r.tracks.forEach((t, i) => sel.add(r.id + '|' + i)));
+        renderDiscography();
+      };
+      top.appendChild(all);
+      top.appendChild(el('span', '', 'Select all'));
+      top.appendChild(el('span', 'margin-left:auto;font-size:11px;color:#8b949e;', releases.length + ' releases · ' + total + ' tracks'));
+      bar.appendChild(top);
+
+      const acts = el('div', 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;');
+      const mk = (label, bg, fn) => {
+        const b = el('button', 'background:' + bg + ';color:#fff;border:none;padding:6px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:' + (sel.size ? 'pointer' : 'not-allowed') + ';opacity:' + (sel.size ? '1' : '0.4') + ';', label);
+        b.disabled = !sel.size;
+        b.onclick = fn;
+        return b;
+      };
+      acts.appendChild(mk('▶ Play selected', '#238636', () => discPlay(discCollect(true))));
+      acts.appendChild(mk('＋ Add to queue', '#1f6feb', () => discAdd(discCollect(true))));
+      acts.appendChild(el('span', 'font-size:11px;color:#8b949e;', sel.size ? sel.size + ' selected' : 'Tick releases or tracks'));
+      const msg = el('span', 'font-size:11px;color:#7ee787;');
+      msg.id = 'disc-msg';
+      acts.appendChild(msg);
+      bar.appendChild(acts);
+      view.appendChild(bar);
+
+      releases.forEach(rel => {
+        const keys = rel.tracks.map((t, i) => rel.id + '|' + i);
+        const nSel = keys.filter(k => sel.has(k)).length;
+        const row = el('div', 'background:#21262d;border:1px solid #30363d;border-radius:6px;padding:6px 8px;display:flex;flex-direction:column;gap:6px;flex-shrink:0;');
+        const head = el('div', 'display:flex;align-items:center;gap:8px;');
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = nSel === keys.length;
+        cb.indeterminate = nSel > 0 && nSel < keys.length;
+        cb.onchange = () => { keys.forEach(k => { if (cb.checked) sel.add(k); else sel.delete(k); }); renderDiscography(); };
+        head.appendChild(cb);
+
+        if (rel.thumb) {
+          const im = document.createElement('img');
+          im.src = rel.thumb;
+          im.style.cssText = 'width:32px;height:32px;border-radius:4px;object-fit:cover;flex-shrink:0;';
+          head.appendChild(im);
+        }
+
+        const txt = el('div', 'flex:1;min-width:0;');
+        txt.appendChild(el('div', 'font-size:12px;color:#f0f6fc;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', rel.title));
+        txt.appendChild(el('div', 'font-size:10px;color:#8b949e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;',
+          [rel.type, (rel.date || '').slice(0, 4), rel.tracks.length + (rel.tracks.length === 1 ? ' track' : ' tracks')].filter(Boolean).join(' · ')));
+        head.appendChild(txt);
+
+        const ic = (label, title, fn) => {
+          const b = el('button', 'background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:4px 7px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0;', label);
+          b.title = title;
+          b.onclick = fn;
+          return b;
+        };
+        head.appendChild(ic('＋', 'Add to queue', () => discAdd(discCollect(false, rel))));
+        head.appendChild(ic('▶', 'Play now', () => discPlay(discCollect(false, rel))));
+        head.appendChild(ic(opened[rel.id] ? 'Close' : 'Open', 'Choose tracks', () => { opened[rel.id] = !opened[rel.id]; renderDiscography(); }));
+        row.appendChild(head);
+
+        if (opened[rel.id]) {
+          rel.tracks.forEach((t, i) => {
+            const k = rel.id + '|' + i;
+            const line = el('label', 'display:flex;align-items:center;gap:8px;font-size:11px;color:#c9d1d9;padding:2px 0 2px 24px;cursor:pointer;');
+            const c = document.createElement('input');
+            c.type = 'checkbox';
+            c.checked = sel.has(k);
+            c.onchange = () => { if (c.checked) sel.add(k); else sel.delete(k); renderDiscography(); };
+            line.appendChild(c);
+            line.appendChild(el('span', 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', (t.n || i + 1) + '. ' + t.title));
+            row.appendChild(line);
+          });
+        }
+        view.appendChild(row);
+      });
+
+      view.scrollTop = keepScroll;
+    }    
   </script>
 </body>
 </html>
