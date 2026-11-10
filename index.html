@@ -2026,7 +2026,7 @@
       doc.head.appendChild(metaViewport);
 
       const titleEl = doc.createElement('title');
-      titleEl.innerText = `${dashboardManifest.title} - Self Distributed`;
+      titleEl.innerText = `${dashboardManifest.title} — ${dashboardManifest.artist}`;
       doc.head.appendChild(titleEl);
 
       [['https://script.google.com', true], ['https://script.googleusercontent.com', true], ['https://vjs.zencdn.net', false]].forEach(([href, cors]) => {
