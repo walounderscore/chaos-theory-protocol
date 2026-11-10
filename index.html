@@ -1543,6 +1543,7 @@
           widgetFileId: t.widgetFileId,
           isrc: t.isrc || '',
           caption: t.caption || '',
+          genre: t.genre || '',
           contributors: t.contributors || []
         }));
       return {
@@ -1556,6 +1557,7 @@
         coverCredit: manifest.coverArtist || '',
         cover: cover,
         thumb: thumb,
+        notes: manifest.albumNotes || '',
         tracks: tracks
       };
     }
@@ -1903,13 +1905,14 @@
       if (manifest.albumNotes) {
         const det = document.createElement('details');
         det.id = 'release-notes-box';
-        det.style.cssText = 'margin-bottom:10px;background:#0d1117;border:1px solid #21262d;border-radius:4px;';
+        det.style.cssText = 'margin-bottom:10px;background:#0d1117;border:1px solid #21262d;border-radius:4px;' + (manifest.albumNotes ? '' : 'display:none;');
         const sum = document.createElement('summary');
         sum.textContent = '📖 About this release';
         sum.style.cssText = 'cursor:pointer;padding:8px 10px;font-size:12px;font-weight:600;color:#c9d1d9;';
         const notesBody = document.createElement('div');
+        notesBody.id = 'release-notes-body';
         notesBody.style.cssText = 'padding:0 10px 10px;font-size:12px;line-height:1.5;color:#8b949e;white-space:pre-wrap;max-height:160px;overflow-y:auto;';
-        notesBody.textContent = manifest.albumNotes;
+        notesBody.textContent = manifest.albumNotes || '';
         det.appendChild(sum);
         det.appendChild(notesBody);
         basePanel.insertBefore(det, basePanel.querySelector('#release-lyrics-box'));
@@ -2116,6 +2119,7 @@
         typeof openPaystackCheckoutModal === 'function' ? openPaystackCheckoutModal : null,
         typeof renderQueue === 'function' ? renderQueue : null,
         typeof moveTrack === 'function' ? moveTrack : null,
+        typeof removeTrack === 'function' ? removeTrack : null,
         typeof updateQueueHeader === 'function' ? updateQueueHeader : null,
         typeof openDiscography === 'function' ? openDiscography : null,
         typeof closeDiscography === 'function' ? closeDiscography : null,
@@ -2127,6 +2131,8 @@
         typeof discAdd === 'function' ? discAdd : null,
         typeof renderDiscography === 'function' ? renderDiscography : null,
         typeof chaosInitAnalytics === 'function' ? chaosInitAnalytics : null,
+        typeof trackArtistLine === 'function' ? trackArtistLine : null,
+        typeof trackSubline === 'function' ? trackSubline : null,
       ];
 
       funcs.forEach(f => {
@@ -2279,8 +2285,12 @@
      const lyricsBox = document.getElementById('release-lyrics-box');
 
      if (activeTitle) activeTitle.innerText = track.title;
-     if (activeArtist) activeArtist.innerText = track.artist || currentManifest.artist || 'walo, the underscore.';
+     if (activeArtist) activeArtist.innerText = trackArtistLine(track);
      if (activeNum) activeNum.innerText = `${idx + 1} / ${currentManifest.tracks.length}`;
+     const hdTitle = document.querySelector('.chaos-ht h2');
+     const hdSub = document.querySelector('.chaos-ht p');
+     if (hdTitle) hdTitle.textContent = track.releaseTitle || currentManifest.title || '';
+     if (hdSub) hdSub.textContent = trackSubline(track);
 
      // 👤 Credits Panel image strictly uses Artist Portrait (fallback to Album Cover)
      const creditsPanelArt = currentManifest.artistImgData || currentManifest.coverArtData || '';
@@ -2290,7 +2300,14 @@
        lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
      }
      const notesBox = document.getElementById('release-notes-box');
-     if (notesBox) notesBox.style.display = track.foreign ? 'none' : '';
+     const notesBodyEl = document.getElementById('release-notes-body');
+     if (notesBox && notesBodyEl) {
+       const notes = track.foreign ? (track.releaseNotes || '') : (currentManifest.albumNotes || '');
+       notesBodyEl.textContent = notes;
+       notesBox.style.display = notes ? '' : 'none';
+       const nsum = notesBox.querySelector('summary');
+       if (nsum) nsum.textContent = '📖 About ' + (track.foreign && track.releaseTitle ? track.releaseTitle : 'this release');
+     }
      
      // --- DYNAMIC CREDITS PANEL METADATA ---
      const releaseDate = track.releaseDate || currentManifest.date || '2026';
@@ -2331,13 +2348,13 @@
          const trackPoster = track.cover || currentManifest.coverArtData || track.thumbData || currentManifest.artistImgData || '';
          if (trackPoster) player.poster(trackPoster);
 
-         document.title = (track.title || '') + ' — ' + (track.artist || currentManifest.artist || '') + ' · ' + (track.releaseTitle || currentManifest.title || '');
+         document.title = (track.title || '') + ' — ' + trackArtistLine(track) + ' · ' + (track.releaseTitle || currentManifest.title || '');
          try {
            if ('mediaSession' in navigator && window.MediaMetadata) {
              const ms = navigator.mediaSession;
              ms.metadata = new MediaMetadata({
                title: track.title || '',
-               artist: track.artist || currentManifest.artist || '',
+               artist: trackArtistLine(track),
                album: track.releaseTitle || currentManifest.title || '',
                artwork: trackPoster ? [{ src: trackPoster, sizes: '512x512', type: 'image/jpeg' }] : []
              });
@@ -2486,6 +2503,20 @@
       if (num) num.innerText = (currentTrackIndex + 1) + ' / ' + tracks.length;
     }
 
+    function removeTrack(idx) {
+      const tracks = currentManifest && currentManifest.tracks;
+      if (!tracks || tracks.length < 2 || idx < 0 || idx >= tracks.length) return;
+      const wasPlaying = idx === currentTrackIndex;
+      tracks.splice(idx, 1);
+      if (idx < currentTrackIndex) currentTrackIndex--;
+      renderQueue();
+      if (wasPlaying) selectTrack(Math.min(idx, tracks.length - 1));
+      else {
+        const num = document.getElementById('active-track-num');
+        if (num) num.innerText = (currentTrackIndex + 1) + ' / ' + tracks.length;
+      }
+    }    
+
     function renderQueue() {
       const list = document.getElementById('right-panel-content');
       if (!list || !currentManifest) return;
@@ -2528,6 +2559,14 @@
           label.appendChild(sub);
         }
         row.appendChild(label);
+          if (canReorder && tracks.length > 1) {
+          const rm = document.createElement('button');
+          rm.textContent = '✕';
+          rm.title = 'Remove from queue';
+          rm.style.cssText = 'background:transparent;border:none;color:#8b949e;font-size:12px;cursor:pointer;padding:2px 4px;flex-shrink:0;';
+          rm.onclick = ev => { ev.stopPropagation(); removeTrack(idx); };
+          row.appendChild(rm);
+        }
 
         row.onclick = () => selectTrack(idx);
 
@@ -2657,7 +2696,7 @@
           <img id="mobile-canvas-art" src="${activeTrack?.cover || manifest.coverArtData || activeTrack?.thumbData || ''}" style="width: 240px; height: 240px; border-radius: 16px; object-fit: cover; box-shadow: 0 12px 32px rgba(0,0,0,0.8);" />
           <div style="text-align: center; width: 100%;">
             <h2 id="mobile-canvas-title" style="margin:0;font-size:16px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;line-height:1.2;">${activeTrack?.title || 'Select Track'}</h2>
-            <p style="margin:4px 0 0;font-size:14px;color:#8b949e;font-weight:400;">${manifest.artist}</p>
+            <p id="mobile-canvas-artist" style="margin:4px 0 0;font-size:14px;color:#8b949e;font-weight:400;">${trackArtistLine(activeTrack)}</p>
           </div>
 
           <!-- Playback Timeline Progress Bar -->
@@ -2780,8 +2819,10 @@
     function syncMobileCanvasView(track, idx) {
       const mobileArt = document.getElementById('mobile-canvas-art');
       const mobileTitle = document.getElementById('mobile-canvas-title');
+      const mobileArtist = document.getElementById('mobile-canvas-artist');
       if (mobileArt) { const a = track.cover || (currentManifest && currentManifest.coverArtData); if (a) mobileArt.src = a; }
       if (mobileTitle) mobileTitle.innerText = track.title;
+      if (mobileArtist) mobileArtist.textContent = trackArtistLine(track); 
     }
 
     function openPaystackCheckoutModal(manifest, source) {
@@ -3047,6 +3088,7 @@
         caption: t.caption || '',
         contributors: t.contributors || [],
         trackNumber: t.n || (i + 1),
+        genre: t.genre || '',
         thumbData: rel.thumb || null
       };
       if (currentManifest.releaseId && rel.id === currentManifest.releaseId) return base;
@@ -3058,6 +3100,8 @@
         artist: rel.artist,
         releaseDate: rel.date,
         coverCredit: rel.coverCredit,
+        releaseGenre: rel.genre || '',
+        releaseNotes: rel.notes || '',
         upc: rel.upc || ''
       });
     }
@@ -3071,12 +3115,19 @@
       return out;
     }
 
-    function discNote(msg) {
+    function discNote(msg, action) {
       const n = document.getElementById('disc-msg');
       if (!n) return;
       n.textContent = msg;
+      if (action) {
+        const b = document.createElement('button');
+        b.textContent = action.label;
+        b.style.cssText = 'margin-left:6px;background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:2px 7px;font-size:11px;cursor:pointer;';
+        b.onclick = () => { n.textContent = ''; action.run(); };
+        n.appendChild(b);
+      }
       clearTimeout(window.__chaosNoteT);
-      window.__chaosNoteT = setTimeout(() => { const m = document.getElementById('disc-msg'); if (m) m.textContent = ''; }, 2500);
+      window.__chaosNoteT = setTimeout(() => { const m = document.getElementById('disc-msg'); if (m) m.textContent = ''; }, action ? 8000 : 2500);
     }
 
     function discPlay(list) {
@@ -3088,15 +3139,19 @@
       selectTrack(0);
     }
 
-    function discAdd(list) {
+    function discAdd(list, force) {
       if (!list.length) return;
       const have = new Set(currentManifest.tracks.map(t => t.widgetFileId));
-      const fresh = list.filter(t => !have.has(t.widgetFileId));
-      currentManifest.tracks = currentManifest.tracks.concat(fresh);
-      renderQueue();
-      try { if (window.gtag && fresh.length) window.gtag('event', 'queue_add', { source: 'discography', tracks: fresh.length }); } catch (e) {}
-      const skipped = list.length - fresh.length;
-      discNote(fresh.length ? ('Added ' + fresh.length + (skipped ? ' · ' + skipped + ' already queued' : '')) : 'Already in your queue');
+      const fresh = force ? list : list.filter(t => !have.has(t.widgetFileId));
+      const dupes = force ? [] : list.filter(t => have.has(t.widgetFileId));
+      if (fresh.length) {
+        currentManifest.tracks = currentManifest.tracks.concat(fresh);
+        renderQueue();
+        try { if (window.gtag) window.gtag('event', 'queue_add', { source: 'discography', tracks: fresh.length }); } catch (e) {}
+      }
+      const again = dupes.length ? { label: 'Add again?', run: () => discAdd(dupes, true) } : null;
+      if (fresh.length) discNote('Added ' + fresh.length + (dupes.length ? ' · ' + dupes.length + ' already queued' : ''), again);
+      else discNote('Already in your queue', again);
     }
 
     function renderDiscography() {
@@ -3210,6 +3265,23 @@
       view.scrollTop = keepScroll;
     }
 
+    function trackArtistLine(track) {
+      const names = role => ((track && track.contributors) || []).filter(c => c && c.role === role && c.name).map(c => c.name);
+      const mains = names('Main Artist'), feats = names('Featured Artist');
+      const base = mains.length ? mains.join(', ') : ((track && track.artist) || (currentManifest && currentManifest.artist) || '');
+      return feats.length ? base + ' & ' + feats.join(', ') : base;
+    }
+
+    function trackSubline(track) {
+      const m = currentManifest || {};
+      const artist = (track && track.artist) || m.artist || '';
+      const year = String((track && track.releaseDate) || m.date || '').slice(0, 4);
+      const albumGenre = (track && track.foreign) ? ((track && track.releaseGenre) || '') : (m.genre || '');
+      const own = (track && track.genre) || '';
+      const genre = (own && albumGenre && own.toLowerCase() !== albumGenre.toLowerCase()) ? albumGenre + '/' + own : (albumGenre || own);
+      return [artist, year, genre].filter(Boolean).join(' • ');
+    }
+    
     function chaosInitAnalytics(measurementId) {
       if (!/^G-[A-Z0-9]{4,}$/.test(measurementId || '')) return;
       let cid = null, fresh = false;
