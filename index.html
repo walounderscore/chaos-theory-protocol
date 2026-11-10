@@ -2079,15 +2079,6 @@
 
       scriptCode += "  const APPS_SCRIPT_URL = " + JSON.stringify(APPS_SCRIPT_URL) + ";\n";
       const gaId = /^G-[A-Z0-9]{4,}$/.test(dashboardManifest.gaMeasurementId || '') ? dashboardManifest.gaMeasurementId : null;
-      if (gaId) {
-        scriptCode += "  (function(){\n";
-        scriptCode += "    window.dataLayer = window.dataLayer || [];\n";
-        scriptCode += "    window.gtag = function(){ dataLayer.push(arguments); };\n";
-        scriptCode += "    var s = document.createElement('script'); s.async = true; s.src = 'https://www.googletagmanager.com/gtag/js?id=" + gaId + "'; document.head.appendChild(s);\n";
-        scriptCode += "    gtag('js', new Date());\n";
-        scriptCode += "    gtag('config', '" + gaId + "', { send_page_view: false });\n";
-        scriptCode += "  })();\n\n";
-      }
       const safeManifest = JSON.stringify(dashboardManifest)
         .replace(/</g, "\\u003c")
         .replace(/>/g, "\\u003e")
@@ -2099,6 +2090,11 @@
       scriptCode += "  let repeatMode = 'off';\n";
       scriptCode += "  let currentManifest = manifest;\n\n";
 
+      if (gaId) {
+        scriptCode += "  chaosInitAnalytics(" + JSON.stringify(gaId) + ");\n";
+        scriptCode += "  window.gtag = function (c, n, p) { if (c === 'event' && window.chaosTrack) window.chaosTrack(n, p); };\n\n";
+      }
+      
       scriptCode += "  window.addEventListener('DOMContentLoaded', () => {\n";
       scriptCode += "    try {\n";
       scriptCode += "      generateEmbedUI(manifest);\n";
@@ -2130,6 +2126,7 @@
         typeof discPlay === 'function' ? discPlay : null,
         typeof discAdd === 'function' ? discAdd : null,
         typeof renderDiscography === 'function' ? renderDiscography : null,
+        typeof chaosInitAnalytics === 'function' ? chaosInitAnalytics : null,
       ];
 
       funcs.forEach(f => {
@@ -2333,6 +2330,25 @@
          // 🎵 Video.js player uses Track Cover Art / Album Cover as its poster
          const trackPoster = track.cover || currentManifest.coverArtData || track.thumbData || currentManifest.artistImgData || '';
          if (trackPoster) player.poster(trackPoster);
+
+         document.title = (track.title || '') + ' — ' + (track.artist || currentManifest.artist || '') + ' · ' + (track.releaseTitle || currentManifest.title || '');
+         try {
+           if ('mediaSession' in navigator && window.MediaMetadata) {
+             const ms = navigator.mediaSession;
+             ms.metadata = new MediaMetadata({
+               title: track.title || '',
+               artist: track.artist || currentManifest.artist || '',
+               album: track.releaseTitle || currentManifest.title || '',
+               artwork: trackPoster ? [{ src: trackPoster, sizes: '512x512', type: 'image/jpeg' }] : []
+             });
+             const on = (a, fn) => { try { ms.setActionHandler(a, fn); } catch (e) {} };
+             on('play', () => player.play());
+             on('pause', () => player.pause());
+             on('previoustrack', () => { const b = document.getElementById('btn-prev-track'); if (b) b.click(); });
+             on('nexttrack', () => triggerNextTrack());
+             on('seekto', d => { if (d && d.seekTime != null) player.currentTime(d.seekTime); });
+           }
+         } catch (e) {}         
 
         const oldFrame = document.getElementById('hosted-track-frame');
         if (oldFrame) oldFrame.remove();
@@ -3192,6 +3208,52 @@
       });
 
       view.scrollTop = keepScroll;
+    }
+
+    function chaosInitAnalytics(measurementId) {
+      if (!/^G-[A-Z0-9]{4,}$/.test(measurementId || '')) return;
+      let cid = null, fresh = false;
+      try { cid = localStorage.getItem('chaos_cid'); } catch (e) {}
+      if (!cid) {
+        cid = Math.floor(Math.random() * 2147483647) + '.' + Math.floor(Date.now() / 1000);
+        fresh = true;
+        try { localStorage.setItem('chaos_cid', cid); } catch (e) {}
+      }
+      const sid = Math.floor(Date.now() / 1000);
+      const pageId = Math.floor(Math.random() * 2147483647);
+      let last = Date.now(), hit = 0;
+
+      window.chaosTrack = function (name, params) {
+        try {
+          const now = Date.now();
+          const q = new URLSearchParams();
+          q.set('v', '2');
+          q.set('tid', measurementId);
+          q.set('cid', cid);
+          q.set('sid', String(sid));
+          q.set('sct', '1');
+          q.set('seg', '1');
+          q.set('_p', String(pageId));
+          q.set('_s', String(++hit));
+          q.set('en', name);
+          q.set('_et', String(Math.min(600000, Math.max(100, now - last))));
+          last = now;
+          if (hit === 1) { q.set('_ss', '1'); if (fresh) q.set('_fv', '1'); }
+          const base = (typeof APPS_SCRIPT_URL !== 'undefined') ? APPS_SCRIPT_URL : location.href;
+          const mid = (typeof currentManifest !== 'undefined' && currentManifest && currentManifest.masterDashboardFileId) || '';
+          q.set('dl', mid ? base + '?fileId=' + mid : base);
+          q.set('dt', document.title || '');
+          q.set('ul', navigator.language || 'en');
+          q.set('sr', screen.width + 'x' + screen.height);
+          if (params) Object.keys(params).forEach(k => {
+            const v = params[k];
+            if (v === null || v === undefined || v === '') return;
+            q.set((typeof v === 'number' ? 'epn.' : 'ep.') + k, String(v));
+          });
+          fetch('https://www.google-analytics.com/g/collect?' + q.toString(), { method: 'GET', mode: 'no-cors', keepalive: true }).catch(() => {});
+        } catch (e) {}
+      };
+      window.chaosTrack('page_view');
     }    
   </script>
 </body>
