@@ -1887,6 +1887,8 @@
         const isHidden = trackListContainer.style.display === 'none';
         trackListContainer.style.display = isHidden ? 'flex' : 'none';
         document.getElementById('right-header-text').style.display = isHidden ? 'block' : 'none';
+        const btnDisc = document.getElementById('btn-disc');
+        if (btnDisc) btnDisc.style.display = isHidden ? 'inline-block' : 'none';
         document.getElementById('right-collapse-icon').innerText = isHidden ? '▶' : '◀';
         updateGridColumns();
       };
