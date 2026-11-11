@@ -3090,7 +3090,7 @@
         trackNumber: t.n || (i + 1),
         genre: t.genre || '',
         thumbData: t.thumb || rel.thumb || null,
-        t.price || null,
+        releaseBundlePrice: t.price || null
       };
       if (currentManifest.releaseId && rel.id === currentManifest.releaseId) return base;
       return Object.assign(base, {
