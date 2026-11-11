@@ -1331,11 +1331,6 @@
         });
       });
 
-      const seenThumbs = {};
-      manifest.tracks.forEach(t => {
-        if (t.thumbData) { if (seenThumbs[t.thumbData]) t.thumbData = null; else seenThumbs[t.thumbData] = true; }
-      });
-
       return manifest;
     }
 
@@ -1544,6 +1539,8 @@
           isrc: t.isrc || '',
           caption: t.caption || '',
           genre: t.genre || '',
+          price: t.price || null,
+          thumb: t.thumbData || '',
           contributors: t.contributors || []
         }));
       return {
@@ -1558,6 +1555,9 @@
         cover: cover,
         thumb: thumb,
         notes: manifest.albumNotes || '',
+        payUrl: manifest.paymentPageUrl || '',
+        licensingEmail: manifest.licensingEmail || '',
+        bundlePrice: manifest.bundlePrice || null,
         tracks: tracks
       };
     }
@@ -2837,21 +2837,21 @@
       `;
 
       const track = (manifest.tracks && (manifest.tracks[currentTrackIndex] || manifest.tracks[0])) || {};
-      const ga = (name, extra) => { try { if (window.gtag) window.gtag('event', name, Object.assign({ track_title: track.title || '', release: manifest.title || '', source: source || 'unknown' }, extra || {})); } catch (e) {} };
+      const ga = (name, extra) => { try { if (window.gtag) window.gtag('event', name, Object.assign({ track_title: track.title || '', release: relTitle, source: source || 'unknown' }, extra || {})); } catch (e) {} };
       ga('download_click');
-      const payUrl = manifest.paymentPageUrl || '';
-      const email = manifest.licensingEmail || '';
-      const subject = encodeURIComponent('Licensing: "' + (track.title || manifest.title) + '" by ' + manifest.artist);
+      const foreign = !!track.foreign;
+      const payUrl = foreign ? (track.releasePayUrl || '') : (manifest.paymentPageUrl || '');
+      const email = (foreign ? track.releaseEmail : manifest.licensingEmail) || manifest.licensingEmail || '';
+      const relTitle = track.releaseTitle || manifest.title || '';
+      const relArtist = track.artist || manifest.artist || '';
+      const bundlePrice = foreign ? track.releaseBundlePrice : manifest.bundlePrice;
+      const subject = encodeURIComponent('Licensing: "' + (track.title || relTitle) + '" — ' + relArtist + ' (' + relTitle + ')');
       const body = encodeURIComponent('Hi,\n\nProject name and type:\nBudget range:\nTrack(s) and where they will appear:\nRelease or distribution date:\nYour name / company:\n');
       const mailto = email ? 'mailto:' + email + '?subject=' + subject + '&body=' + body : '';
-      const prices = (manifest.tracks || []).map(t => Number(t.price)).filter(p => p > 0);
       const fmt = n => '₦' + Number(n).toLocaleString('en-NG');
       let priceLine = '';
-      if (prices.length) {
-        const lo = Math.min(...prices), hi = Math.max(...prices);
-        priceLine = lo === hi ? fmt(lo) + ' per track' : fmt(lo) + '–' + fmt(hi) + ' per track';
-      }
-      if (manifest.bundlePrice) priceLine += (priceLine ? ' · ' : '') + 'Full release ' + fmt(manifest.bundlePrice);
+      if (Number(track.price) > 0) priceLine = 'This track ' + fmt(track.price);
+      if (Number(bundlePrice) > 0) priceLine += (priceLine ? ' · ' : '') + 'Full release ' + fmt(bundlePrice);
 
       const card = 'background:#0d1117;border:1px solid #30363d;padding:14px;border-radius:8px;';
       const btn = 'display:block;text-align:center;text-decoration:none;color:#fff;padding:10px;border-radius:6px;font-weight:bold;font-size:14px;margin-top:10px;';
@@ -3089,7 +3089,8 @@
         contributors: t.contributors || [],
         trackNumber: t.n || (i + 1),
         genre: t.genre || '',
-        thumbData: rel.thumb || null
+        thumbData: t.thumb || rel.thumb || null,
+        t.price || null
       };
       if (currentManifest.releaseId && rel.id === currentManifest.releaseId) return base;
       return Object.assign(base, {
@@ -3102,7 +3103,10 @@
         coverCredit: rel.coverCredit,
         releaseGenre: rel.genre || '',
         releaseNotes: rel.notes || '',
-        upc: rel.upc || ''
+        upc: rel.upc || '',
+        releasePayUrl: rel.payUrl || '',
+        releaseEmail: rel.licensingEmail || '',
+        releaseBundlePrice: rel.bundlePrice || null
       });
     }
 
