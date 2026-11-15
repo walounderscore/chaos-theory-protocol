@@ -2084,48 +2084,6 @@
 
       scriptCode += "  const APPS_SCRIPT_URL = " + JSON.stringify(APPS_SCRIPT_URL) + ";\n";
       const gaId = /^G-[A-Z0-9]{4,}$/.test(dashboardManifest.gaMeasurementId || '') ? dashboardManifest.gaMeasurementId : null;
-      
-      if (gaId) {
-        scriptCode += "  const MEASUREMENT_ID = " + JSON.stringify(gaId) + ";\n";
-        scriptCode += "  window.dataLayer = window.dataLayer || [];\n";
-        scriptCode += "  window.gtag = function () { window.dataLayer.push(arguments); };\n";
-        scriptCode += "\n";
-        scriptCode += "  function getCid() {\n";
-        scriptCode += "    let cid;\n";
-        scriptCode += "    try { cid = localStorage.getItem('chaos_cid'); } catch (e) {}\n";
-        scriptCode += "    if (!cid) {\n";
-        scriptCode += "      cid = Math.floor(Math.random() * 2147483647) + '.' + Math.floor(Date.now() / 1000);\n";
-        scriptCode += "      try { localStorage.setItem('chaos_cid', cid); } catch (e) {}\n";
-        scriptCode += "    }\n";
-        scriptCode += "    return cid;\n";
-        scriptCode += "  }\n";
-        scriptCode += "\n";
-        scriptCode += "  const cid = getCid();\n";
-        scriptCode += "\n";
-        scriptCode += "  const gaScript = document.createElement('script');\n";
-        scriptCode += "  gaScript.async = true;\n";
-        scriptCode += "  gaScript.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(MEASUREMENT_ID);\n";
-        scriptCode += "\n";
-        scriptCode += "  gaScript.onload = function () {\n";
-        scriptCode += "    console.info('[GA4 DIAGNOSTIC] gtag.js loaded');\n";
-        scriptCode += "    window.gtag('js', new Date());\n";
-        scriptCode += "    window.gtag('config', MEASUREMENT_ID, {\n";
-        scriptCode += "      send_page_view: false,\n";
-        scriptCode += "      client_id: cid\n";
-        scriptCode += "    });\n";
-        scriptCode += "    setTimeout(function () {\n";
-        scriptCode += "      console.info('[GA4 DIAGNOSTIC] Sending manual_test');\n";
-        scriptCode += "      window.gtag('event', 'manual_test', { test_source: 'apps_script_iframe' });\n";
-        scriptCode += "    }, 1500);\n";
-        scriptCode += "  };\n";
-        scriptCode += "\n";
-        scriptCode += "  gaScript.onerror = function () {\n";
-        scriptCode += "    console.error('[GA4 DIAGNOSTIC] gtag.js failed to load');\n";
-        scriptCode += "  };\n";
-        scriptCode += "\n";
-        scriptCode += "  document.head.appendChild(gaScript);\n";
-      }
-      
       const safeManifest = JSON.stringify(dashboardManifest)
         .replace(/</g, "\\u003c")
         .replace(/>/g, "\\u003e")
@@ -2136,6 +2094,11 @@
       scriptCode += "  let isShuffleActive = false;\n";
       scriptCode += "  let repeatMode = 'off';\n";
       scriptCode += "  let currentManifest = manifest;\n\n";
+
+      if (gaId) {
+        scriptCode += "  chaosInitAnalytics(" + JSON.stringify(gaId) + ");\n";
+        scriptCode += "  window.gtag = function (c, n, p) { if (c === 'event' && window.chaosTrack) window.chaosTrack(n, p); };\n\n";
+      }
       
       scriptCode += "  window.addEventListener('DOMContentLoaded', () => {\n";
       scriptCode += "    try {\n";
@@ -3129,7 +3092,7 @@
         trackNumber: t.n || (i + 1),
         genre: t.genre || '',
         thumbData: t.thumb || rel.thumb || null,
-        price: t.price || null
+        price: t.price || null,
       };
       if (currentManifest.releaseId && rel.id === currentManifest.releaseId) return base;
       return Object.assign(base, {
@@ -3145,7 +3108,7 @@
         upc: rel.upc || '',
         releasePayUrl: rel.payUrl || '',
         releaseEmail: rel.licensingEmail || '',
-        releaseBundlePrice: rel.bundlePrice || null
+        releaseBundlePrice: rel.bundlePrice || null,
       });
     }
 
