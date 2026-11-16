@@ -198,7 +198,7 @@
 
         <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:0.8rem;color:#c9d1d9;cursor:pointer;">
           <input type="checkbox" id="global-focus-release" onchange="this.dataset.touched='1'" style="width:16px;height:16px;padding:0 !important;">
-          Instrumental / Focus release <span style="color:#8b949e;font-size:0.72rem;">(shows in the Focus shelf; quiet player layout)</span>
+          Instrumental / Focus release <span style="color:#8b949e;font-size:0.72rem;">(shows in the Focus mode; quiet player layout)</span>
         </label>
         
         <div style="display: flex; gap: 10px; align-items: center; margin-top: 5px;">
@@ -370,7 +370,7 @@
       window.__chaosFocusPref = turnOn ? 'on' : 'off';
 
       if (turnOn) {
-        // Automatically open the focus shelf/banner in discography
+        // Automatically open the focus banner in discography
         window.__chaosDiscFocusShelfOpen = true;
       }
 
@@ -3419,8 +3419,13 @@
         const shelf = el('div', 'background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:6px;flex-shrink:0;');
         const nF = focusRels.reduce((n, r) => n + r.tracks.length, 0);
         
-        const shelfHead = el('div', 'display:flex;justify-content:space-between;align-items:center;');
-        shelfHead.appendChild(el('div', 'font-size:12px;color:#f0f6fc;font-weight:600;', '🎧 Focus Shelf'));
+        const shelfHead = el('div', 'display:flex;flex-direction:column;gap:2px;');
+        
+        const shelfTitle = el('div', 'font-size:12px;color:#f0f6fc;font-weight:600;', '🎧 Focus Mode');
+        const shelfSub = el('div', 'font-size:8px;color:#808080;font-weight:200;', 'Play underscores & instrumentals only.');
+      
+        shelfHead.appendChild(shelfTitle);
+        shelfHead.appendChild(shelfSub);
         
         // Headphone button linking to Now Playing headphone toggle
         const shelfHeadphone = el('button', 'background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;', '🎧');
