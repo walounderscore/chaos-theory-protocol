@@ -195,6 +195,11 @@
           <label style="font-size:0.75rem;color:#8b949e;display:block;margin-bottom:3px;">Album notes / liner intro (shown on every track):</label>
           <textarea id="global-album-notes" rows="3" placeholder="The story behind the release, credits, thank-yous..." style="width:100%;font-size:0.8rem;font-family:inherit;"></textarea>
         </div>
+
+        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:0.8rem;color:#c9d1d9;cursor:pointer;">
+          <input type="checkbox" id="global-focus-release" onchange="this.dataset.touched='1'" style="width:16px;height:16px;padding:0 !important;">
+          Instrumental / Focus release <span style="color:#8b949e;font-size:0.72rem;">(shows in the Focus shelf; quiet player layout)</span>
+        </label>
         
         <div style="display: flex; gap: 10px; align-items: center; margin-top: 5px;">
           <button type="button" class="icon-btn" onclick="applyGlobalArtistToAll()">📋 Apply Album Artist to All Tracks</button>
@@ -325,6 +330,43 @@
       }
     }
 
+    function suggestFocus() {
+      const box = document.getElementById('global-focus-release');
+      const title = (document.getElementById('builder-release-title')?.value || '');
+      if (!box || box.dataset.touched === '1') return;
+      box.checked = /\b(instrumentals?|underscor(?:e|es|ed))\b/i.test(title);
+    }
+
+    function trackIsFocus(track) {
+      if (!track) return false;
+      return track.foreign ? !!track.releaseFocus : !!(currentManifest && currentManifest.focus);
+    }
+
+    function applyFocusLayout() {
+      const w = document.getElementById('chaos-sovereign-dashboard');
+      if (!w || !currentManifest || !currentManifest.tracks) return;
+      const auto = trackIsFocus(currentManifest.tracks[currentTrackIndex]);
+      const pref = window.__chaosFocusPref;
+      const on = pref === 'on' ? true : (pref === 'off' ? false : auto);
+      w.dataset.focus = on ? '1' : '0';
+      if (on && (w.dataset.tab === 'credits' || w.dataset.tab === 'lyrics')) {
+        w.dataset.tab = 'player';
+        document.querySelectorAll('#chaos-tabs button').forEach((x, i) => x.classList.toggle('on', i === 0));
+      }
+      const b = document.getElementById('btn-focus-toggle');
+      if (b) {
+        b.style.background = on ? '#1f6feb' : '#21262d';
+        b.style.color = on ? '#fff' : '#c9d1d9';
+        b.title = on ? 'Focus layout on' : 'Focus layout off';
+      }
+    }
+
+    function toggleFocusLayout() {
+      const w = document.getElementById('chaos-sovereign-dashboard');
+      window.__chaosFocusPref = (w && w.dataset.focus === '1') ? 'off' : 'on';
+      applyFocusLayout();
+    }
+    
     function updateLiveAlbumBadge() {
       const title = document.getElementById('builder-release-title').value.trim() || 'chaos theory.';
       const artist = document.getElementById('global-album-artist').value.trim() || 'walo, the underscore.';
@@ -360,6 +402,7 @@
           }
         });
       });
+      suggestFocus();      
     }
 
       window.addEventListener('keydown', (e) => {
@@ -686,6 +729,8 @@
       if (upcEl) upcEl.value = manifest.upc || '';
       const notesEl = document.getElementById('global-album-notes');
       if (notesEl) notesEl.value = manifest.albumNotes || '';
+      const focusEl = document.getElementById('global-focus-release');
+      if (focusEl) { focusEl.checked = !!manifest.focus; focusEl.dataset.touched = '1'; }
 
       // Restore Album Cover Art
       if (manifest.coverArtData) {
@@ -1286,6 +1331,7 @@
         catalogFileId: (currentManifest && currentManifest.catalogFileId) || null,
         paymentPageUrl: (document.getElementById('release-payment-url')?.value || '').trim() || null,
         upc: (document.getElementById('global-upc')?.value || '').trim() || null,
+        focus: !!document.getElementById('global-focus-release')?.checked,
         albumNotes: (document.getElementById('global-album-notes')?.value || '').trim() || null,
         licensingEmail: (document.getElementById('licensing-email')?.value || '').trim() || null,
         gaMeasurementId: (document.getElementById('ga-measurement-id')?.value || '').trim() || null,
@@ -1552,6 +1598,7 @@
         genre: manifest.genre || '',
         type: releaseTypeFor(tracks.length),
         upc: manifest.upc || '',
+        focus: !!manifest.focus,
         coverCredit: manifest.coverArtist || '',
         cover: cover,
         thumb: thumb,
@@ -1837,9 +1884,14 @@
           <h1 id="active-track-title" style="margin: 0; font-size: 18px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${activeTrack?.title || 'Select Track'}</h1>
           <p id="active-track-artist" style="margin: 4px 0 0 0; font-size: 14px; color: #8b949e; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${manifest.artist || 'walo, the underscore.'}</p>
         </div>
-        <span id="active-track-num" style="font-size: 12px; color: #58a6ff; font-weight: 700; background: #0d1117; padding: 4px 10px; border-radius: 4px; border: 1px solid #21262d; flex-shrink: 0;">${manifest.tracks.length > 0 ? '1 / ' + manifest.tracks.length : '0 / 0'}</span>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+          <button id="btn-focus-toggle" title="Focus layout" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:4px;padding:3px 7px;font-size:11px;cursor:pointer;">🎧</button>
+          <span id="active-track-num" style="font-size: 12px; color: #58a6ff; font-weight: 700; background: #0d1117; padding: 4px 10px; border-radius: 4px; border: 1px solid #21262d; flex-shrink: 0;">${manifest.tracks.length > 0 ? '1 / ' + manifest.tracks.length : '0 / 0'}</span>
+        </div>  
       `;
       centerPanel.appendChild(nowPlayingTitle);
+      const focusBtn = nowPlayingTitle.querySelector('#btn-focus-toggle');
+      if (focusBtn) focusBtn.onclick = toggleFocusLayout;
 
       // 🌟 Ideal Taller Rectangular Video Proportions from Screenshot 2
       const videoEl = document.createElement('video');
@@ -1938,6 +1990,7 @@
 
       embedContainer.appendChild(wrapper);
             renderQueue();
+            applyFocusLayout();
             const rs = document.createElement('style');
             rs.textContent = `
               #chaos-tabs{display:none;grid-column:1/-1;gap:4px;}
@@ -1998,7 +2051,15 @@
                 #chaos-sovereign-dashboard[data-tab]>.chaos-p-player{display:flex !important;flex-direction:column;padding:6px !important;gap:4px !important;}
                 #btn-share-release,#btn-mobile-canvas{display:none !important;}
                 .chaos-hosted #chaos-sovereign-dashboard{grid-template-rows:auto minmax(0,1fr) !important;gap:6px !important;}
-              }`;
+              }
+              @media (min-width:721px){
+                #chaos-sovereign-dashboard[data-focus="1"]{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) !important;}
+              }
+              #chaos-sovereign-dashboard[data-focus="1"] .chaos-p-credits,
+              #chaos-sovereign-dashboard[data-focus="1"] .chaos-p-lyrics{display:none !important;}
+              #chaos-sovereign-dashboard[data-focus="1"] #chaos-tabs button:nth-child(3),
+              #chaos-sovereign-dashboard[data-focus="1"] #chaos-tabs button:nth-child(4){display:none;}
+              `;
             document.head.appendChild(rs);
      
       populateStep5EmbedBox(manifest);
@@ -2466,6 +2527,7 @@
        }
      }
 
+     applyFocusLayout();
      populateStep5EmbedBox(currentManifest);
      syncMobileCanvasView(track, idx);
    }
@@ -3107,6 +3169,7 @@
         releaseGenre: rel.genre || '',
         releaseNotes: rel.notes || '',
         upc: rel.upc || '',
+        releaseFocus: !!rel.focus,
         releasePayUrl: rel.payUrl || '',
         releaseEmail: rel.licensingEmail || '',
         releaseBundlePrice: rel.bundlePrice || null,
@@ -3137,11 +3200,11 @@
       window.__chaosNoteT = setTimeout(() => { const m = document.getElementById('disc-msg'); if (m) m.textContent = ''; }, action ? 8000 : 2500);
     }
 
-    function discPlay(list) {
+    function discPlay(list, source) {
       if (!list.length) return;
       currentManifest.tracks = list;
       currentTrackIndex = 0;
-      try { if (window.gtag) window.gtag('event', 'release_play', { source: 'discography', tracks: list.length }); } catch (e) {}
+      try { if (window.gtag) window.gtag('event', 'release_play', { source: source || 'discography', tracks: list.length }); } catch (e) {}
       closeDiscography();
       selectTrack(0);
     }
@@ -3216,6 +3279,24 @@
       bar.appendChild(acts);
       view.appendChild(bar);
 
+      const focusRels = releases.filter(r => r.focus);
+      if (focusRels.length) {
+        const shelf = el('div', 'background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:6px;flex-shrink:0;');
+        const nF = focusRels.reduce((n, r) => n + r.tracks.length, 0);
+        shelf.appendChild(el('div', 'font-size:12px;color:#f0f6fc;font-weight:600;', '🎧 Focus'));
+        shelf.appendChild(el('div', 'font-size:10px;color:#8b949e;', 'Instrumentals for work and study · ' + focusRels.length + (focusRels.length === 1 ? ' release · ' : ' releases · ') + nF + ' tracks'));
+        const frow = el('div', 'display:flex;gap:6px;flex-wrap:wrap;');
+        const allFocus = () => focusRels.flatMap(r => r.tracks.map((t, i) => discBuild(r, i)));
+        const shuffled = a => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const x = b[i]; b[i] = b[j]; b[j] = x; } return b; };
+        const fb = (label, bg, fn) => { const b = el('button', 'background:' + bg + ';color:#fff;border:' + (bg === '#21262d' ? '1px solid #30363d' : 'none') + ';padding:6px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;', label); b.onclick = fn; return b; };
+        const loopOn = () => { if (repeatMode === 'off') { const rb = document.getElementById('btn-repeat'); if (rb) rb.click(); } };
+        frow.appendChild(fb('▶ Play all', '#238636', () => { discPlay(allFocus(), 'focus'); loopOn(); }));
+        frow.appendChild(fb('🔀 Shuffle', '#1f6feb', () => { discPlay(shuffled(allFocus()), 'focus'); loopOn(); }));
+        frow.appendChild(fb('＋ Add all', '#21262d', () => discAdd(allFocus())));
+        shelf.appendChild(frow);
+        view.appendChild(shelf);
+      }      
+
       releases.forEach(rel => {
         const keys = rel.tracks.map((t, i) => rel.id + '|' + i);
         const nSel = keys.filter(k => sel.has(k)).length;
@@ -3239,7 +3320,7 @@
         const txt = el('div', 'flex:1;min-width:0;');
         txt.appendChild(el('div', 'font-size:12px;color:#f0f6fc;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', rel.title));
         txt.appendChild(el('div', 'font-size:10px;color:#8b949e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;',
-          [rel.type, (rel.date || '').slice(0, 4), rel.tracks.length + (rel.tracks.length === 1 ? ' track' : ' tracks')].filter(Boolean).join(' · ')));
+          [rel.type, rel.focus ? '🎧 Focus' : '', (rel.date || '').slice(0, 4), rel.tracks.length + (rel.tracks.length === 1 ? ' track' : ' tracks')].filter(Boolean).join(' · ')));
         head.appendChild(txt);
 
         const ic = (label, title, fn) => {
@@ -3415,6 +3496,7 @@
 
             if (!m.releaseId) m.releaseId = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
             m.catalogFileId = catalogId;
+            if (m.focus === undefined) m.focus = /\b(instrumentals?|underscor(?:e|es|ed))\b/i.test(m.title || '');
             if (m.coverArtData) m.coverArtData = await shrinkIfLarger(m.coverArtData, 1600, 0.85);
             if (m.artistImgData) m.artistImgData = await shrinkIfLarger(m.artistImgData, 800, 0.82);
             for (const t of m.tracks) if (t.thumbData) t.thumbData = await shrinkIfLarger(t.thumbData, 96, 0.7);
