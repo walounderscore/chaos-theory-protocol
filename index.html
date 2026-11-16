@@ -2197,6 +2197,9 @@
         typeof chaosInitAnalytics === 'function' ? chaosInitAnalytics : null,
         typeof trackArtistLine === 'function' ? trackArtistLine : null,
         typeof trackSubline === 'function' ? trackSubline : null,
+        typeof trackIsFocus === 'function' ? trackIsFocus : null,
+        typeof applyFocusLayout === 'function' ? applyFocusLayout : null,
+        typeof toggleFocusLayout === 'function' ? toggleFocusLayout : null,
       ];
 
       funcs.forEach(f => {
