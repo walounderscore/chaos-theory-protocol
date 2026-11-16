@@ -359,6 +359,9 @@
         b.style.color = on ? '#fff' : '#c9d1d9';
         b.title = on ? 'Focus layout on' : 'Focus layout off';
       }
+      // 🌟 Re-render queue and discography views to respect focus filtering
+      renderQueue();
+      if (window.__chaosDiscOpen) renderDiscography();
     }
 
     function toggleFocusLayout() {
@@ -2537,6 +2540,12 @@
     
     function triggerNextTrack() {
       if (!currentManifest || !currentManifest.tracks || currentManifest.tracks.length === 0) return;
+      
+      const isFocusActive = document.getElementById('chaos-sovereign-dashboard')?.dataset.focus === '1';
+      const allTracks = currentManifest.tracks;
+      const validIndices = allTracks.map((t, i) => (isFocusActive && !trackIsFocus(t)) ? -1 : i).filter(i => i >= 0);
+
+      if (validIndices.length === 0) return;
 
       if (repeatMode === 'one') {
         selectTrack(currentTrackIndex);
@@ -2545,12 +2554,14 @@
 
       let nextIdx;
       if (isShuffleActive) {
-        nextIdx = Math.floor(Math.random() * currentManifest.tracks.length);
+        nextIdx = validIndices[Math.floor(Math.random() * validIndices.length)];
       } else {
-        nextIdx = currentTrackIndex + 1;
-        if (nextIdx >= currentManifest.tracks.length) {
+        const currentPos = validIndices.indexOf(currentTrackIndex);
+        if (currentPos >= 0 && currentPos < validIndices.length - 1) {
+          nextIdx = validIndices[currentPos + 1];
+        } else {
           if (repeatMode === 'all') {
-            nextIdx = 0;
+            nextIdx = validIndices[0];
           } else {
             return;
           }
@@ -2588,22 +2599,28 @@
     function renderQueue() {
       const list = document.getElementById('right-panel-content');
       if (!list || !currentManifest) return;
-      const tracks = currentManifest.tracks || [];
+      
+      // 🌟 Focus filter check (keeps your original tracks if focus is off)
+      const isFocusActive = document.getElementById('chaos-sovereign-dashboard')?.dataset.focus === '1';
+      const allTracks = currentManifest.tracks || [];
+      const tracks = isFocusActive ? allTracks.filter(t => trackIsFocus(t)) : allTracks;
+
       updateQueueHeader();      
       const canReorder = typeof selectedUnifiedFiles === 'undefined';
-      const firstThumb = (tracks.find(t => t.thumbData) || {}).thumbData || currentManifest.coverArtData || '';
+      const firstThumb = (allTracks.find(t => t.thumbData) || {}).thumbData || currentManifest.coverArtData || '';
       list.innerHTML = '';
 
       if (tracks.length === 0) {
-        list.innerHTML = '<div style="color:#8b949e;font-size:11px;font-style:italic;padding:10px;text-align:center;">No tracks processed yet. Build a release above to populate queue.</div>';
+        list.innerHTML = `<div style="color:#8b949e;font-size:11px;font-style:italic;padding:10px;text-align:center;">${isFocusActive ? 'No focus tracks in queue.' : 'No tracks processed yet. Build a release above to populate queue.'}</div>`;
         return;
       }
 
       tracks.forEach((track, idx) => {
+        const origIdx = allTracks.indexOf(track); // Maps back to master array index
         const row = document.createElement('div');
         row.className = 'track-select-btn';
-        row.dataset.index = idx;
-        row.style.cssText = 'background:' + (idx === currentTrackIndex ? '#1f6feb' : '#21262d') + ';color:#c9d1d9;border:1px solid #30363d;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:8px;flex-shrink:0;transition:background 0.2s;';
+        row.dataset.index = origIdx;
+        row.style.cssText = 'background:' + (origIdx === currentTrackIndex ? '#1f6feb' : '#21262d') + ';color:#c9d1d9;border:1px solid #30363d;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:8px;flex-shrink:0;transition:background 0.2s;';
 
         const handle = document.createElement('span');
         handle.textContent = '⋮⋮';
@@ -2619,7 +2636,7 @@
 
         const label = document.createElement('span');
         label.style.cssText = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-grow:1;';
-        label.textContent = (idx + 1) + '. ' + track.title;
+        label.textContent = (origIdx + 1) + '. ' + track.title;
         if (track.foreign && track.releaseTitle) {
           const sub = document.createElement('span');
           sub.textContent = '  ' + track.releaseTitle;
@@ -2627,16 +2644,17 @@
           label.appendChild(sub);
         }
         row.appendChild(label);
-          if (canReorder && tracks.length > 1) {
+        
+        if (canReorder && allTracks.length > 1) {
           const rm = document.createElement('button');
           rm.textContent = '✕';
           rm.title = 'Remove from queue';
           rm.style.cssText = 'background:transparent;border:none;color:#8b949e;font-size:12px;cursor:pointer;padding:2px 4px;flex-shrink:0;';
-          rm.onclick = ev => { ev.stopPropagation(); removeTrack(idx); };
+          rm.onclick = ev => { ev.stopPropagation(); removeTrack(origIdx); };
           row.appendChild(rm);
         }
 
-        row.onclick = () => selectTrack(idx);
+        row.onclick = () => selectTrack(origIdx);
 
         if (canReorder) {
           handle.addEventListener('pointerdown', ev => {
@@ -3232,7 +3250,11 @@
       if (!view) return;
       const sel = (window.__chaosSel = window.__chaosSel || new Set());
       const opened = (window.__chaosExp = window.__chaosExp || {});
-      const releases = discReleases();
+      
+      const isFocusActive = document.getElementById('chaos-sovereign-dashboard')?.dataset.focus === '1';
+      const allReleases = discReleases();
+      const releases = isFocusActive ? allReleases.filter(r => r.focus || (r.tracks || []).some(t => trackIsFocus(t))) : allReleases;
+
       const keepScroll = view.scrollTop;
       view.innerHTML = '';
 
@@ -3244,7 +3266,7 @@
       };
 
       if (releases.length === 0) {
-        view.appendChild(el('div', 'color:#8b949e;font-size:11px;font-style:italic;padding:10px;text-align:center;', 'No releases in the catalog yet.'));
+        view.appendChild(el('div', 'color:#8b949e;font-size:11px;font-style:italic;padding:10px;text-align:center;', isFocusActive ? 'No focus releases found.' : 'No releases in the catalog yet.'));
         return;
       }
 
@@ -3263,7 +3285,16 @@
       };
       top.appendChild(all);
       top.appendChild(el('span', '', 'Select all'));
-      top.appendChild(el('span', 'margin-left:auto;font-size:11px;color:#8b949e;', releases.length + ' releases · ' + total + ' tracks'));
+      
+      // 🎧 Focus shelf toggle button in header bar
+      const shelfBtn = el('button', 'margin-left:auto;background:' + (window.__chaosDiscFocusShelfOpen ? '#1f6feb' : '#21262d') + ';color:#c9d1d9;border:1px solid #30363d;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;', '🎧 Focus');
+      shelfBtn.title = 'Toggle focus filter shelf';
+      shelfBtn.onclick = (e) => {
+        e.stopPropagation();
+        window.__chaosDiscFocusShelfOpen = !window.__chaosDiscFocusShelfOpen;
+        renderDiscography();
+      };
+      top.appendChild(shelfBtn);
       bar.appendChild(top);
 
       const acts = el('div', 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;');
@@ -3275,19 +3306,30 @@
       };
       acts.appendChild(mk('▶ Play selected', '#238636', () => discPlay(discCollect(true))));
       acts.appendChild(mk('＋ Add to queue', '#1f6feb', () => discAdd(discCollect(true))));
-      acts.appendChild(el('span', 'font-size:11px;color:#8b949e;', sel.size ? sel.size + ' selected' : 'Tick releases or tracks'));
+      acts.appendChild(el('span', 'font-size:11px;color:#8b949e;', sel.size ? sel.size + ' selected' : releases.length + ' releases'));
       const msg = el('span', 'font-size:11px;color:#7ee787;');
       msg.id = 'disc-msg';
       acts.appendChild(msg);
       bar.appendChild(acts);
       view.appendChild(bar);
 
+      // 🎧 Collapsible Focus Shelf (Hidden by default until toggled)
       const focusRels = releases.filter(r => r.focus);
-      if (focusRels.length) {
+      if (window.__chaosDiscFocusShelfOpen && focusRels.length) {
         const shelf = el('div', 'background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:6px;flex-shrink:0;');
         const nF = focusRels.reduce((n, r) => n + r.tracks.length, 0);
-        shelf.appendChild(el('div', 'font-size:12px;color:#f0f6fc;font-weight:600;', '🎧 Focus'));
-        shelf.appendChild(el('div', 'font-size:10px;color:#8b949e;', 'Instrumentals for work and study · ' + focusRels.length + (focusRels.length === 1 ? ' release · ' : ' releases · ') + nF + ' tracks'));
+        
+        const shelfHead = el('div', 'display:flex;justify-content:space-between;align-items:center;');
+        shelfHead.appendChild(el('div', 'font-size:12px;color:#f0f6fc;font-weight:600;', '🎧 Focus Shelf'));
+        
+        // Headphone button linking to Now Playing headphone toggle
+        const shelfHeadphone = el('button', 'background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;', '🎧');
+        shelfHeadphone.title = 'Link to Now Playing focus mode';
+        shelfHeadphone.onclick = () => { toggleFocusLayout(); };
+        shelfHead.appendChild(shelfHeadphone);
+        shelf.appendChild(shelfHead);
+
+        shelf.appendChild(el('div', 'font-size:10px;color:#8b949e;', 'Instrumentals for work and study · ' + focusRels.length + ' releases · ' + nF + ' tracks'));
         const frow = el('div', 'display:flex;gap:6px;flex-wrap:wrap;');
         const allFocus = () => focusRels.flatMap(r => r.tracks.map((t, i) => discBuild(r, i)));
         const shuffled = a => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const x = b[i]; b[i] = b[j]; b[j] = x; } return b; };
@@ -3322,8 +3364,9 @@
 
         const txt = el('div', 'flex:1;min-width:0;');
         txt.appendChild(el('div', 'font-size:12px;color:#f0f6fc;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', rel.title));
+        // 🛠️ Removed "🎧 Focus" badge text from individual release subline metadata
         txt.appendChild(el('div', 'font-size:10px;color:#8b949e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;',
-          [rel.type, rel.focus ? '🎧 Focus' : '', (rel.date || '').slice(0, 4), rel.tracks.length + (rel.tracks.length === 1 ? ' track' : ' tracks')].filter(Boolean).join(' · ')));
+          [rel.type, (rel.date || '').slice(0, 4), rel.tracks.length + (rel.tracks.length === 1 ? ' track' : ' tracks')].filter(Boolean).join(' • ')));
         head.appendChild(txt);
 
         const ic = (label, title, fn) => {
