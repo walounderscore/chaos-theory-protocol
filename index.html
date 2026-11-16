@@ -1624,7 +1624,8 @@
         payUrl: manifest.paymentPageUrl || '',
         licensingEmail: manifest.licensingEmail || '',
         bundlePrice: manifest.bundlePrice || null,
-        tracks: tracks
+        tracks: tracks,
+        dashboardFileId: manifest.masterDashboardFileId || '',
       };
     }
 
@@ -1975,21 +1976,21 @@
           ${manifest.tracks[0]?.caption || `[Select a track above to view lyrics and liner notes]\n\nChaos Theory Protocol — Sovereign Audio Distribution Suite.`}
         </div>
       `;
-      if (manifest.albumNotes) {
-        const det = document.createElement('details');
-        det.id = 'release-notes-box';
-        det.style.cssText = 'margin-bottom:10px;background:#0d1117;border:1px solid #21262d;border-radius:4px;' + (manifest.albumNotes ? '' : 'display:none;');
-        const sum = document.createElement('summary');
-        sum.textContent = '📖 About this release';
-        sum.style.cssText = 'cursor:pointer;padding:8px 10px;font-size:12px;font-weight:600;color:#c9d1d9;';
-        const notesBody = document.createElement('div');
-        notesBody.id = 'release-notes-body';
-        notesBody.style.cssText = 'padding:0 10px 10px;font-size:12px;line-height:1.5;color:#8b949e;white-space:pre-wrap;max-height:160px;overflow-y:auto;';
-        notesBody.textContent = manifest.albumNotes || '';
-        det.appendChild(sum);
-        det.appendChild(notesBody);
-        basePanel.insertBefore(det, basePanel.querySelector('#release-lyrics-box'));
-      }
+      
+      const det = document.createElement('details');
+      det.id = 'release-notes-box';
+      det.style.cssText = 'margin-bottom:10px;background:#0d1117;border:1px solid #21262d;border-radius:4px;' + (manifest.albumNotes ? '' : 'display:none;');
+      const sum = document.createElement('summary');
+      sum.textContent = '📖 About this release';
+      sum.style.cssText = 'cursor:pointer;padding:8px 10px;font-size:12px;font-weight:600;color:#c9d1d9;';
+      const notesBody = document.createElement('div');
+      notesBody.id = 'release-notes-body';
+      notesBody.style.cssText = 'padding:0 10px 10px;font-size:12px;line-height:1.5;color:#8b949e;white-space:pre-wrap;max-height:160px;overflow-y:auto;';
+      notesBody.textContent = manifest.albumNotes || '';
+      det.appendChild(sum);
+      det.appendChild(notesBody);
+      basePanel.insertBefore(det, basePanel.querySelector('#release-lyrics-box'));
+        
       wrapper.appendChild(basePanel);
      const tabs = document.createElement('div');
       tabs.id = 'chaos-tabs';
@@ -2219,6 +2220,7 @@
         typeof applyFocusLayout === 'function' ? applyFocusLayout : null,
         typeof toggleFocusLayout === 'function' ? toggleFocusLayout : null,
         typeof initChladniCanvas === 'function' ? initChladniCanvas : null,
+        typeof trackReleaseDashboardId === 'function' ? trackReleaseDashboardId : null,
       ];
 
       funcs.forEach(f => {
@@ -2250,6 +2252,11 @@
       }
 
       return fileId;
+    }
+
+    function trackReleaseDashboardId(track) {
+      if (track && track.foreign) return track.releaseDashboardId || '';
+      return (currentManifest && currentManifest.masterDashboardFileId) || '';
     }
     
     function populateStep5EmbedBox(manifest) {
@@ -2289,8 +2296,11 @@
       const btnShare = document.getElementById('btn-share-release');
       const btnCheckout = document.getElementById('btn-checkout-license');
       const btnFull = document.getElementById('btn-open-full');
-      if (btnFull) btnFull.onclick = () => window.open(APPS_SCRIPT_URL + '?fileId=' + manifest.masterDashboardFileId, '_blank');
-
+      if (btnFull) btnFull.onclick = () => {
+        const id = trackReleaseDashboardId((currentManifest.tracks || [])[currentTrackIndex]) || manifest.masterDashboardFileId;
+        window.open(APPS_SCRIPT_URL + '?fileId=' + id, '_blank');
+      };
+      
       if (btnShuffle) {
         btnShuffle.onclick = () => {
           isShuffleActive = !isShuffleActive;
@@ -2701,7 +2711,7 @@
               handle.removeEventListener('pointercancel', onCancel);
               rows.forEach(r => { r.style.boxShadow = ''; });
               row.style.opacity = '';
-              if (commit) moveTrack(from, to);
+              if (commit) moveTrack(allTracks.indexOf(tracks[from]), allTracks.indexOf(tracks[to]));
             };
             const onUp = () => finish(true);
             const onCancel = () => finish(false);
@@ -2715,9 +2725,18 @@
       });
     }    
 
-    function openShareOptionsModal(manifest) {
+        function openShareOptionsModal(manifest) {
       let modal = document.getElementById('chaos-share-modal');
       if (modal) modal.remove();
+
+      const cm = currentManifest || manifest || {};
+      const tracks = cm.tracks || [];
+      const activeTrack = tracks[currentTrackIndex] || tracks[0] || {};
+      const relTitle = activeTrack.releaseTitle || cm.title || '';
+      const relArtist = activeTrack.artist || cm.artist || '';
+      const trackUrl = activeTrack.widgetFileId ? APPS_SCRIPT_URL + '?fileId=' + activeTrack.widgetFileId : '';
+      const dashId = trackReleaseDashboardId(activeTrack);
+      const releaseUrl = dashId ? APPS_SCRIPT_URL + '?fileId=' + dashId : '';
 
       modal = document.createElement('div');
       modal.id = 'chaos-share-modal';
@@ -2725,52 +2744,49 @@
         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8);
         z-index: 999999; display: flex; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;
       `;
-
-      const activeTrack = manifest.tracks[currentTrackIndex];
-      const playerUrl = activeTrack?.widgetFileId ? `${APPS_SCRIPT_URL}?fileId=${activeTrack.widgetFileId}` : window.location.href;
-      const siteUrl = window.location.href;
-
       modal.innerHTML = `
         <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; max-width: 380px; width: 100%; color: #c9d1d9; font-family: system-ui, sans-serif;">
           <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 14px;">
-            <h3 style="margin: 0; font-size: 16px; color: #f0f6fc;">🔗 Share Release</h3>
+            <h3 style="margin: 0; font-size: 16px; color: #f0f6fc;">🔗 Share</h3>
             <button id="close-share-modal" style="background: transparent; color: #8b949e; border: none; font-size: 18px; cursor: pointer;">✕</button>
           </div>
-          <div style="display: flex; flex-direction: column; gap: 10px;">
-            <button id="share-opt-player" style="background: #21262d; border: 1px solid #30363d; color: #f0f6fc; padding: 12px; border-radius: 8px; text-align: left; cursor: pointer;">
-              <strong style="display: block; font-size: 13px;">▶️ Share Player Stream</strong>
-              <span style="font-size: 11px; color: #8b949e;">Direct link to active track widget</span>
-            </button>
-            <button id="share-opt-site" style="background: #21262d; border: 1px solid #30363d; color: #f0f6fc; padding: 12px; border-radius: 8px; text-align: left; cursor: pointer;">
-              <strong style="display: block; font-size: 13px;">🌐 Share Website Domain</strong>
-              <span style="font-size: 11px; color: #8b949e;">Link to host page (${window.location.hostname})</span>
-            </button>
-          </div>
+          <div id="share-opts" style="display: flex; flex-direction: column; gap: 10px;"></div>
         </div>
       `;
-
       document.body.appendChild(modal);
-
       document.getElementById('close-share-modal').onclick = () => modal.remove();
 
-      document.getElementById('share-opt-player').onclick = () => {
-        dispatchShare(`Stream "${activeTrack?.title || manifest.title}"`, playerUrl);
-        modal.remove();
+      const opts = modal.querySelector('#share-opts');
+      const addOpt = (kind, icon, heading, name, url, text) => {
+        const b = document.createElement('button');
+        b.style.cssText = 'background:#21262d;border:1px solid #30363d;color:#f0f6fc;padding:12px;border-radius:8px;text-align:left;cursor:' + (url ? 'pointer' : 'not-allowed') + ';opacity:' + (url ? '1' : '0.5') + ';';
+        const h = document.createElement('strong');
+        h.style.cssText = 'display:block;font-size:13px;';
+        h.textContent = icon + ' ' + heading;
+        const s = document.createElement('span');
+        s.style.cssText = 'font-size:11px;color:#8b949e;';
+        s.textContent = url ? name : 'Update this release once to enable this link.';
+        b.appendChild(h);
+        b.appendChild(s);
+        if (url) b.onclick = () => {
+          try { if (window.gtag) window.gtag('event', 'share_click', { kind: kind, track_title: activeTrack.title || '', release: relTitle }); } catch (e) {}
+          dispatchShare(text, url);
+          modal.remove();
+        };
+        opts.appendChild(b);
       };
-
-      document.getElementById('share-opt-site').onclick = () => {
-        dispatchShare(`Listen to "${manifest.title}" by ${manifest.artist}`, siteUrl);
-        modal.remove();
-      };
+      addOpt('track', '▶️', 'Share this track', activeTrack.title || '', trackUrl, 'Stream "' + (activeTrack.title || relTitle) + '" by ' + relArtist);
+      addOpt('release', '💿', 'Share this release', relTitle, releaseUrl, 'Listen to "' + relTitle + '" by ' + relArtist);
     }
 
     function dispatchShare(text, url) {
-      if (navigator.share) {
-        navigator.share({ title: currentManifest?.title || 'Chaos Theory', text, url }).catch(() => {});
-      } else {
-        navigator.clipboard.writeText(url);
-        alert('Link copied to clipboard!');
-      }
+      const copy = () => {
+        const done = () => alert('Link copied to clipboard!');
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, () => prompt('Copy this link:', url));
+        else prompt('Copy this link:', url);
+      };
+      if (navigator.share) navigator.share({ title: text, text, url }).catch(err => { if (!err || err.name !== 'AbortError') copy(); });
+      else copy();
     }
 
     function openMobilePortraitModal(manifest) {
@@ -2949,58 +2965,6 @@
         playerInstance.on('pause', () => { if (playPauseBtn) playPauseBtn.innerText = '▶️'; });
       }
     }
-
-      // --- Live Video.js Player Binding & Time Utilities ---
-      function formatTime(seconds) {
-        if (isNaN(seconds)) return "0:00";
-        const mins = Math.floor(seconds / 60);
-        const secs = Math.floor(seconds % 60);
-        return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-      }
-
-      const playerInstance = window.videojs ? (videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player')) : null;
-      const playPauseBtn = document.getElementById('mobile-play-pause-btn');
-      const seekBar = document.getElementById('mobile-seek-bar');
-      const currentTimeEl = document.getElementById('mobile-current-time');
-      const durationEl = document.getElementById('mobile-duration');
-
-      if (playerInstance) {
-        if (playPauseBtn) {
-          playPauseBtn.innerText = playerInstance.paused() ? '▶️' : '⏸️';
-
-          playPauseBtn.onclick = () => {
-            if (playerInstance.paused()) {
-              playerInstance.play();
-              playPauseBtn.innerText = '⏸️';
-            } else {
-              playerInstance.pause();
-              playPauseBtn.innerText = '▶️';
-            }
-          };
-        }
-
-        playerInstance.on('timeupdate', () => {
-          const current = playerInstance.currentTime();
-          const duration = playerInstance.duration() || 0;
-          if (duration > 0 && seekBar) {
-            seekBar.value = (current / duration) * 100;
-          }
-          if (currentTimeEl) currentTimeEl.innerText = formatTime(current);
-          if (durationEl) durationEl.innerText = formatTime(duration);
-        });
-
-        if (seekBar) {
-          seekBar.oninput = () => {
-            const duration = playerInstance.duration() || 0;
-            if (duration > 0) {
-              playerInstance.currentTime((seekBar.value / 100) * duration);
-            }
-          };
-        }
-
-        playerInstance.on('play', () => { if (playPauseBtn) playPauseBtn.innerText = '⏸️'; });
-        playerInstance.on('pause', () => { if (playPauseBtn) playPauseBtn.innerText = '▶️'; });
-      };
 
     function syncMobileCanvasView(track, idx) {
       const mobileArt = document.getElementById('mobile-canvas-art');
@@ -3294,6 +3258,7 @@
         releasePayUrl: rel.payUrl || '',
         releaseEmail: rel.licensingEmail || '',
         releaseBundlePrice: rel.bundlePrice || null,
+        releaseDashboardId: rel.dashboardFileId || '',
       });
     }
 
@@ -3706,6 +3671,7 @@
       }
 
     function initChladniCanvas(container, trackSignature, isFocusActive) {
+      if (container.__chaosStop) container.__chaosStop();
       let canvas = container.querySelector('#chladni-canvas');
       if (!canvas) {
         canvas = document.createElement('canvas');
@@ -3744,6 +3710,7 @@
 
       let animId;
       function animate() {
+        if (!canvas.isConnected) return;
         ctx.clearRect(0, 0, width, height);
         ctx.fillStyle = '#00ff66'; // Glowing sovereign green laser hue
 
@@ -3761,7 +3728,8 @@
         animId = requestAnimationFrame(animate);
       }
       animate();
-      return () => cancelAnimationFrame(animId);
+      container.__chaosStop = () => cancelAnimationFrame(animId);
+      return container.__chaosStop;
     }
   </script>
 </body>
