@@ -3386,12 +3386,21 @@
       top.appendChild(all);
       top.appendChild(el('span', '', 'Select all'));
       
-      // 🎧 Focus shelf toggle button in header bar
-      const shelfBtn = el('button', 'margin-left:auto;background:' + (window.__chaosDiscFocusShelfOpen ? '#1f6feb' : '#21262d') + ';color:#c9d1d9;border:1px solid #30363d;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;', '🎧 Focus');
-      shelfBtn.title = 'Toggle focus filter shelf';
+      // 🎧 Context-aware Focus Shelf button in discography header bar
+      const shelfBtn = el('button', 'margin-left:auto;background:' + (isFocusActive ? '#1f6feb' : '#21262d') + ';color:#c9d1d9;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer;', '🎧 Focus');
+      shelfBtn.title = isFocusActive ? 'Toggle focus shelf' : 'Enable focus mode & open shelf';
       shelfBtn.onclick = (e) => {
         e.stopPropagation();
-        window.__chaosDiscFocusShelfOpen = !window.__chaosDiscFocusShelfOpen;
+        const currentlyActive = document.getElementById('chaos-sovereign-dashboard')?.dataset.focus === '1';
+        
+        if (!currentlyActive) {
+          // If focus mode is off, turn it on AND open the shelf
+          toggleFocusLayout();
+          window.__chaosDiscFocusShelfOpen = true;
+        } else {
+          // If focus mode is already on, just toggle the shelf open/closed smoothly
+          window.__chaosDiscFocusShelfOpen = !window.__chaosDiscFocusShelfOpen;
+        }
         renderDiscography();
       };
       top.appendChild(shelfBtn);
@@ -3413,33 +3422,38 @@
       bar.appendChild(acts);
       view.appendChild(bar);
 
-      // 🎧 Collapsible Focus Shelf (Hidden by default until toggled)
+      // 🎧 Collapsible Focus Shelf (Visible only when shelf state is true)
       const focusRels = releases.filter(r => r.focus);
       if (window.__chaosDiscFocusShelfOpen && focusRels.length) {
         const shelf = el('div', 'background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:6px;flex-shrink:0;');
         const nF = focusRels.reduce((n, r) => n + r.tracks.length, 0);
         
-        const shelfHead = el('div', 'display:flex;flex-direction:column;gap:2px;');
+        const shelfHead = el('div', 'display:flex;justify-content:space-between;align-items:center;');
         
-        const shelfTitle = el('div', 'font-size:12px;color:#f0f6fc;font-weight:600;', '🎧 Focus Mode');
-        const shelfSub = el('div', 'font-size:8px;color:#808080;font-weight:200;', 'Play underscores & instrumentals only.');
-      
-        shelfHead.appendChild(shelfTitle);
-        shelfHead.appendChild(shelfSub);
+        const titleWrap = el('div', 'display:flex;flex-direction:column;gap:2px;');
+        titleWrap.appendChild(el('div', 'font-size:12px;color:#f0f6fc;font-weight:600;', '🎧 Focus Shelf'));
+        titleWrap.appendChild(el('div', 'font-size:8px;color:#808080;font-weight:200;', 'Play underscores & instrumentals only.'));
+        shelfHead.appendChild(titleWrap);
         
-        // Headphone button linking to Now Playing headphone toggle
-        const shelfHeadphone = el('button', 'background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;', '🎧');
-        shelfHeadphone.title = 'Link to Now Playing focus mode';
-        shelfHeadphone.onclick = () => { toggleFocusLayout(); };
-        shelfHead.appendChild(shelfHeadphone);
+        // Small '✕' button to close just the shelf without disabling focus mode
+        const closeShelfBtn = el('button', 'background:transparent;color:#8b949e;border:none;font-size:14px;cursor:pointer;padding:2px 6px;', '✕');
+        closeShelfBtn.title = 'Close focus shelf';
+        closeShelfBtn.onclick = (e) => {
+          e.stopPropagation();
+          window.__chaosDiscFocusShelfOpen = false;
+          renderDiscography();
+        };
+        shelfHead.appendChild(closeShelfBtn);
         shelf.appendChild(shelfHead);
 
-        shelf.appendChild(el('div', 'font-size:10px;color:#8b949e;', 'Instrumentals for work and study · ' + focusRels.length + ' releases · ' + nF + ' tracks'));
+        shelf.appendChild(el('div', 'font-size:10px;color:#8b949e;', focusRels.length + ' releases · ' + nF + ' tracks'));
+        
         const frow = el('div', 'display:flex;gap:6px;flex-wrap:wrap;');
         const allFocus = () => focusRels.flatMap(r => r.tracks.map((t, i) => discBuild(r, i)));
         const shuffled = a => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const x = b[i]; b[i] = b[j]; b[j] = x; } return b; };
         const fb = (label, bg, fn) => { const b = el('button', 'background:' + bg + ';color:#fff;border:' + (bg === '#21262d' ? '1px solid #30363d' : 'none') + ';padding:6px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;', label); b.onclick = fn; return b; };
         const loopOn = () => { if (repeatMode === 'off') { const rb = document.getElementById('btn-repeat'); if (rb) rb.click(); } };
+        
         frow.appendChild(fb('▶ Play all', '#238636', () => { discPlay(allFocus(), 'focus'); loopOn(); }));
         frow.appendChild(fb('🔀 Shuffle', '#1f6feb', () => { discPlay(shuffled(allFocus()), 'focus'); loopOn(); }));
         frow.appendChild(fb('＋ Add all', '#21262d', () => discAdd(allFocus())));
@@ -3469,7 +3483,6 @@
 
         const txt = el('div', 'flex:1;min-width:0;');
         txt.appendChild(el('div', 'font-size:12px;color:#f0f6fc;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', rel.title));
-        // 🛠️ Removed "🎧 Focus" badge text from individual release subline metadata
         txt.appendChild(el('div', 'font-size:10px;color:#8b949e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;',
           [rel.type, (rel.date || '').slice(0, 4), rel.tracks.length + (rel.tracks.length === 1 ? ' track' : ' tracks')].filter(Boolean).join(' • ')));
         head.appendChild(txt);
