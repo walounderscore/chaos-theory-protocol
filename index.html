@@ -2984,8 +2984,7 @@
 
         playerInstance.on('play', () => { if (playPauseBtn) playPauseBtn.innerText = '⏸️'; });
         playerInstance.on('pause', () => { if (playPauseBtn) playPauseBtn.innerText = '▶️'; });
-      }
-    }
+      };
 
     function syncMobileCanvasView(track, idx) {
       const mobileArt = document.getElementById('mobile-canvas-art');
