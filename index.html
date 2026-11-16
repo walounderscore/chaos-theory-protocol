@@ -366,8 +366,23 @@
 
     function toggleFocusLayout() {
       const w = document.getElementById('chaos-sovereign-dashboard');
-      window.__chaosFocusPref = (w && w.dataset.focus === '1') ? 'off' : 'on';
+      const turnOn = !(w && w.dataset.focus === '1');
+      window.__chaosFocusPref = turnOn ? 'on' : 'off';
+
+      if (turnOn) {
+        // Automatically open the focus shelf/banner in discography
+        window.__chaosDiscFocusShelfOpen = true;
+      }
+
       applyFocusLayout();
+
+      // If focus mode is turned on and there are 0 focus tracks in the current queue, open discography automatically
+      if (turnOn && currentManifest && currentManifest.tracks) {
+        const focusTracks = currentManifest.tracks.filter(t => trackIsFocus(t));
+        if (focusTracks.length === 0) {
+          openDiscography();
+        }
+      }
     }
     
     function updateLiveAlbumBadge() {
@@ -3669,7 +3684,7 @@
         + (failed.length ? '\n\nFailed:\n- ' + failed.join('\n- ') : '');
       logMessage('🏁 ' + summary.replace(/\n+/g, ' | '));
       alert(summary);
-    }
+      }
 
     function initChladniCanvas(container, trackSignature, isFocusActive) {
       let canvas = container.querySelector('#chladni-canvas');
