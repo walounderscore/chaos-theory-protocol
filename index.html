@@ -2761,24 +2761,30 @@
       let modal = document.getElementById('chaos-mobile-modal');
       if (modal) modal.remove();
 
+      const isFocusActive = document.getElementById('chaos-sovereign-dashboard')?.dataset.focus === '1';
+      const activeTrack = manifest.tracks[currentTrackIndex] || manifest.tracks[0];
+
       modal = document.createElement('div');
       modal.id = 'chaos-mobile-modal';
       modal.style.cssText = `
         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #0d1117;
         z-index: 99999; display: flex; flex-direction: column; justify-content: space-between;
-        padding: 24px; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; color: #c9d1d9;
+        padding: 24px 24px 0 24px; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; color: #c9d1d9; overflow: hidden;
       `;
 
-      const activeTrack = manifest.tracks[currentTrackIndex] || manifest.tracks[0];
-
       modal.innerHTML = `
-        <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin:0 -8px;">
-          <button id="close-mobile-modal" style="justify-self:start;background:transparent;color:#c9d1d9;border:none;font-size:24px;cursor:pointer;padding:4px 8px;">✕</button>
+        <!-- Chladni Matrix Reactive Background Container -->
+        <div id="mobile-matrix-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none;"></div>
+
+        <!-- Top Bar -->
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin:0 -8px;z-index:1;">
+          <button id="close-mobile-modal" style="justify-self:start;background:transparent;color:#c9d1d9;border:none;font-size:24px;cursor:pointer;padding:4px 8px;" title="Close">✕</button>
           <span style="font-size:12px;color:#8b949e;font-weight:600;letter-spacing:1px;text-transform:uppercase;">NOW PLAYING</span>
-          <button id="mobile-checkout-btn" style="justify-self:end;background:#1f6feb;color:#fff;border:none;padding:7px 12px;border-radius:16px;font-size:12px;font-weight:600;cursor:pointer;">⬇️ Download</button>
+          <button id="mobile-focus-toggle" style="justify-self:end;background:${isFocusActive ? '#1f6feb' : '#21262d'};color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:5px 10px;font-size:14px;cursor:pointer;" title="Toggle Focus Mode">🎧</button>
         </div>
 
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; margin: auto 0;">
+        <!-- Center Player Content -->
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; margin: auto 0; z-index: 1;">
           <img id="mobile-canvas-art" src="${activeTrack?.cover || manifest.coverArtData || activeTrack?.thumbData || ''}" style="width: 240px; height: 240px; border-radius: 16px; object-fit: cover; box-shadow: 0 12px 32px rgba(0,0,0,0.8);" />
           <div style="text-align: center; width: 100%;">
             <h2 id="mobile-canvas-title" style="margin:0;font-size:16px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;line-height:1.2;">${activeTrack?.title || 'Select Track'}</h2>
@@ -2795,7 +2801,8 @@
           </div>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 400px; margin: 0 auto;">
+        <!-- Controls & Footer Section -->
+        <div style="display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 400px; margin: 0 auto; z-index: 1;">
           <div style="display: flex; justify-content: space-around; align-items: center;">
             <button id="mobile-shuffle-btn" style="background: transparent; border: none; font-size: 20px; color: ${isShuffleActive ? '#58a6ff' : '#8b949e'}; cursor: pointer;" title="Shuffle">🔀</button>
             <button onclick="document.getElementById('btn-prev-track').click()" style="background: transparent; border: none; font-size: 26px; color: #f0f6fc; cursor: pointer;" title="Previous">⏮️</button>
@@ -2805,9 +2812,33 @@
           </div>
           <p style="text-align: center; font-size: 11px; color: #8b949e; margin: 0;">© ${manifest.artist}. All rights reserved.</p>
         </div>
+
+        <!-- Full-Bottom Download Banner -->
+        <div style="margin: 0 -24px; z-index: 1;">
+          <button id="mobile-checkout-btn" style="width: 100%; background: #1f6feb; color: #fff; border: none; border-radius: 0; padding: 16px; font-size: 14px; font-weight: bold; cursor: pointer; text-align: center;">⬇️ Download</button>
+        </div>
       `;
 
       document.body.appendChild(modal);
+
+      // --- Initialize Chladni Matrix Background ---
+      const matrixContainer = document.getElementById('mobile-matrix-container');
+      if (matrixContainer) {
+        initChladniCanvas(matrixContainer, activeTrack?.widgetFileId || activeTrack?.title || 'chaos', isFocusActive);
+      }
+
+      // --- Focus Toggle Binding ---
+      document.getElementById('mobile-focus-toggle').onclick = () => {
+        toggleFocusLayout();
+        const updatedFocus = document.getElementById('chaos-sovereign-dashboard')?.dataset.focus === '1';
+        const focusBtn = document.getElementById('mobile-focus-toggle');
+        if (focusBtn) {
+          focusBtn.style.background = updatedFocus ? '#1f6feb' : '#21262d';
+        }
+        if (matrixContainer) {
+          initChladniCanvas(matrixContainer, activeTrack?.widgetFileId || activeTrack?.title || 'chaos', updatedFocus);
+        }
+      };
 
       try { window.top.postMessage({ type: 'chaos-fullscreen', on: true }, '*'); } catch (e) {}
       try { const el = document.documentElement; if (el.requestFullscreen && !document.fullscreenElement) el.requestFullscreen().catch(() => {}); } catch (e) {}
@@ -2816,6 +2847,7 @@
         try { window.top.postMessage({ type: 'chaos-fullscreen', on: false }, '*'); } catch (e) {}
         modal.remove(); if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
       };
+
       document.getElementById('mobile-checkout-btn').onclick = () => {
         try { window.top.postMessage({ type: 'chaos-fullscreen', on: false }, '*'); } catch (e) {}
         modal.remove(); if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
@@ -2848,6 +2880,59 @@
           }
         };
       }
+
+      // --- Live Video.js Player Binding & Time Utilities ---
+      function formatTime(seconds) {
+        if (isNaN(seconds)) return "0:00";
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+      }
+
+      const playerInstance = window.videojs ? (videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player')) : null;
+      const playPauseBtn = document.getElementById('mobile-play-pause-btn');
+      const seekBar = document.getElementById('mobile-seek-bar');
+      const currentTimeEl = document.getElementById('mobile-current-time');
+      const durationEl = document.getElementById('mobile-duration');
+
+      if (playerInstance) {
+        if (playPauseBtn) {
+          playPauseBtn.innerText = playerInstance.paused() ? '▶️' : '⏸️';
+
+          playPauseBtn.onclick = () => {
+            if (playerInstance.paused()) {
+              playerInstance.play();
+              playPauseBtn.innerText = '⏸️';
+            } else {
+              playerInstance.pause();
+              playPauseBtn.innerText = '▶️';
+            }
+          };
+        }
+
+        playerInstance.on('timeupdate', () => {
+          const current = playerInstance.currentTime();
+          const duration = playerInstance.duration() || 0;
+          if (duration > 0 && seekBar) {
+            seekBar.value = (current / duration) * 100;
+          }
+          if (currentTimeEl) currentTimeEl.innerText = formatTime(current);
+          if (durationEl) durationEl.innerText = formatTime(duration);
+        });
+
+        if (seekBar) {
+          seekBar.oninput = () => {
+            const duration = playerInstance.duration() || 0;
+            if (duration > 0) {
+              playerInstance.currentTime((seekBar.value / 100) * duration);
+            }
+          };
+        }
+
+        playerInstance.on('play', () => { if (playPauseBtn) playPauseBtn.innerText = '⏸️'; });
+        playerInstance.on('pause', () => { if (playPauseBtn) playPauseBtn.innerText = '▶️'; });
+      }
+    }
 
       // --- Live Video.js Player Binding & Time Utilities ---
       function formatTime(seconds) {
@@ -3585,6 +3670,65 @@
         + (failed.length ? '\n\nFailed:\n- ' + failed.join('\n- ') : '');
       logMessage('🏁 ' + summary.replace(/\n+/g, ' | '));
       alert(summary);
+    }
+
+    function initChladniCanvas(container, trackSignature, isFocusActive) {
+      let canvas = container.querySelector('#chladni-canvas');
+      if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvas.id = 'chladni-canvas';
+        // Behind player content (z-index: 0), opacity responds to Focus mode state
+        canvas.style.cssText = `position:absolute; top:0; left:0; width:100%; height:100%; z-index:0; opacity:${isFocusActive ? '0.2' : '0.65'}; pointer-events:none; border-radius:inherit; transition: opacity 0.3s ease;`;
+        container.insertBefore(canvas, container.firstChild);
+      } else {
+        canvas.style.opacity = isFocusActive ? '0.2' : '0.65';
+      }
+      
+      const ctx = canvas.getContext('2d');
+      let width = canvas.width = container.clientWidth || 320;
+      let height = canvas.height = container.clientHeight || 320;
+
+      // Generate a deterministic mathematical seed from the track's binary/widget ID signature
+      let seed = 1;
+      const sig = trackSignature || 'chaos_default';
+      for (let i = 0; i < sig.length; i++) {
+        seed = (seed * 31 + sig.charCodeAt(i)) % 10000;
+      }
+
+      const cols = 16;
+      const rows = 16;
+      let points = [];
+
+      for (let x = 0; x < cols; x++) {
+        for (let y = 0; y < rows; y++) {
+          points.push({
+            baseX: (x / (cols - 1)) * width,
+            baseY: (y / (rows - 1)) * height,
+            freq: (seed % 5) + 1
+          });
+        }
+      }
+
+      let animId;
+      function animate() {
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#00ff66'; // Glowing sovereign green laser hue
+
+        let time = Date.now() * 0.002;
+        points.forEach(p => {
+          // Chladni plate wave displacement driven by track signature seed & time
+          let wave = Math.sin(p.baseX * 0.02 * p.freq + time) * Math.cos(p.baseY * 0.02 * p.freq + time);
+          let displacement = wave * 6;
+
+          ctx.beginPath();
+          ctx.arc(p.baseX + displacement, p.baseY + displacement, 1.8, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        animId = requestAnimationFrame(animate);
+      }
+      animate();
+      return () => cancelAnimationFrame(animId);
     }
   </script>
 </body>
