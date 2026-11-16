@@ -262,6 +262,7 @@
         <button class="copy-btn" style="background: #238636;" onclick="copyPlayerDirectLink()">🔗 Copy Player Link</button>
         <button class="copy-btn" style="background: #21262d; border: 1px solid #30363d;" onclick="forceRegenerateEmbed()">♻️ Update Release Info (Same Audio)</button>
         <button type="button" class="copy-btn" onclick="generateSeoSnippet()" style="margin-top:12px;">🔎 Generate search-friendly metadata</button>
+        <button id="update-all-btn" class="copy-btn" style="background:#21262d;border:1px solid #30363d;" onclick="updateAllReleases()">🔄 Update All Releases</button>
         <textarea id="seo-snippet-box" class="embed-box" style="height:140px;" readonly placeholder="Paste this on the page that hosts your embed, next to the player."></textarea>
       </div>
     </div>
@@ -3315,13 +3316,19 @@
           q.set('_s', String(++hit));
           q.set('en', name);
           q.set('_et', String(Math.min(600000, Math.max(100, now - last))));
-          last = now;
+          last = now;          
           if (hit === 1) { q.set('_ss', '1'); if (fresh) q.set('_fv', '1'); }
           const base = (typeof APPS_SCRIPT_URL !== 'undefined') ? APPS_SCRIPT_URL : location.href;
           const mid = (typeof currentManifest !== 'undefined' && currentManifest && currentManifest.masterDashboardFileId) || '';
           q.set('dl', mid ? base + '?fileId=' + mid : base);
           q.set('dt', document.title || '');
           q.set('ul', navigator.language || 'en');
+
+          let host = '';
+          try { const ao = location.ancestorOrigins; if (ao && ao.length) host = new URL(ao[ao.length - 1]).hostname; } catch (e) {}
+          if (document.referrer) q.set('dr', document.referrer);
+          if (host) q.set('ep.embed_host', host);
+          
           q.set('sr', screen.width + 'x' + screen.height);
           if (params) Object.keys(params).forEach(k => {
             const v = params[k];
@@ -3333,6 +3340,124 @@
       };
       window.chaosTrack('page_view');
     }    
+
+    function shrinkIfLarger(src, maxPx, quality) {
+      return new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => resolve(Math.max(img.width, img.height) > maxPx ? shrinkImage(src, maxPx, quality) : src);
+        img.onerror = () => resolve(src);
+        img.src = src;
+      });
+    }
+
+    async function updateAllReleases() {
+      const btn = document.getElementById('update-all-btn');
+      if (window.__chaosBulkRunning) {
+        window.__chaosBulkStop = true;
+        logMessage('⏹️ Stopping after the current release…');
+        return;
+      }
+      if (!accessToken || !driveFolderId) { alert('Please connect Google Drive first.'); return; }
+
+      const auth = { 'Authorization': 'Bearer ' + accessToken };
+      const catalogName = 'chaos_catalog.json';
+      const mb = n => (n / 1048576).toFixed(1);
+      const authFail = msg => /401|Unauthorized|Invalid Credentials|Token/i.test(String(msg));
+
+      let snaps = [];
+      try {
+        const lq = encodeURIComponent(`'${driveFolderId}' in parents and mimeType='application/json' and trashed=false`);
+        const lr = await fetch(`https://www.googleapis.com/drive/v3/files?q=${lq}&pageSize=200&fields=files(id,name,size)`, { headers: auth });
+        const ld = await lr.json();
+        if (!lr.ok) throw new Error(ld.error ? ld.error.message : lr.statusText);
+        snaps = (ld.files || []).filter(f => /_session_snapshot\.json$/.test(f.name));
+      } catch (err) {
+        handleDriveError(err);
+        logMessage('❌ Could not list your releases: ' + err.message);
+        return;
+      }
+      if (!snaps.length) { alert('No release snapshots found in your vault.'); return; }
+
+      const total = snaps.reduce((n, f) => n + (parseInt(f.size, 10) || 0), 0);
+      if (!confirm('Update ' + snaps.length + ' releases?\n\nThis re-uploads each player page and snapshot: roughly ' + mb(total + 650000 * snaps.length) + ' MB up and ' + mb(total) + ' MB down. Your audio is not touched.')) return;
+
+      window.__chaosBulkRunning = true;
+      window.__chaosBulkStop = false;
+      const prevLabel = btn ? btn.innerText : '';
+      const ok = [], skipped = [], failed = [], entries = [];
+      let catalog = { version: 1, releases: [] };
+      let catalogId = null, catalogReadable = true;
+
+      try {
+        const cq = encodeURIComponent(`name = '${catalogName}' and '${driveFolderId}' in parents and trashed = false`);
+        const cr = await fetch(`https://www.googleapis.com/drive/v3/files?q=${cq}&fields=files(id)`, { headers: auth });
+        const cd = await cr.json();
+        if (!cr.ok) throw new Error(cd.error ? cd.error.message : cr.statusText);
+        if (cd.files && cd.files.length) {
+          catalogId = cd.files[0].id;
+          const got = await fetch(`https://www.googleapis.com/drive/v3/files/${catalogId}?alt=media`, { headers: auth });
+          const parsed = got.ok ? await got.json().catch(() => null) : null;
+          if (parsed && Array.isArray(parsed.releases)) catalog = parsed; else catalogReadable = false;
+        } else {
+          catalogId = await uploadFileToDrive(catalogName, new TextEncoder().encode(JSON.stringify(catalog)), 'application/json');
+        }
+
+        for (let i = 0; i < snaps.length; i++) {
+          if (window.__chaosBulkStop) break;
+          const f = snaps[i];
+          if (btn) btn.innerText = '⏳ ' + (i + 1) + '/' + snaps.length + ' — tap to stop';
+          try {
+            const res = await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`, { headers: auth });
+            if (!res.ok) throw new Error('download failed (' + res.status + ')');
+            const m = await res.json();
+            if (!m || !m.title || !Array.isArray(m.tracks)) { skipped.push(f.name + ' (not a release snapshot)'); continue; }
+            if (!m.tracks.some(t => t.widgetFileId)) { skipped.push(m.title + ' (no uploaded tracks; it needs a one-time rebuild)'); continue; }
+
+            if (!m.releaseId) m.releaseId = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+            m.catalogFileId = catalogId;
+            if (m.coverArtData) m.coverArtData = await shrinkIfLarger(m.coverArtData, 1600, 0.85);
+            if (m.artistImgData) m.artistImgData = await shrinkIfLarger(m.artistImgData, 800, 0.82);
+            for (const t of m.tracks) if (t.thumbData) t.thumbData = await shrinkIfLarger(t.thumbData, 96, 0.7);
+
+            await uploadReleaseDashboardHtml(m);
+            await uploadManifestToDrive(m);
+            entries.push(await buildCatalogEntry(m));
+            ok.push(m.title);
+          } catch (err) {
+            failed.push(f.name + ' (' + err.message + ')');
+            if (authFail(err.message)) break;
+          }
+          await new Promise(r => setTimeout(r, 400));
+        }
+
+        if (entries.length && catalogReadable) {
+          entries.forEach(e => {
+            const k = catalog.releases.findIndex(r => r.id === e.id);
+            if (k >= 0) catalog.releases[k] = e; else catalog.releases.push(e);
+          });
+          catalog.updated = new Date().toISOString();
+          await uploadFileToDrive(catalogName, new TextEncoder().encode(JSON.stringify(catalog)), 'application/json');
+          logMessage('📀 Catalog updated: ' + catalog.releases.length + ' release(s).');
+        } else if (!catalogReadable) {
+          logMessage('⚠️ Your existing catalog could not be read, so it was left unchanged.');
+        }
+      } catch (err) {
+        handleDriveError(err);
+        logMessage('❌ Bulk update stopped: ' + err.message);
+        failed.push('(run stopped: ' + err.message + ')');
+      } finally {
+        window.__chaosBulkRunning = false;
+        window.__chaosBulkStop = false;
+        if (btn) btn.innerText = prevLabel;
+        if (currentManifest) { try { populateStep5EmbedBox(currentManifest); } catch (e) {} }
+      }
+
+      const summary = 'Updated ' + ok.length + ' of ' + snaps.length + '.'
+        + (skipped.length ? '\n\nSkipped:\n- ' + skipped.join('\n- ') : '')
+        + (failed.length ? '\n\nFailed:\n- ' + failed.join('\n- ') : '');
+      logMessage('🏁 ' + summary.replace(/\n+/g, ' | '));
+      alert(summary);
+    }
   </script>
 </body>
 </html>
