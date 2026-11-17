@@ -345,9 +345,7 @@
     function applyFocusLayout() {
       const w = document.getElementById('chaos-sovereign-dashboard');
       if (!w || !currentManifest || !currentManifest.tracks) return;
-      const auto = trackIsFocus(currentManifest.tracks[currentTrackIndex]);
-      const pref = window.__chaosFocusPref;
-      const on = pref === 'on' ? true : (pref === 'off' ? false : auto);
+      const on = window.__chaosFocusPref === 'on';
       w.dataset.focus = on ? '1' : '0';
       if (on && (w.dataset.tab === 'credits' || w.dataset.tab === 'lyrics')) {
         w.dataset.tab = 'player';
@@ -1790,6 +1788,7 @@
       function updateGridColumns() {
         const leftCollapsed = document.getElementById('left-panel-content')?.style.display === 'none';
         const rightCollapsed = document.getElementById('right-panel-content')?.style.display === 'none';
+        wrapper.dataset.rcol = rightCollapsed ? '1' : '0';
         wrapper.style.gridTemplateColumns = `${leftCollapsed ? '42px' : 'minmax(0, 1fr)'} minmax(0, 1.25fr) ${rightCollapsed ? '42px' : 'minmax(0, 1.15fr)'}`;
       }
 
@@ -2074,11 +2073,14 @@
               @media (min-width:721px){
                 #chaos-sovereign-dashboard[data-focus="1"]{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) !important;}
               }
+               @media (min-width:721px){
+                #chaos-sovereign-dashboard[data-focus="1"][data-rcol="1"]{grid-template-columns:minmax(0,1fr) 42px !important;}
+              } 
               #chaos-sovereign-dashboard[data-focus="1"] .chaos-p-credits,
               #chaos-sovereign-dashboard[data-focus="1"] .chaos-p-lyrics{display:none !important;}
               #chaos-sovereign-dashboard[data-focus="1"] #chaos-tabs button:nth-child(3),
               #chaos-sovereign-dashboard[data-focus="1"] #chaos-tabs button:nth-child(4){display:none;}
-              }`;
+              `;
             document.head.appendChild(rs);
      
       populateStep5EmbedBox(manifest);
@@ -2867,8 +2869,7 @@
         if (focusBtn) {
           focusBtn.style.background = updatedFocus ? '#1f6feb' : '#21262d';
         }
-        if (matrixContainer) {
-          initChladniCanvas(matrixContainer, activeTrack?.widgetFileId || activeTrack?.title || 'chaos', updatedFocus);
+        if (matrixContainer && matrixContainer.__chladni) matrixContainer.__chladni.setFocus(updatedFocus);
         }
       };
 
@@ -2973,6 +2974,8 @@
       if (mobileArt) { const a = track.cover || (currentManifest && currentManifest.coverArtData); if (a) mobileArt.src = a; }
       if (mobileTitle) mobileTitle.innerText = track.title;
       if (mobileArtist) mobileArtist.textContent = trackArtistLine(track); 
+      const mc = document.getElementById('mobile-matrix-container');
+      if (mc && mc.__chladni) mc.__chladni.setTrack((track && (track.widgetFileId || track.title)) || 'chaos');
     }
 
     function openPaystackCheckoutModal(manifest, source) {
@@ -3672,64 +3675,80 @@
 
     function initChladniCanvas(container, trackSignature, isFocusActive) {
       if (container.__chaosStop) container.__chaosStop();
-      let canvas = container.querySelector('#chladni-canvas');
-      if (!canvas) {
-        canvas = document.createElement('canvas');
-        canvas.id = 'chladni-canvas';
-        // Behind player content (z-index: 0), opacity responds to Focus mode state
-        canvas.style.cssText = `position:absolute; top:0; left:0; width:100%; height:100%; z-index:0; opacity:${isFocusActive ? '0.2' : '0.65'}; pointer-events:none; border-radius:inherit; transition: opacity 0.3s ease;`;
-        container.insertBefore(canvas, container.firstChild);
-      } else {
-        canvas.style.opacity = isFocusActive ? '0.2' : '0.65';
-      }
-      
+
+      const canvas = document.createElement('canvas');
+      canvas.id = 'chladni-canvas';
+      canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;border-radius:inherit;transition:opacity 0.3s ease;';
+      container.insertBefore(canvas, container.firstChild);
       const ctx = canvas.getContext('2d');
-      let width = canvas.width = container.clientWidth || 320;
-      let height = canvas.height = container.clientHeight || 320;
 
-      // Generate a deterministic mathematical seed from the track's binary/widget ID signature
-      let seed = 1;
-      const sig = trackSignature || 'chaos_default';
-      for (let i = 0; i < sig.length; i++) {
-        seed = (seed * 31 + sig.charCodeAt(i)) % 10000;
-      }
+      let width = 0, height = 0;
+      const resize = () => { width = canvas.width = container.clientWidth || 320; height = canvas.height = container.clientHeight || 320; };
+      resize();
+      window.addEventListener('resize', resize);
 
-      const cols = 16;
-      const rows = 16;
-      let points = [];
+      const cols = 16, rows = 16;
+      let fx = 1, fy = 1, ph = 0, phase = 0;
+      let rampStart = Date.now(), lastT = Date.now(), rafId = 0, stopped = false;
+      const player = window.videojs ? videojs.getPlayer('sovereign-local-player') : null;
+      const isPlaying = () => !!player && !player.paused() && !player.ended();
 
-      for (let x = 0; x < cols; x++) {
-        for (let y = 0; y < rows; y++) {
-          points.push({
-            baseX: (x / (cols - 1)) * width,
-            baseY: (y / (rows - 1)) * height,
-            freq: (seed % 5) + 1
-          });
-        }
-      }
+      const setTrack = sig => {
+        let seed = 1;
+        const s = String(sig || 'chaos_default');
+        for (let i = 0; i < s.length; i++) seed = (seed * 31 + s.charCodeAt(i)) % 10007;
+        fx = 1 + (seed % 7);
+        fy = 1 + (Math.floor(seed / 7) % 7);
+        ph = (seed % 13) * 0.5;
+        phase = 0;
+        rampStart = Date.now();
+      };
+      const setFocus = on => { canvas.style.opacity = on ? '0.2' : '0.65'; };
 
-      let animId;
-      function animate() {
-        if (!canvas.isConnected) return;
+      const draw = () => {
+        const now = Date.now();
+        if (isPlaying()) phase += (now - lastT) * 0.002;
+        lastT = now;
+        const amp = Math.min(1, (now - rampStart) / 700) * 6;
         ctx.clearRect(0, 0, width, height);
-        ctx.fillStyle = '#00ff66'; // Glowing sovereign green laser hue
+        ctx.fillStyle = '#00ff66';
+        for (let x = 0; x < cols; x++) {
+          for (let y = 0; y < rows; y++) {
+            const bx = (x / (cols - 1)) * width, by = (y / (rows - 1)) * height;
+            const wave = Math.sin(bx * 0.02 * fx + phase + ph) * Math.cos(by * 0.02 * fy + phase);
+            const d = wave * amp;
+            ctx.beginPath();
+            ctx.arc(bx + d, by + d, 1.8, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      };
 
-        let time = Date.now() * 0.002;
-        points.forEach(p => {
-          // Chladni plate wave displacement driven by track signature seed & time
-          let wave = Math.sin(p.baseX * 0.02 * p.freq + time) * Math.cos(p.baseY * 0.02 * p.freq + time);
-          let displacement = wave * 6;
+      const stop = () => {
+        stopped = true;
+        if (rafId) cancelAnimationFrame(rafId);
+        if (player) player.off('play', kick);
+        window.removeEventListener('resize', resize);
+        canvas.remove();
+        container.__chladni = null;
+        container.__chaosStop = null;
+      };
+      const tick = () => {
+        rafId = 0;
+        if (stopped) return;
+        if (!container.isConnected) { stop(); return; }
+        draw();
+        if (isPlaying() || Date.now() - rampStart < 750) rafId = requestAnimationFrame(tick);
+      };
+      function kick() { if (!stopped && !rafId) { lastT = Date.now(); rafId = requestAnimationFrame(tick); } }
 
-          ctx.beginPath();
-          ctx.arc(p.baseX + displacement, p.baseY + displacement, 1.8, 0, Math.PI * 2);
-          ctx.fill();
-        });
-
-        animId = requestAnimationFrame(animate);
-      }
-      animate();
-      container.__chaosStop = () => cancelAnimationFrame(animId);
-      return container.__chaosStop;
+      if (player) player.on('play', kick);
+      setTrack(trackSignature);
+      setFocus(isFocusActive);
+      container.__chladni = { setTrack: sig => { setTrack(sig); kick(); }, setFocus: setFocus, stop: stop };
+      container.__chaosStop = stop;
+      kick();
+      return stop;
     }
   </script>
 </body>
