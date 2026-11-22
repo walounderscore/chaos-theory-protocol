@@ -1629,6 +1629,7 @@
         bundlePrice: manifest.bundlePrice || null,
         tracks: tracks,
         dashboardFileId: manifest.masterDashboardFileId || '',
+        website: manifest.artistWebsite || '',
       };
     }
 
@@ -1883,27 +1884,23 @@
           </p>
         </div>
       `;
-      const siteUrl = /^https?:\/\//i.test(manifest.artistWebsite || '') ? manifest.artistWebsite : '';
-      if (siteUrl) {
-        const artEl = leftContent.querySelector('#metadata-cover-art');
-        if (artEl) {
-          const a = document.createElement('a');
-          a.id = 'artist-site-link';
-          a.className = 'chaos-artist-link';
-          a.href = siteUrl;
-          a.target = '_blank';
-          a.rel = 'noopener';
-          a.title = 'Visit my website';
-          artEl.parentNode.insertBefore(a, artEl);
-          a.appendChild(artEl);
-          const cta = document.createElement('span');
-          cta.className = 'chaos-artist-cta';
-          cta.textContent = 'Visit my website ↗';
-          a.appendChild(cta);
-          a.addEventListener('click', () => {
-            try { if (window.gtag) window.gtag('event', 'artist_site_click', { release: currentManifest.title || '' }); } catch (e) {}
-          });
-        }
+      const artEl = leftContent.querySelector('#metadata-cover-art');
+      if (artEl) {
+        const a = document.createElement('a');
+        a.id = 'artist-site-link';
+        a.className = 'chaos-artist-link';
+        artEl.parentNode.insertBefore(a, artEl);
+        a.appendChild(artEl);
+        const cta = document.createElement('span');
+        cta.className = 'chaos-artist-cta';
+        cta.textContent = 'Visit my website ↗';
+        a.appendChild(cta);
+        a.addEventListener('click', () => {
+          if (!a.classList.contains('on')) return;
+          const t = (currentManifest.tracks || [])[currentTrackIndex] || {};
+          try { if (window.gtag) window.gtag('event', 'artist_site_click', { release: t.releaseTitle || currentManifest.title || '' }); } catch (e) {}
+        });
+        applyArtistLink((manifest.tracks || [])[0]);
       }
       leftPanel.appendChild(leftContent);
 
@@ -2108,13 +2105,15 @@
               #chaos-sovereign-dashboard[data-focus="1"] #chaos-tabs button:nth-child(3),
               #chaos-sovereign-dashboard[data-focus="1"] #chaos-tabs button:nth-child(4){display:none;}
               
-              .chaos-artist-link{position:relative;display:block;flex-shrink:0;border-radius:8px;overflow:hidden;text-decoration:none;}
-              .chaos-artist-cta{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:8px;background:rgba(0,0,0,0.55);color:#fff;font-size:13px;font-weight:600;opacity:0;transition:opacity .2s ease;}
+              .chaos-artist-link{position:relative;display:block;flex-shrink:0;border-radius:8px;overflow:hidden;text-decoration:none;cursor:default;pointer-events:none;}
+              .chaos-artist-link.on{cursor:pointer;pointer-events:auto;}
+              .chaos-artist-cta{display:none;position:absolute;inset:0;align-items:center;justify-content:center;text-align:center;padding:8px;background:rgba(0,0,0,0.55);color:#fff;font-size:13px;font-weight:600;opacity:0;transition:opacity .2s ease;}
+              .chaos-artist-link.on .chaos-artist-cta{display:flex;}
               @media (hover:hover){
-                .chaos-artist-link:hover .chaos-artist-cta,.chaos-artist-link:focus-visible .chaos-artist-cta{opacity:1;}
+                .chaos-artist-link.on:hover .chaos-artist-cta,.chaos-artist-link.on:focus-visible .chaos-artist-cta{opacity:1;}
               }
               @media (hover:none){
-                .chaos-artist-cta{inset:auto 0 0 0;opacity:1;background:linear-gradient(transparent,rgba(0,0,0,0.78));padding:18px 8px 8px;font-size:11px;}
+                .chaos-artist-link.on .chaos-artist-cta{inset:auto 0 0 0;opacity:1;background:linear-gradient(transparent,rgba(0,0,0,0.78));padding:18px 8px 8px;font-size:11px;}
               }  
               `;
             document.head.appendChild(rs);
@@ -2259,6 +2258,8 @@
         typeof toggleFocusLayout === 'function' ? toggleFocusLayout : null,
         typeof initChladniCanvas === 'function' ? initChladniCanvas : null,
         typeof trackReleaseDashboardId === 'function' ? trackReleaseDashboardId : null,
+        typeof applyArtistLink === 'function' ? applyArtistLink : null,
+        typeof discPlayAsk === 'function' ? discPlayAsk : null,
       ];
 
       funcs.forEach(f => {
@@ -2429,6 +2430,7 @@
      // 👤 Credits Panel image strictly uses Artist Portrait (fallback to Album Cover)
      const creditsPanelArt = currentManifest.artistImgData || currentManifest.coverArtData || '';
      if (metaImg) metaImg.src = creditsPanelArt;
+     applyArtistLink(track);
 
      if (lyricsBox) {
        lyricsBox.innerText = track.caption || `[Liner Notes / Lyrics for ${track.title}]\n\nAll rights reserved. © ${currentManifest.artist}.`;
@@ -3311,6 +3313,7 @@
         releaseEmail: rel.licensingEmail || '',
         releaseBundlePrice: rel.bundlePrice || null,
         releaseDashboardId: rel.dashboardFileId || '',
+        releaseWebsite: rel.website || '',
       });
     }
 
@@ -3326,27 +3329,40 @@
     function discNote(msg, action) {
       const n = document.getElementById('disc-msg');
       if (!n) return;
+      const acts = Array.isArray(action) ? action : (action ? [action] : []);
       n.textContent = msg;
-      if (action) {
+      acts.forEach(a => {
         const b = document.createElement('button');
-        b.textContent = action.label;
+        b.textContent = a.label;
         b.style.cssText = 'margin-left:6px;background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:2px 7px;font-size:11px;cursor:pointer;';
-        b.onclick = () => { n.textContent = ''; action.run(); };
+        b.onclick = () => { n.textContent = ''; clearTimeout(window.__chaosNoteT); a.run(); };
         n.appendChild(b);
-      }
+      });
       clearTimeout(window.__chaosNoteT);
-      window.__chaosNoteT = setTimeout(() => { const m = document.getElementById('disc-msg'); if (m) m.textContent = ''; }, action ? 8000 : 2500);
+      window.__chaosNoteT = setTimeout(() => { const m = document.getElementById('disc-msg'); if (m) m.textContent = ''; }, acts.length ? 10000 : 2500);
     }
 
-    function discPlay(list, source) {
+    function discPlay(list, source, after) {
       if (!list.length) return;
       currentManifest.tracks = list;
       currentTrackIndex = 0;
       try { if (window.gtag) window.gtag('event', 'release_play', { source: source || 'discography', tracks: list.length }); } catch (e) {}
       closeDiscography();
       selectTrack(0);
+      if (after) after();
     }
 
+    function discPlayAsk(list, source, after) {
+      if (!list.length) return;
+      const cur = currentManifest.tracks || [];
+      const same = cur.length === list.length && cur.every((t, i) => t.widgetFileId === list[i].widgetFileId);
+      if (same) { discPlay(list, source, after); return; }
+      discNote('Replace your queue (' + cur.length + ' tracks)?', [
+        { label: 'Replace queue', run: () => discPlay(list, source, after) },
+        { label: 'Add to queue', run: () => discAdd(list) }
+      ]);
+    }
+    
     function discAdd(list, force) {
       if (!list.length) return;
       const have = new Set(currentManifest.tracks.map(t => t.widgetFileId));
@@ -3471,8 +3487,8 @@
         const fb = (label, bg, fn) => { const b = el('button', 'background:' + bg + ';color:#fff;border:' + (bg === '#21262d' ? '1px solid #30363d' : 'none') + ';padding:6px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;', label); b.onclick = fn; return b; };
         const loopOn = () => { if (repeatMode === 'off') { const rb = document.getElementById('btn-repeat'); if (rb) rb.click(); } };
         
-        frow.appendChild(fb('▶ Play all', '#238636', () => { discPlay(allFocus(), 'focus'); loopOn(); }));
-        frow.appendChild(fb('🔀 Shuffle', '#1f6feb', () => { discPlay(shuffled(allFocus()), 'focus'); loopOn(); }));
+        frow.appendChild(fb('▶ Play all', '#238636', () => { discPlayAsk(allFocus(), 'focus'); loopOn(); }));
+        frow.appendChild(fb('🔀 Shuffle', '#1f6feb', () => { discPlayAsk(shuffled(allFocus()), 'focus'); loopOn(); }));
         frow.appendChild(fb('＋ Add all', '#21262d', () => discAdd(allFocus())));
         shelf.appendChild(frow);
         view.appendChild(shelf);
@@ -3510,8 +3526,8 @@
           b.onclick = fn;
           return b;
         };
-        head.appendChild(ic('＋', 'Add to queue', () => discAdd(discCollect(false, rel))));
-        head.appendChild(ic('▶', 'Play now', () => discPlay(discCollect(false, rel))));
+        head.appendChild(ic('＋', 'Add to queue', () => discAddAsk(discCollect(false, rel))));
+        head.appendChild(ic('▶', 'Play now', () => discPlayAsk(discCollect(false, rel))));
         head.appendChild(ic(opened[rel.id] ? 'Close' : 'Open', 'Choose tracks', () => { opened[rel.id] = !opened[rel.id]; renderDiscography(); }));
         row.appendChild(head);
 
@@ -3806,6 +3822,23 @@
       if (!u) return null;
       if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) u = 'https://' + u;
       try { const p = new URL(u); return /^https?:$/.test(p.protocol) ? p.href : null; } catch (e) { return null; }
+    }    
+
+    function applyArtistLink(track) {
+      const a = document.getElementById('artist-site-link');
+      if (!a) return;
+      const url = (track && track.foreign) ? (track.releaseWebsite || '') : ((currentManifest && currentManifest.artistWebsite) || '');
+      if (/^https?:\/\//i.test(url)) {
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.title = 'Visit my website';
+        a.classList.add('on');
+      } else {
+        a.removeAttribute('href');
+        a.removeAttribute('title');
+        a.classList.remove('on');
+      }
     }    
   </script>
 </body>
