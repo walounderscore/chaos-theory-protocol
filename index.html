@@ -242,6 +242,8 @@
       <input type="email" id="licensing-email" placeholder="you@yourdomain.com" style="width:100%;">
       <label style="font-size:0.75rem;color:#8b949e;display:block;margin:10px 0 3px;">Google Analytics Measurement ID (optional):</label>
       <input type="text" id="ga-measurement-id" placeholder="G-XXXXXXXXXX" style="width:100%;">
+      <label style="font-size:0.75rem;color:#8b949e;display:block;margin:10px 0 3px;">Artist website (the artist image links here, optional):</label>
+      <input type="url" id="artist-website" placeholder="https://yourname.com" style="width:100%;">
     </div>
 
     <!-- System Logs -->
@@ -741,6 +743,8 @@
       if (licEmailEl) licEmailEl.value = manifest.licensingEmail || '';
       const gaEl = document.getElementById('ga-measurement-id');
       if (gaEl) gaEl.value = manifest.gaMeasurementId || '';
+      const siteEl = document.getElementById('artist-website');
+      if (siteEl) siteEl.value = manifest.artistWebsite || '';
       const upcEl = document.getElementById('global-upc');
       if (upcEl) upcEl.value = manifest.upc || '';
       const notesEl = document.getElementById('global-album-notes');
@@ -1351,6 +1355,7 @@
         albumNotes: (document.getElementById('global-album-notes')?.value || '').trim() || null,
         licensingEmail: (document.getElementById('licensing-email')?.value || '').trim() || null,
         gaMeasurementId: (document.getElementById('ga-measurement-id')?.value || '').trim() || null,
+        artistWebsite: normalizeWebUrl(document.getElementById('artist-website')?.value),
         tracks: []
       };
 
@@ -1878,6 +1883,28 @@
           </p>
         </div>
       `;
+      const siteUrl = /^https?:\/\//i.test(manifest.artistWebsite || '') ? manifest.artistWebsite : '';
+      if (siteUrl) {
+        const artEl = leftContent.querySelector('#metadata-cover-art');
+        if (artEl) {
+          const a = document.createElement('a');
+          a.id = 'artist-site-link';
+          a.className = 'chaos-artist-link';
+          a.href = siteUrl;
+          a.target = '_blank';
+          a.rel = 'noopener';
+          a.title = 'Visit my website';
+          artEl.parentNode.insertBefore(a, artEl);
+          a.appendChild(artEl);
+          const cta = document.createElement('span');
+          cta.className = 'chaos-artist-cta';
+          cta.textContent = 'Visit my website ↗';
+          a.appendChild(cta);
+          a.addEventListener('click', () => {
+            try { if (window.gtag) window.gtag('event', 'artist_site_click', { release: currentManifest.title || '' }); } catch (e) {}
+          });
+        }
+      }
       leftPanel.appendChild(leftContent);
 
       leftHeader.onclick = () => {
@@ -2080,6 +2107,15 @@
               #chaos-sovereign-dashboard[data-focus="1"] .chaos-p-lyrics{display:none !important;}
               #chaos-sovereign-dashboard[data-focus="1"] #chaos-tabs button:nth-child(3),
               #chaos-sovereign-dashboard[data-focus="1"] #chaos-tabs button:nth-child(4){display:none;}
+              
+              .chaos-artist-link{position:relative;display:block;flex-shrink:0;border-radius:8px;overflow:hidden;text-decoration:none;}
+              .chaos-artist-cta{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:8px;background:rgba(0,0,0,0.55);color:#fff;font-size:13px;font-weight:600;opacity:0;transition:opacity .2s ease;}
+              @media (hover:hover){
+                .chaos-artist-link:hover .chaos-artist-cta,.chaos-artist-link:focus-visible .chaos-artist-cta{opacity:1;}
+              }
+              @media (hover:none){
+                .chaos-artist-cta{inset:auto 0 0 0;opacity:1;background:linear-gradient(transparent,rgba(0,0,0,0.78));padding:18px 8px 8px;font-size:11px;}
+              }  
               `;
             document.head.appendChild(rs);
      
@@ -3641,6 +3677,7 @@
 
             if (!m.releaseId) m.releaseId = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
             m.catalogFileId = catalogId;
+            if (!m.artistWebsite) m.artistWebsite = normalizeWebUrl(document.getElementById('artist-website')?.value);
             if (m.focus === undefined) m.focus = /\b(instrumentals?|underscor(?:e|es|ed))\b/i.test(m.title || '');
             if (m.coverArtData) m.coverArtData = await shrinkIfLarger(m.coverArtData, 1600, 0.85);
             if (m.artistImgData) m.artistImgData = await shrinkIfLarger(m.artistImgData, 800, 0.82);
@@ -3763,6 +3800,13 @@
       kick();
       return stop;
     }
+
+    function normalizeWebUrl(v) {
+      let u = String(v || '').trim();
+      if (!u) return null;
+      if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) u = 'https://' + u;
+      try { const p = new URL(u); return /^https?:$/.test(p.protocol) ? p.href : null; } catch (e) { return null; }
+    }    
   </script>
 </body>
 </html>
