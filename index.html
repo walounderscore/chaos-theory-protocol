@@ -3526,7 +3526,7 @@
           b.onclick = fn;
           return b;
         };
-        head.appendChild(ic('＋', 'Add to queue', () => discAddAsk(discCollect(false, rel))));
+        head.appendChild(ic('＋', 'Add to queue', () => discAdd(discCollect(false, rel))));
         head.appendChild(ic('▶', 'Play now', () => discPlay(discCollect(false, rel))));
         head.appendChild(ic(opened[rel.id] ? 'Close' : 'Open', 'Choose tracks', () => { opened[rel.id] = !opened[rel.id]; renderDiscography(); }));
         row.appendChild(head);
