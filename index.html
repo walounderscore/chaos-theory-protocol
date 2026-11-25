@@ -361,6 +361,7 @@
       }
       // 🌟 Re-render queue and discography views to respect focus filtering
       renderQueue();
+      chaosStreamTimer().place();
       if (window.__chaosDiscOpen) renderDiscography();
     }
 
@@ -1994,7 +1995,10 @@
       basePanel.className = 'chaos-p chaos-p-lyrics';
       basePanel.style.cssText = `grid-column: 1 / -1; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px;`;
       basePanel.innerHTML = `
-        <h3 style="margin-top: 0; font-size: 13px; color: #f0f6fc; border-bottom: 1px solid #30363d; padding-bottom: 6px;">📝 Lyrics & Notes</h3>
+        <div id="chaos-lyrics-head" style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:1px solid #30363d;padding-bottom:6px;margin-bottom:13px;">
+          <h3 style="margin:0;font-size:13px;color:#f0f6fc;">📝 Lyrics & Notes</h3>
+          <button id="chaos-timer" type="button" class="chaos-timer"><span class="tl"></span><span class="ts"></span><span class="tv">00:00:00</span></button>
+        </div>        
         <div id="release-lyrics-box" style="font-family: monospace; font-size: 12px; color: #8b949e; white-space: pre-wrap; max-height: 120px; overflow-y: auto; padding: 8px; background: #0d1117; border-radius: 4px; border: 1px solid #21262d;">
           ${manifest.tracks[0]?.caption || `[Select a track above to view lyrics and liner notes]\n\nChaos Theory Protocol — Sovereign Audio Distribution Suite.`}
         </div>
@@ -2015,6 +2019,11 @@
       basePanel.insertBefore(det, basePanel.querySelector('#release-lyrics-box'));
         
       wrapper.appendChild(basePanel);
+      const timerChip = basePanel.querySelector('#chaos-timer');
+      if (timerChip) timerChip.onclick = () => chaosStreamTimer().toggle();
+      chaosStreamTimer().render();
+      if (!window.__chaosTimerRz) { window.__chaosTimerRz = true; window.addEventListener('resize', () => chaosStreamTimer().place()); }
+     
      const tabs = document.createElement('div');
       tabs.id = 'chaos-tabs';
       [['player','▶ Player'],['queue','🎵 Queue'],['credits','📜 Credits'],['lyrics','📝 Lyrics']].forEach(([k, label]) => {
@@ -2026,6 +2035,7 @@
           tabs.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
         };
         tabs.appendChild(b);
+          chaosStreamTimer().place();
       });
       wrapper.dataset.tab = 'player';
       wrapper.appendChild(tabs);
@@ -2115,8 +2125,22 @@
               @media (hover:none){
                 .chaos-artist-link.on .chaos-artist-cta{inset:auto 0 0 0;opacity:1;background:linear-gradient(transparent,rgba(0,0,0,0.78));padding:18px 8px 8px;font-size:11px;}
               }  
+
+              .chaos-timer,.chaos-timer:hover{background:#0d1117 !important;}
+              .chaos-timer{border:1px solid #21262d;border-radius:4px;color:#8b949e;font-size:11px;font-weight:600;padding:3px 8px;cursor:pointer;white-space:nowrap;font-variant-numeric:tabular-nums;flex-shrink:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
+              .chaos-timer:hover{border-color:#30363d;color:#c9d1d9;}
+              .chaos-timer .tl{margin-right:6px;}
+              .chaos-timer .ts{display:none;margin-right:6px;}
+              .chaos-timer .tv{color:#58a6ff;}
+              .chaos-timer.compact .tl{display:none;}
+              .chaos-timer.compact .ts{display:inline;}
+              @media (max-width:720px){
+                .chaos-timer .tl{display:none;}
+                .chaos-timer .ts{display:inline;}
+              }
               `;
             document.head.appendChild(rs);
+      chaosStreamTimer().place();
      
       populateStep5EmbedBox(manifest);
       setupPlaybackHandlers(manifest);
@@ -2471,6 +2495,7 @@
      // --- ROBUST LOCAL PLAYER SOURCE MANAGEMENT & PLAYER POSTER ---
      if (window.videojs) {
        let player = videojs.getPlayer('sovereign-local-player') || videojs('sovereign-local-player');
+       chaosStreamTimer().bind(player);
        if (!window.__chaosRz) {
          window.__chaosRz = true;
          window.addEventListener('resize', () => {
@@ -2518,7 +2543,7 @@
           if (window.__chaosOnEnd) player.off('ended', window.__chaosOnEnd);
           window.__chaosOnPlay = () => { if (!started) { started = true; window.gtag('event', 'track_play', meta); } };
           window.__chaosOnTime = () => { if (!thirty && player.currentTime() >= 30) { thirty = true; window.gtag('event', 'listen_30s', meta); } };
-          window.__chaosOnEnd = () => window.gtag('event', 'track_complete', meta);
+          window.__chaosOnEnd = () => window.gtag('event', 'track_complete', Object.assign({}, meta, chaosStreamTimer().snapshot()));
           player.on('play', window.__chaosOnPlay);
           player.on('timeupdate', window.__chaosOnTime);
           player.on('ended', window.__chaosOnEnd);
@@ -3839,6 +3864,117 @@
         a.removeAttribute('title');
         a.classList.remove('on');
       }
+    }    
+
+    function chaosStreamTimer() {
+      if (window.__chaosTimerApi) return window.__chaosTimerApi;
+
+      const GAP_MS = 90000; // a break longer than this ends the non-stop streak
+      const st = { mode: 'today', total: 0, streak: 0, day: '', last: null, gapStart: null, lastSave: 0, mile: 0 };
+      const MILES = [15, 30, 60, 120, 240]; // minutes of non-stop streaming
+
+      const dayKey = () => {
+        const d = new Date();
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      };
+      const hms = ms => {
+        const s = Math.max(0, Math.floor(ms / 1000));
+        return [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60].map(n => String(n).padStart(2, '0')).join(':');
+      };
+
+      st.day = dayKey();
+      try {
+        const saved = JSON.parse(localStorage.getItem('chaos_stream_today') || 'null');
+        if (saved && saved.d === st.day) st.total = Number(saved.ms) || 0;
+        if (localStorage.getItem('chaos_timer_mode') === 'focus') st.mode = 'focus';
+      } catch (e) {}
+
+      const save = force => {
+        const now = Date.now();
+        if (!force && now - st.lastSave < 5000) return;
+        st.lastSave = now;
+        try { localStorage.setItem('chaos_stream_today', JSON.stringify({ d: st.day, ms: Math.round(st.total) })); } catch (e) {}
+      };
+
+      const render = () => {
+        const el = document.getElementById('chaos-timer');
+        if (!el) return;
+        const f = st.mode === 'focus';
+        const tl = el.querySelector('.tl'), ts = el.querySelector('.ts'), tv = el.querySelector('.tv');
+        if (tl) tl.textContent = f ? 'Focus Time (Non-Stop Stream Length)' : 'Total Streaming Today';
+        if (ts) ts.textContent = f ? 'Focus' : 'Today';
+        if (tv) tv.textContent = hms(f ? st.streak : st.total);
+        el.title = f
+          ? 'Time streamed without a break longer than 90 seconds. Click for the daily total.'
+          : 'Everything you have streamed today. Click for your non-stop focus time.';
+      };
+
+      const resume = now => {
+        if (st.gapStart !== null && now - st.gapStart > GAP_MS) { st.streak = 0; st.mile = 0; }
+        st.gapStart = null;
+        st.last = now;
+      };
+
+      const tick = () => {
+        const now = Date.now();
+        const d = dayKey();
+        if (d !== st.day) { st.day = d; st.total = 0; }
+        if (st.last === null) resume(now);
+        else {
+          const dt = now - st.last;
+          if (dt > 0 && dt < 2000) { st.total += dt; st.streak += dt; }
+          st.last = now;
+        }
+        while (st.mile < MILES.length && st.streak >= MILES[st.mile] * 60000) {
+          try { if (window.gtag) window.gtag('event', 'focus_milestone', { minutes: MILES[st.mile], day_sec: Math.round(st.total / 1000) }); } catch (e) {}
+          st.mile++;
+        }
+        save(false);
+        render();
+      };
+
+      const stop = () => {
+        st.last = null;
+        if (st.gapStart === null) st.gapStart = Date.now();
+        save(true);
+      };
+
+      const toggle = () => {
+        st.mode = st.mode === 'focus' ? 'today' : 'focus';
+        try { localStorage.setItem('chaos_timer_mode', st.mode); } catch (e) {}
+        render();
+      };
+
+      const place = () => {
+        const chip = document.getElementById('chaos-timer');
+        if (!chip) return;
+        const lp = document.querySelector('.chaos-p-lyrics');
+        const head = document.getElementById('chaos-lyrics-head');
+        const slot = document.getElementById('btn-focus-toggle');
+        const shown = !!(lp && head && getComputedStyle(lp).display !== 'none');
+        if (shown) {
+          if (chip.parentNode !== head) head.appendChild(chip);
+          chip.classList.remove('compact');
+        } else if (slot && slot.parentNode) {
+          if (chip.nextSibling !== slot) slot.parentNode.insertBefore(chip, slot);
+          chip.classList.add('compact');
+        }
+      };
+
+      const bind = player => {
+        if (!player || player.__chaosTimerBound) return;
+        player.__chaosTimerBound = true;
+        player.on('timeupdate', () => { if (!player.paused() && !player.seeking()) tick(); });
+        player.on('playing', () => resume(Date.now()));
+        ['pause', 'ended', 'waiting', 'seeking', 'error', 'emptied'].forEach(ev => player.on(ev, stop));
+      };
+
+      const snapshot = () => ({ streak_sec: Math.round(st.streak / 1000), day_sec: Math.round(st.total / 1000) });
+      window.addEventListener('pagehide', () => save(true));
+      document.addEventListener('visibilitychange', () => { if (document.hidden) save(true); });
+
+      window.__chaosTimerApi = { render, toggle, place, bind, snapshot };
+      return window.__chaosTimerApi;
     }    
   </script>
 </body>
