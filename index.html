@@ -2148,7 +2148,17 @@
       setupPlaybackHandlers(manifest);
 
       if (manifest.tracks && manifest.tracks.length > 0) {
-        setTimeout(() => { selectTrack(0); }, 300);
+        let startIdx = 0;
+        const wanted = window.__chaosStartTrackId;
+        if (wanted) {
+          const k = manifest.tracks.findIndex(t => t.widgetFileId === wanted);
+          if (k >= 0) {
+            startIdx = k;
+            try { if (window.gtag) window.gtag('event', 'shared_track_open', { track_title: manifest.tracks[k].title || '', release: manifest.title || '' }); } catch (e) {}
+          }
+          window.__chaosStartTrackId = null;
+        }
+        setTimeout(() => { selectTrack(startIdx); }, 300);
       }
     }
     
@@ -2186,14 +2196,14 @@
         doc.head.appendChild(l);
       });
 
-      const firstId = dashboardManifest.tracks && dashboardManifest.tracks[0] && dashboardManifest.tracks[0].widgetFileId;
-      if (firstId) {
+      const trackIds = (dashboardManifest.tracks || []).map(t => t.widgetFileId).filter(Boolean);
+      if (trackIds.length) {
         const early = doc.createElement('script');
         early.appendChild(doc.createTextNode(
-          "window.__chaosPl = window.__chaosPl || {};" +
-          "window.__chaosPl[" + JSON.stringify(firstId) + "] = fetch(" +
-          JSON.stringify(APPS_SCRIPT_URL + '?fileId=' + firstId + '&mode=playlist') +
-          ").then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); });"
+          "(function(){var ids=" + JSON.stringify(trackIds) + ";" +
+          "var id=window.__chaosStartTrackId;if(!id||ids.indexOf(id)<0)id=ids[0];" +
+          "window.__chaosPl=window.__chaosPl||{};" +
+          "window.__chaosPl[id]=fetch(" + JSON.stringify(APPS_SCRIPT_URL) + "+'?fileId='+id+'&mode=playlist').then(function(r){if(!r.ok)throw new Error(r.status);return r.text();});})();"
         ));
         doc.head.appendChild(early);
       }
@@ -2802,7 +2812,10 @@
       const activeTrack = tracks[currentTrackIndex] || tracks[0] || {};
       const relTitle = activeTrack.releaseTitle || cm.title || '';
       const relArtist = activeTrack.artist || cm.artist || '';
-      const trackUrl = activeTrack.widgetFileId ? APPS_SCRIPT_URL + '?fileId=' + activeTrack.widgetFileId : '';
+      const trackDash = trackReleaseDashboardId(activeTrack);
+      const trackUrl = !activeTrack.widgetFileId ? ''
+        : (trackDash ? APPS_SCRIPT_URL + '?fileId=' + trackDash + '&track=' + activeTrack.widgetFileId
+                     : APPS_SCRIPT_URL + '?fileId=' + activeTrack.widgetFileId);
       const dashId = trackReleaseDashboardId(activeTrack);
       const releaseUrl = dashId ? APPS_SCRIPT_URL + '?fileId=' + dashId : '';
 
@@ -2843,7 +2856,7 @@
         };
         opts.appendChild(b);
       };
-      addOpt('track', '▶️', 'Share this track', activeTrack.title || '', trackUrl, 'Stream "' + (activeTrack.title || relTitle) + '" by ' + relArtist);
+      addOpt('track', '▶️', 'Share this track', (activeTrack.title || '') + (trackDash ? ' · opens in the full player' : ''), trackUrl, 'Stream "' + (activeTrack.title || relTitle) + '" by ' + relArtist);
       addOpt('release', '💿', 'Share this release', relTitle, releaseUrl, 'Listen to "' + relTitle + '" by ' + relArtist);
     }
 
